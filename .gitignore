@@ -1,0 +1,4 @@
+.DS_Store
+target/
+workplace/*
+!workplace/.gitkeep
