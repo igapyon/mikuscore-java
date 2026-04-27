@@ -29,10 +29,12 @@
 - [x] `workplace/` を repository root に作る
 - [x] `workplace/.gitkeep` だけを Git 管理対象にする
 - [x] upstream `https://github.com/igapyon/mikuscore` を `workplace/mikuscore` に clone する
+- [ ] STOP: upstream `mikuscore` 側のリファクタリング完了を確認するまで、straight conversion を開始しない
 - [x] 姉妹アプリ `workplace/mikuproject-java-devel` を参照可能にする
 
 ### 直近の限定作業
 
+- 警告: straight conversion 実装に入ろうとしたら、まず upstream `mikuscore` のリファクタリング完了確認へ戻る
 - [x] Maven project skeleton を作る
   - `pom.xml`
   - `src/main/java`
@@ -68,6 +70,9 @@
   - `docs/upstream-test-mapping.md`
   - `docs/upstream-followup-log.md`
 - 次に進めやすい候補:
+  - 警告: upstream `mikuscore` の最新 TODO では、次のリファクタリング優先範囲は `src/ts/abc-io.ts`、次点で `src/ts/musescore-io.ts`、`src/ts/musicxml-io.ts` は watch only とされている
+  - 警告: `convert` command 実装で ABC / MuseScore 変換に踏み込む場合は、upstream 側リファクタリング完了確認が先
+  - 確認: 既移植済みの中心は `state` family / core basic command subset / MusicXML・MXL・ZIP subset であり、ABC / MuseScore I/O 本体は未移植
   - `convert` command の first cut を Java CLI に追加する
     - 最小候補: `--from musicxml --to musicxml` normalize / pass-through と `.mxl` input / output の橋渡し
     - 参照: `workplace/mikuscore/scripts/mikuscore-cli.mjs`
