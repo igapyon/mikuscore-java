@@ -10,6 +10,105 @@
 
 ## 最重要
 
+### 2026-05-07 最新 upstream 取り込み方針
+
+- [x] upstream `workplace/mikuscore` を `cc776ec` まで fast-forward する
+- [x] upstream `npm run check:all` を通し、最新 upstream checkout が検証可能な状態であることを確認する
+- [x] 既存ユーザー互換は不要と判断する
+- [x] 前回取り込みの途中状態を絶対視せず、最新 upstream の `convert` / `render` / `state` CLI taxonomy と `src/ts/cli-api.ts` を新しい基準にする
+- [x] upstream refactor 完了を確認し、Java 側の README / TODO / mapping docs を正式な取り込みフェーズ前提へ整理する
+- [x] Java CLI help / command tree を最新 upstream の公開 CLI 形へ寄せ直す
+- [ ] 既存 `state` family 実装は温存しつつ、必要なら API 名・診断・入出力契約を破壊的に直す
+- [x] 最初の取り込み slice として `convert --from musicxml --to musicxml` を実装する
+  - [x] stdin / stdout の MusicXML text path を通す
+  - [x] `--in <file>` で `.musicxml` / `.xml` text input を通す
+  - [x] `--in <file>.mxl` で MXL input を MusicXML text として decode する
+  - [x] `--out <file>` で text MusicXML output を通す
+  - [x] `--out <file>.mxl` で MXL output を encode する
+  - [x] unsupported conversion pair は最新 upstream と同じ方向の usage error として扱う
+- [x] `render svg` は Java direct parity 可否を別途判断し、今回 slice では未実装なら明示的に pending / unsupported として扱う
+  - upstream `src/ts/verovio-out.ts` は `window.verovio` / `verovio.js` runtime に依存するため、Java direct conversion は初期 slice では行わない
+  - Java 側では renderer runtime 方針が決まるまで `render svg` を unsupported のまま扱う
+- [ ] ABC / MuseScore / MIDI / MEI / LilyPond / VSQX は、最新 upstream の責務分離を見て Java 直移植対象と除外対象を再分類する
+- [x] `src/ts/abc-lexer.ts` を Java `AbcLexer` として first slice 移植する
+  - [x] `lexAbcLengthToken`
+  - [x] `lexAbcAccidental`
+  - [x] `lexAbcNote`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-parser.ts` の playable-event first slice を Java `AbcParser` として移植する
+  - [x] `parseAbcNoteAt`
+  - [x] `parseAbcChordAt`
+  - [x] `parseAbcPlayableEventAt`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-parser.ts` の field / token / dispatcher slice を Java `AbcParser` に追加する
+  - [x] field / repeat / barline helpers
+  - [x] span / quoted string / decoration helpers
+  - [x] broken rhythm / shorthand / tie / slur helpers
+  - [x] paren / bracket / body-token / body-entry dispatchers
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-parser.ts` の grace group helper を Java `AbcParser` に追加する
+  - [x] `parseAbcGraceGroupAt`
+  - [x] malformed grace accidental warning
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の first utility slice を Java `AbcIo` として移植する
+  - [x] fraction helpers
+  - [x] ABC length token parse / format helpers
+  - [x] pitch / accidental / key / tempo unit helpers
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の second utility slice を Java `AbcIo` に追加する
+  - [x] `isAbcjsWrapperLine`
+  - [x] `estimateAbcMeasureContentDiv`
+  - [x] `fifthsFromAbcKey`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の meta directive slice を Java `AbcIo` に追加する
+  - [x] `parseAbcMetaParams`
+  - [x] `applyAbcTrillMeta`
+  - [x] `applyAbcKeyMeta`
+  - [x] `applyAbcMeasureMeta`
+  - [x] `applyAbcTransposeMeta`
+  - [x] `handleAbcMetaDirectiveLine`
+  - [x] `isAbcStructuredDirectiveLine`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の import line processor slice を Java `AbcIo` に追加する
+  - [x] `AbcImportLineState`
+  - [x] `AbcImportVoiceRegistry`
+  - [x] `handleAbcUnsupportedContinuedFieldLine`
+  - [x] `clearAbcPendingUnsupportedContinuedFieldOnStructuredLine`
+  - [x] `handleAbcHeaderFieldLine`
+  - [x] `applyAbcVoiceDirective`
+  - [x] `parseUserDefinedDecoration`
+  - [x] `expandUserDefinedDecorationSymbols`
+  - [x] `processAbcImportLine`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の body text entry slice を Java `AbcIo` に追加する
+  - [x] `AbcImportBodyEntry`
+  - [x] `appendAbcBodyTextEntries`
+  - [x] `splitBodyTextByInlineVoice`
+  - [x] `splitBodyTextByOverlay`
+  - [x] overlay voice metadata propagation
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の voice directive tail slice を Java `AbcIo` に追加する
+  - [x] `parseVoiceDirectiveTail`
+  - [x] quoted / bare attribute parsing
+  - [x] clef / transpose / unsupported key handling
+  - [x] skipped first-token handling
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の header parsing helper slice を Java `AbcIo` に追加する
+  - [x] `parseTempoFromQ`
+  - [x] `parseMeter`
+  - [x] `parseFraction`
+  - [x] `parseKey`
+  - [x] warning / fallback behavior
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の voice measure meta helper slice を Java `AbcIo` に追加する
+  - [x] `buildAbcVoiceMeasureMetaByIndex`
+  - [x] key / meter / tempo hint collection
+  - [x] notation meta と hinted meta の merge behavior
+  - [x] tempo clamp behavior
+  - [x] focused JUnit tests を追加する
+- [x] `mvn test` を primary verification として通す
+- [x] 実装後に `git status --short` と diff を確認する
+
 ### 現在フェーズの運用方針
 
 - 新規機能追加ではなく、Node.js / TypeScript upstream の既存 semantics を Java へ追跡可能に移す
@@ -29,12 +128,12 @@
 - [x] `workplace/` を repository root に作る
 - [x] `workplace/.gitkeep` だけを Git 管理対象にする
 - [x] upstream `https://github.com/igapyon/mikuscore` を `workplace/mikuscore` に clone する
-- [ ] STOP: upstream `mikuscore` 側のリファクタリング完了を確認するまで、straight conversion を開始しない
+- [x] upstream `mikuscore` 側の refactor 完了を確認済み。`cc776ec` を今回の互換基準として扱い、最新構造から取り込み直す
 - [x] 姉妹アプリ `workplace/mikuproject-java-devel` を参照可能にする
 
 ### 直近の限定作業
 
-- 警告: straight conversion 実装に入ろうとしたら、まず upstream `mikuscore` のリファクタリング完了確認へ戻る
+- 2026-05-07 方針: straight conversion 実装は upstream `cc776ec` の `convert` / `render` / `state` CLI taxonomy と `src/ts/cli-api.ts` を基準に進める
 - [x] Maven project skeleton を作る
   - `pom.xml`
   - `src/main/java`
@@ -70,8 +169,8 @@
   - `docs/upstream-test-mapping.md`
   - `docs/upstream-followup-log.md`
 - 次に進めやすい候補:
-  - 警告: upstream `mikuscore` の最新 TODO では、次のリファクタリング優先範囲は `src/ts/abc-io.ts`、次点で `src/ts/musescore-io.ts`、`src/ts/musicxml-io.ts` は watch only とされている
-  - 警告: `convert` command 実装で ABC / MuseScore 変換に踏み込む場合は、upstream 側リファクタリング完了確認が先
+  - 確認: upstream `mikuscore` の refactor 完了後の最新 TODO では、次の Java 棚卸し優先範囲は `src/ts/abc-io.ts`、次点で `src/ts/musescore-io.ts`、`src/ts/musicxml-io.ts` は watch only として扱う
+  - 注意: `convert` command 実装で ABC / MuseScore 変換に踏み込む場合は、upstream `cc776ec` の責務分離後の構造を基準に棚卸しする
   - 確認: 既移植済みの中心は `state` family / core basic command subset / MusicXML・MXL・ZIP subset であり、ABC / MuseScore I/O 本体は未移植
   - `convert` command の first cut を Java CLI に追加する
     - 最小候補: `--from musicxml --to musicxml` normalize / pass-through と `.mxl` input / output の橋渡し
@@ -79,7 +178,7 @@
     - Java 側候補: `MikuscoreCli`, `MusicXmlIo`, `MxlIo`
   - format I/O を続ける場合は `src/ts/abc-lexer.ts` / `src/ts/abc-parser.ts` / `src/ts/abc-io.ts` の棚卸しから開始する
   - core を続ける場合は `core/timeIndex.ts` の underfull / rest consume-fill parity または `core/accidentalSpelling.ts` を小スライス化する
-  - render を続ける場合は `render svg` の Java direct parity 可否を調べ、難しければ `docs/upstream-followup-log.md` に制約として閉じる
+  - render は upstream `verovio.js` runtime 依存のため、Java direct renderer runtime 方針が決まるまで `docs/upstream-followup-log.md` の制約として扱う
 - 作業開始時に見る場所:
   - 方針: `docs/miku-soft-20-javaapp-design-v20260426.md`, `docs/miku-soft-30-straight-conversion-v20260425.md`
   - 進行: `docs/remaining-migration-items.md`
@@ -116,8 +215,22 @@
   - state command 用 DOM parse / serialize subset は partial 移植済み
   - parse / serialize / pretty-print、part-list / part id / tuplet notation / final barline normalization、explicit implicit beam pass subset は `MusicXmlIo` に partial 移植済み
 - [ ] `src/ts/abc-io.ts`
-- [ ] `src/ts/abc-lexer.ts`
+  - fraction / length token / pitch / accidental / key / tempo unit helpers は `AbcIo` に partial 移植済み
+  - abcjs wrapper line / measure content duration estimate / ABC key fifths helper は `AbcIo` に partial 移植済み
+  - `%@mks` meta directive helpers は `AbcIo` に partial 移植済み
+  - ABC import line processor / header / user-defined decoration helper slice は `AbcIo` に partial 移植済み
+  - ABC body text entry / inline voice / overlay split helper slice は `AbcIo` に partial 移植済み
+  - ABC voice directive tail helper slice は `AbcIo` に partial 移植済み
+  - ABC header parsing helper slice は `AbcIo` に partial 移植済み
+  - ABC voice measure meta helper slice は `AbcIo` に partial 移植済み
+  - ABC body import / MusicXML export integration は未移植
+- [x] `src/ts/abc-lexer.ts`
+  - `lexAbcLengthToken` / `lexAbcAccidental` / `lexAbcNote` を `AbcLexer` に移植済み
 - [ ] `src/ts/abc-parser.ts`
+  - `parseAbcNoteAt` / `parseAbcChordAt` / `parseAbcPlayableEventAt` は `AbcParser` に partial 移植済み
+  - field / repeat / barline / span / decoration / body-token / body-entry helpers は `AbcParser` に partial 移植済み
+  - grace group helper は `AbcParser` に partial 移植済み
+  - ABC I/O 本体接続は未移植
 - [ ] `src/ts/mxl-io.ts`
   - MXL container extraction / encoding subset は `MxlIo` に partial 移植済み
 - [ ] `src/ts/zip-io.ts`
