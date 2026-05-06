@@ -6,8 +6,9 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 
 | Java command | Status | Notes |
 | --- | --- | --- |
-| `--help` | implemented | Foundation help only |
+| `--help` | implemented | Help now follows the current upstream `convert` / `state` command split for implemented Java slices |
 | `--version` | implemented | Returns Java package version fallback |
+| `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]` | implemented | First Java convert slice; supports text MusicXML and `.mxl` decode / encode by file extension |
 | `state summarize [--in <file>|-]` | implemented | Emits upstream-shaped JSON summary for MusicXML text input |
 | `state inspect-measure --measure <number> [--in <file>|-]` | implemented | Emits upstream-shaped note selectors for one MusicXML measure |
 | `state validate-command --command <json> [--in <file>|-]` | implemented | Partial: validates basic command catalog including `ui_noop` |
@@ -18,6 +19,7 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 
 | Upstream command | Java command | Status | Notes |
 | --- | --- | --- | --- |
+| `convert --from musicxml --to musicxml` | `convert --from musicxml --to musicxml` | implemented | Java-side bridge command for text MusicXML and MXL file-path handling while broader conversion pairs are pending |
 | `convert --from abc --to musicxml` | pending | not started | |
 | `convert --from musicxml --to abc` | pending | not started | |
 | `convert --from midi --to musicxml` | pending | not started | |
@@ -30,8 +32,8 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | `convert --from musicxml --to musescore` | pending | not started | |
 | `convert --from vsqx --to musicxml` | excluded | out of initial Java conversion scope | VSQX bridge / dependency constraints |
 | `convert --from musicxml --to vsqx` | excluded | out of initial Java conversion scope | VSQX bridge / dependency constraints |
-| `render svg` | pending | not started | Java render feasibility needs review |
-| `render svg --from abc` | pending | not started | Upstream one-shot flow is internally ABC -> MusicXML -> SVG |
+| `render svg` | pending | unsupported in current Java slice | Upstream depends on `window.verovio` / `verovio.js`; Java renderer runtime strategy is not fixed |
+| `render svg --from abc` | pending | unsupported in current Java slice | Upstream one-shot flow is internally ABC -> MusicXML -> SVG, but SVG rendering has the same Verovio runtime constraint |
 | `state summarize` | `state summarize [--in <file>|-]` | partial | Supports MusicXML text input from stdin or file |
 | `state inspect-measure` | `state inspect-measure --measure <number> [--in <file>|-]` | partial | Supports MusicXML text input from stdin or file |
 | `state validate-command` | `state validate-command --command <json> [--in <file>|-]` | partial | Basic command catalog; supports `targetNodeId`/`selector` or `anchorNodeId`/`anchor_selector` where applicable |
@@ -47,3 +49,15 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 - stdin / stdout text behavior
 - `.mxl` / `.mscz` file path behavior
 - diagnostics text / JSON mode
+
+## Implemented Convert Slice Details
+
+| Contract item | Java behavior |
+| --- | --- |
+| stdin input | UTF-8 MusicXML text |
+| stdout output | UTF-8 MusicXML text unless `--out` names a file |
+| `.musicxml` / `.xml` input | UTF-8 MusicXML text |
+| `.mxl` input | Decode via `MxlIo.extractMusicXmlTextFromMxl` |
+| `.musicxml` / `.xml` output | UTF-8 MusicXML text |
+| `.mxl` output | Encode via `MxlIo.makeMxlBytes` |
+| unsupported pair | Exit status `2`, message `Unsupported conversion pair: --from ... --to ...` |

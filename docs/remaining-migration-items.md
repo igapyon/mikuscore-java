@@ -13,10 +13,13 @@ This file records the current `mikuscore-java` status and next migration items.
 - Primary verification command: `mvn test`
 - Runtime packaging: single executable jar configured through Maven shade plugin
 - Distribution zip: configured as an initial Maven assembly
-- CLI: foundation entrypoint plus `state summarize`, `state inspect-measure`, `state validate-command`, `state apply-command`, and `state diff`
+- CLI: foundation entrypoint plus first `convert --from musicxml --to musicxml` slice, `state summarize`, `state inspect-measure`, `state validate-command`, `state apply-command`, and `state diff`
 - Core conversion: partial basic command catalog and state inspection migration exists
-- Format I/O: not yet migrated
-- Render output: not yet migrated
+- Format I/O: MusicXML / MXL / ZIP helper subset migrated; broader ABC / MuseScore / MIDI / MEI / LilyPond conversion remains pending
+- ABC lexer: first low-level `abc-lexer.ts` helper slice migrated
+- ABC parser: playable-event, structural token, body dispatcher, and grace group helper slices migrated
+- ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, and voice measure meta helper slices migrated
+- Render output: not migrated; `render svg` is constrained by upstream `verovio.js` browser runtime dependency
 
 ## Current Scope
 
@@ -64,7 +67,66 @@ Out of scope for the initial Java conversion:
 - [x] Add `musicxml-io.ts` tuplet notation enrichment subset
 - [x] Add `musicxml-io.ts` explicit implicit beam pass subset
 - [x] Add `mxl-io.ts` / `zip-io.ts` container extraction and encoding subset
-- [ ] Decide whether SVG render can be implemented directly in Java or must be recorded as constrained by upstream runtime dependencies
+- [x] Add first latest-upstream CLI taxonomy slice: `convert --from musicxml --to musicxml`
+  - supports stdin / stdout MusicXML text
+  - supports `.musicxml` / `.xml` text files
+  - supports `.mxl` input decode and `.mxl` output encode
+- [x] Add first ABC low-level lexer slice from `src/ts/abc-lexer.ts`
+  - `lexAbcLengthToken`
+  - `lexAbcAccidental`
+  - `lexAbcNote`
+- [x] Add first ABC parser playable-event slice from `src/ts/abc-parser.ts`
+  - `parseAbcNoteAt`
+  - `parseAbcChordAt`
+  - `parseAbcPlayableEventAt`
+- [x] Add ABC parser field / token / dispatcher slice from `src/ts/abc-parser.ts`
+  - field / repeat / barline helpers
+  - span / quoted string / decoration helpers
+  - broken rhythm / shorthand / tie / slur helpers
+  - paren / bracket / body-token / body-entry dispatchers
+- [x] Add ABC parser grace group slice from `src/ts/abc-parser.ts`
+  - `parseAbcGraceGroupAt`
+  - malformed grace accidental warning behavior
+- [x] Add first ABC I/O utility slice from `src/ts/abc-io.ts`
+  - fraction helpers
+  - ABC length token parse / format helpers
+  - pitch / accidental / key / tempo unit helpers
+- [x] Add second ABC I/O utility slice from `src/ts/abc-io.ts`
+  - abcjs wrapper line detection
+  - measure content duration estimate
+  - ABC key fifths helper
+- [x] Add ABC I/O meta directive slice from `src/ts/abc-io.ts`
+  - `%@mks` params parsing
+  - trill/key/measure/transpose meta application
+  - structured directive detection
+- [x] Add ABC I/O import line processor slice from `src/ts/abc-io.ts`
+  - import line state / voice registry carrier classes
+  - unsupported continued field handling
+  - header field / voice directive handling
+  - user-defined decoration parse / expansion helpers
+  - `processAbcImportLine`
+- [x] Add ABC I/O body text entry slice from `src/ts/abc-io.ts`
+  - body entry carrier class
+  - inline voice split
+  - overlay split
+  - overlay voice metadata propagation
+- [x] Add ABC I/O voice directive tail slice from `src/ts/abc-io.ts`
+  - quoted / bare V: attribute parsing
+  - name / clef / transpose handling
+  - unsupported key and skipped first-token handling
+- [x] Add ABC I/O header parsing helper slice from `src/ts/abc-io.ts`
+  - tempo parsing from `Q:`
+  - meter parsing from `M:`
+  - unit length fraction parsing from `L:`
+  - key parsing from `K:`
+  - warning / fallback behavior
+- [x] Add ABC I/O voice measure meta helper slice from `src/ts/abc-io.ts`
+  - key / meter / tempo hint collection
+  - notation meta and hinted meta merge behavior
+  - tempo clamp behavior
+- [ ] Continue ABC migration with `src/ts/abc-io.ts` body import and MusicXML export integration
+- [x] Decide whether SVG render can be implemented directly in Java or must be recorded as constrained by upstream runtime dependencies
+  - current decision: keep `render svg` unsupported in the Java initial slice until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen
 
 ## Verification Commands
 

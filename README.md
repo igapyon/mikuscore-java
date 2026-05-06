@@ -76,6 +76,7 @@ Current foundation commands:
 
 - `--help`
 - `--version`
+- `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]`
 - `state summarize [--in <file>|-]`
 - `state inspect-measure --measure <number> [--in <file>|-]`
 - `state validate-command --command <json> [--in <file>|-]`
@@ -97,10 +98,18 @@ Current MusicXML I/O support also includes a Java `MusicXmlIo` normalization sub
 
 MXL container support is available through the Java `MxlIo` slice for `META-INF/container.xml` based MusicXML extraction, fallback `.musicxml` / `.xml` extraction, and `score.musicxml` MXL encoding.
 
+The first `convert` slice is intentionally narrow and follows the latest upstream CLI taxonomy while Java format conversion is still partial:
+
+- stdin / stdout MusicXML text pass-through
+- `.musicxml` / `.xml` file input and output
+- `.mxl` file input decoded to MusicXML text
+- `.mxl` file output encoded from MusicXML text
+- unsupported conversion pairs return usage error status `2`
+
 Planned upstream command families:
 
 - `convert --from ... --to ...`
-- `render svg`
+- `render svg` (pending; upstream currently depends on `verovio.js` browser runtime)
 - `state summarize`
 - `state inspect-measure`
 - `state validate-command`

@@ -30,7 +30,7 @@ This document records upstream-following questions, parity gaps, and conversion 
 - Status: open
 - Area: `render svg`
 - Upstream reference: `src/ts/verovio-out.ts`, browser/runtime-related render flow
-- Note: Java-side feasibility and parity strategy are not decided yet.
+- Note: Upstream `renderMusicXmlDomToSvg` depends on `window.verovio`, `verovio.js` runtime initialization, and browser DOM serialization. Java direct conversion is therefore not part of the current initial slice. Keep Java `render svg` unsupported until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen.
 
 ## Closed Items
 

@@ -6,10 +6,13 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Locale;
 
 import jp.igapyon.mikuscore.coreapi.CoreApi;
 import jp.igapyon.mikuscore.musicxml.MusicXmlState;
+import jp.igapyon.mikuscore.musicxml.MxlIo;
 
 /**
  * Minimal CLI entrypoint. Product commands are added through straight conversion.
@@ -38,11 +41,41 @@ public final class MikuscoreCli {
             out.println(CoreApi.version());
             return 0;
         }
+        if ("convert".equals(args[0])) {
+            return runConvert(args, in, out, err);
+        }
         if ("state".equals(args[0])) {
             return runState(args, in, out, err);
         }
         err.println("Unsupported command: " + args[0]);
         err.println("Product commands will be added through straight conversion from upstream mikuscore.");
+        return 2;
+    }
+
+    private static int runConvert(String[] args, InputStream in, PrintStream out, PrintStream err) {
+        if (args.length < 2 || "--help".equals(args[1]) || "-h".equals(args[1])) {
+            printConvertHelp(out);
+            return 0;
+        }
+        String from = lowerOptionValue(args, "--from");
+        String to = lowerOptionValue(args, "--to");
+        if (from == null || from.length() == 0 || to == null || to.length() == 0) {
+            err.println("convert requires both --from <format> and --to <format>.");
+            return 2;
+        }
+        if ("musicxml".equals(from) && "musicxml".equals(to)) {
+            String inputPath = optionValue(args, "--in");
+            String outputPath = optionValue(args, "--out");
+            try {
+                String xmlText = readMusicXmlInput(inputPath, in);
+                writeMusicXmlOutput(outputPath, xmlText, out);
+                return 0;
+            } catch (Exception ex) {
+                err.println("MusicXML to MusicXML conversion failed: " + ex.getMessage());
+                return 1;
+            }
+        }
+        err.println("Unsupported conversion pair: --from " + from + " --to " + to);
         return 2;
     }
 
@@ -141,13 +174,48 @@ public final class MikuscoreCli {
         out.println("mikuscore-java");
         out.println();
         out.println("Usage:");
+        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/mikuscore.jar state summarize [--in <file>|-]");
+        out.println("  java -jar target/mikuscore.jar state inspect-measure --measure <number> [--in <file>|-]");
+        out.println("  java -jar target/mikuscore.jar state validate-command --command <json> [--in <file>|-]");
+        out.println("  java -jar target/mikuscore.jar state apply-command --command <json> [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/mikuscore.jar state diff --before <file> --after <file>");
+        out.println("  java -jar target/mikuscore.jar convert --help");
+        out.println("  java -jar target/mikuscore.jar state --help");
         out.println("  java -jar target/mikuscore.jar --help");
-        out.println("  java -jar target/mikuscore.jar --version");
         out.println();
-        out.println("Planned upstream command families:");
-        out.println("  convert --from <format> --to <format>");
-        out.println("  render svg");
-        out.println("  state <command>");
+        out.println("Commands:");
+        out.println("  convert   Convert score text between supported formats");
+        out.println("  state     Inspect canonical MusicXML state");
+        out.println();
+        out.println("Options:");
+        out.println("  --from <format>  Source format");
+        out.println("  --to <format>    Target format");
+        out.println("  --in <file>|-    Read input from file or stdin");
+        out.println("  --out <file>|-   Write output to file or stdout");
+        out.println("  --version        Show version");
+    }
+
+    private static void printConvertHelp(PrintStream out) {
+        out.println("mikuscore-java convert");
+        out.println();
+        out.println("Usage:");
+        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/mikuscore.jar convert --help");
+        out.println();
+        out.println("Description:");
+        out.println("  Convert score text between supported formats.");
+        out.println();
+        out.println("Supported pairs:");
+        out.println("  --from musicxml --to musicxml");
+        out.println();
+        out.println("Input:");
+        out.println("  --in <file>|-  Read MusicXML text or MXL bytes from file or stdin");
+        out.println("  file paths     musicxml accepts .musicxml / .xml / .mxl");
+        out.println();
+        out.println("Output:");
+        out.println("  --out <file>|-  Write MusicXML text or MXL bytes to file or stdout");
+        out.println("  file paths      musicxml writes .mxl when --out ends with .mxl");
     }
 
     private static void printStateHelp(PrintStream out) {
@@ -177,19 +245,56 @@ public final class MikuscoreCli {
         return null;
     }
 
-    private static String readInputText(String inputPath, InputStream in) throws IOException {
-        if (inputPath != null && !"-".equals(inputPath)) {
-            return new String(Files.readAllBytes(Paths.get(inputPath)), StandardCharsets.UTF_8);
+    private static String lowerOptionValue(String[] args, String name) {
+        String value = optionValue(args, name);
+        return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String readMusicXmlInput(String inputPath, InputStream in) throws IOException {
+        byte[] bytes = readInputBytes(inputPath, in);
+        if (hasExtension(inputPath, ".mxl")) {
+            return MxlIo.extractMusicXmlTextFromMxl(bytes);
         }
-        return new String(readAllBytes(in), StandardCharsets.UTF_8);
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private static String readInputText(String inputPath, InputStream in) throws IOException {
+        return new String(readInputBytes(inputPath, in), StandardCharsets.UTF_8);
+    }
+
+    private static byte[] readInputBytes(String inputPath, InputStream in) throws IOException {
+        if (inputPath != null && !"-".equals(inputPath)) {
+            return Files.readAllBytes(Paths.get(inputPath));
+        }
+        return readAllBytes(in);
+    }
+
+    private static void writeMusicXmlOutput(String outputPath, String text, PrintStream out) throws IOException {
+        if (hasExtension(outputPath, ".mxl")) {
+            writeOutputBytes(outputPath, MxlIo.makeMxlBytes(text), out);
+            return;
+        }
+        writeOutputText(outputPath, text, out);
     }
 
     private static void writeOutputText(String outputPath, String text, PrintStream out) throws IOException {
+        writeOutputBytes(outputPath, text.getBytes(StandardCharsets.UTF_8), out);
+    }
+
+    private static void writeOutputBytes(String outputPath, byte[] bytes, PrintStream out) throws IOException {
         if (outputPath != null && !"-".equals(outputPath)) {
-            Files.write(Paths.get(outputPath), text.getBytes(StandardCharsets.UTF_8));
+            Path path = Paths.get(outputPath);
+            Files.write(path, bytes);
             return;
         }
-        out.print(text);
+        out.write(bytes);
+    }
+
+    private static boolean hasExtension(String path, String extension) {
+        if (path == null) {
+            return false;
+        }
+        return path.trim().toLowerCase(Locale.ROOT).endsWith(extension);
     }
 
     private static byte[] readAllBytes(InputStream in) throws IOException {
