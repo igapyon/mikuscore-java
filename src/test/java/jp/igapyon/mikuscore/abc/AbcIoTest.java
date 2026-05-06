@@ -407,6 +407,346 @@ public class AbcIoTest {
         assertEquals("stop", measure.getEndingStopType());
     }
 
+    @Test
+    public void buildsAbcMusicXmlExportHelperXml() {
+        assertEquals("&amp;&lt;&gt;&quot;&apos;", AbcIo.xmlEscape("&<>\"'"));
+        assertEquals("<clef><sign>G</sign><line>2</line></clef>", AbcIo.clefXmlFromAbcClef(""));
+        assertEquals("<clef><sign>F</sign><line>4</line></clef>", AbcIo.clefXmlFromAbcClef("bass"));
+        assertEquals("<clef><sign>C</sign><line>3</line></clef>", AbcIo.clefXmlFromAbcClef("alto"));
+        assertEquals("<clef><sign>C</sign><line>4</line></clef>", AbcIo.clefXmlFromAbcClef("tenor"));
+
+        assertEquals("<transpose><diatonic>-1</diatonic><chromatic>-2</chromatic></transpose>",
+                AbcIo.buildAbcPartTransposeXml(new AbcIo.AbcTransposeMeta(Integer.valueOf(-2),
+                        Integer.valueOf(-1))));
+        assertEquals("", AbcIo.buildAbcPartTransposeXml(null));
+        assertEquals("", AbcIo.buildAbcTempoDirectionXml(Integer.valueOf(120), false));
+        assertEquals(
+                "<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>120</per-minute></metronome></direction-type><sound tempo=\"120\"/></direction>",
+                AbcIo.buildAbcTempoDirectionXml(Integer.valueOf(120), true));
+
+        List<AbcIo.AbcParsedStaffVoice> staffVoices = Arrays.asList(new AbcIo.AbcParsedStaffVoice(1, "treble"),
+                new AbcIo.AbcParsedStaffVoice(2, "bass"));
+        assertEquals(
+                "<clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign><line>4</line></clef>",
+                AbcIo.buildAbcGroupedStaffClefXml(staffVoices));
+
+        AbcIo.AbcParsedPartHeader part = new AbcIo.AbcParsedPartHeader("alto",
+                new AbcIo.AbcTransposeMeta(Integer.valueOf(-3), null), staffVoices);
+        AbcIo.AbcMeasureHeaderXml firstHeader = AbcIo.buildAbcMeasureHeaderXml(part, 0, 0, -1,
+                new AbcIo.AbcMeter(3, 4), Integer.valueOf(96), null, null);
+        assertEquals(
+                "<attributes><divisions>960</divisions><key><fifths>-1</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><staves>2</staves><transpose><chromatic>-3</chromatic></transpose><clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign><line>4</line></clef></attributes><direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>96</per-minute></metronome></direction-type><sound tempo=\"96\"/></direction>",
+                firstHeader.getHeaderXml());
+        assertEquals("", firstHeader.getTempoDirectionXml());
+
+        AbcIo.AbcMeasureHeaderXml laterHeader = AbcIo.buildAbcMeasureHeaderXml(part, 1, 2, 2,
+                new AbcIo.AbcMeter(6, 8), Integer.valueOf(72), Integer.valueOf(2), new AbcIo.AbcMeter(6, 8));
+        assertEquals(
+                "<attributes><key><fifths>2</fifths></key><time><beats>6</beats><beat-type>8</beat-type></time></attributes>",
+                laterHeader.getHeaderXml());
+
+        AbcIo.AbcMeasureMeta meta = new AbcIo.AbcMeasureMeta("A&B", true, true, true, Integer.valueOf(3), "1<",
+                "2>", "discontinue");
+        assertEquals(
+                "<barline location=\"left\"><ending number=\"1&lt;\" type=\"start\"/><repeat direction=\"forward\" winged=\"none\"/></barline>",
+                AbcIo.buildAbcMeasureRepeatStartXml(meta));
+        assertEquals(
+                "<barline location=\"right\"><ending number=\"2&gt;\" type=\"discontinue\"/><repeat direction=\"backward\" winged=\"none\" times=\"3\"/></barline>",
+                AbcIo.buildAbcMeasureRepeatEndXml(meta));
+        assertEquals("<measure number=\"A&amp;B\" implicit=\"yes\"><left/><attr/><tempo/><debug/><diag/><src/><note/><right/></measure>",
+                AbcIo.buildAbcMeasureXml(4, "A&B", true, "<left/>", "<attr/>", "<tempo/>", "<debug/>",
+                        "<diag/>", "<src/>", "<note/>", "<right/>"));
+    }
+
+    @Test
+    public void buildsAbcPartMeasureRenderContext() {
+        AbcIo.AbcPartRenderState state = AbcIo.createInitialAbcPartRenderState(9, 4, 4, Integer.valueOf(88));
+        assertEquals(7, state.getCurrentPartFifths());
+        assertEquals(4, state.getCurrentPartMeter().getBeats());
+        assertEquals(4, state.getCurrentPartMeter().getBeatType());
+        assertEquals(Integer.valueOf(88), state.getCurrentPartTempo());
+
+        List<List<AbcIo.AbcMeasureNote>> measures = Arrays.asList(
+                Arrays.asList(new AbcIo.AbcMeasureNote("V1", 480, false, false)),
+                Arrays.asList(new AbcIo.AbcMeasureNote("V1", 720, false, false),
+                        new AbcIo.AbcMeasureNote("V1", 720, false, false)));
+        Map<Integer, Integer> keyByMeasure = new LinkedHashMap<Integer, Integer>();
+        keyByMeasure.put(Integer.valueOf(2), Integer.valueOf(-9));
+        Map<Integer, AbcIo.AbcMeter> meterByMeasure = new LinkedHashMap<Integer, AbcIo.AbcMeter>();
+        meterByMeasure.put(Integer.valueOf(2), new AbcIo.AbcMeter(6, 8));
+        Map<Integer, Integer> tempoByMeasure = new LinkedHashMap<Integer, Integer>();
+        tempoByMeasure.put(Integer.valueOf(2), Integer.valueOf(999));
+        Map<Integer, AbcIo.AbcMeasureMeta> measureMetaByIndex = new LinkedHashMap<Integer, AbcIo.AbcMeasureMeta>();
+        measureMetaByIndex.put(Integer.valueOf(2),
+                new AbcIo.AbcMeasureMeta("2", true, false, false, null, "", "", ""));
+        AbcIo.AbcParsedPartRenderData part = new AbcIo.AbcParsedPartRenderData(measures, keyByMeasure, meterByMeasure,
+                tempoByMeasure, measureMetaByIndex);
+
+        AbcIo.AbcPartMeasureRenderContext first = AbcIo.buildAbcPartMeasureRenderContext(part, 0, state, 4, 4);
+        assertEquals(1, first.getNotes().size());
+        assertNull(first.getMeasureMeta());
+        assertNull(first.getHintedFifths());
+        assertNull(first.getHintedMeter());
+        assertNull(first.getHintedTempo());
+        assertEquals(3840, first.getCurrentMeasureDurationDiv());
+        assertEquals(true, first.isInferredImplicitPickup());
+        assertEquals(7, first.getNextState().getCurrentPartFifths());
+        assertEquals(Integer.valueOf(88), first.getNextState().getCurrentPartTempo());
+
+        AbcIo.AbcPartMeasureRenderContext second = AbcIo.buildAbcPartMeasureRenderContext(part, 1,
+                first.getNextState(), 4, 4);
+        assertEquals(Integer.valueOf(-7), second.getHintedFifths());
+        assertEquals(6, second.getHintedMeter().getBeats());
+        assertEquals(8, second.getHintedMeter().getBeatType());
+        assertEquals(Integer.valueOf(300), second.getHintedTempo());
+        assertEquals(2880, second.getCurrentMeasureDurationDiv());
+        assertEquals(false, second.isInferredImplicitPickup());
+        assertEquals(-7, second.getNextState().getCurrentPartFifths());
+        assertEquals(6, second.getNextState().getCurrentPartMeter().getBeats());
+        assertEquals(8, second.getNextState().getCurrentPartMeter().getBeatType());
+        assertEquals(Integer.valueOf(300), second.getNextState().getCurrentPartTempo());
+        assertEquals("2", second.getMeasureMeta().getNumber());
+    }
+
+    @Test
+    public void buildsAbcRenderedMeasureMiscXml() {
+        List<AbcIo.AbcMeasureNote> notes = Arrays.asList(new AbcIo.AbcMeasureNote("V12", 480, false, false, false,
+                "D", Integer.valueOf(5), Integer.valueOf(1), "eighth"));
+
+        String debug = AbcIo.buildAbcMeasureDebugMiscXml(notes, 3);
+        assertEquals(
+                "<attributes><miscellaneous><miscellaneous-field name=\"mks:dbg:abc:meta:count\">0x0001</miscellaneous-field><miscellaneous-field name=\"mks:dbg:abc:meta:0001\">idx=0x0000;m=0x0003;v=12;r=0;g=0;ch=0;st=D;al=1;oc=0x05;dd=0x01E0;tp=eighth</miscellaneous-field></miscellaneous></attributes>",
+                debug);
+
+        String source = AbcIo.buildAbcSourceMiscXml("A\\B\nC");
+        assertEquals(
+                "<attributes><miscellaneous><miscellaneous-field name=\"mks:src:abc:raw-encoding\">escape-v1</miscellaneous-field><miscellaneous-field name=\"mks:src:abc:raw-length\">5</miscellaneous-field><miscellaneous-field name=\"mks:src:abc:raw-encoded-length\">7</miscellaneous-field><miscellaneous-field name=\"mks:src:abc:raw-chunks\">1</miscellaneous-field><miscellaneous-field name=\"mks:src:abc:raw-truncated\">0</miscellaneous-field><miscellaneous-field name=\"mks:src:abc:raw-0001\">A\\\\B\\nC</miscellaneous-field></miscellaneous></attributes>",
+                source);
+
+        List<AbcIo.AbcImportDiagnostic> diagnostics = Arrays.asList(
+                new AbcIo.AbcImportDiagnostic("warn", "OVERFULL", "abc", "moved <x>", "V1", Integer.valueOf(2),
+                        "reflowed", Integer.valueOf(3)),
+                new AbcIo.AbcImportDiagnostic("warn", "GLOBAL", "abc", "", "", null, "", null));
+        String diag = AbcIo.buildAbcDiagMiscXml(diagnostics);
+        assertEquals(
+                "<attributes><miscellaneous><miscellaneous-field name=\"mks:diag:count\">2</miscellaneous-field><miscellaneous-field name=\"mks:diag:0001\">level=warn;code=OVERFULL;fmt=abc;measure=2;voice=V1;action=reflowed;message=moved &lt;x&gt;;movedEvents=3</miscellaneous-field><miscellaneous-field name=\"mks:diag:0002\">level=warn;code=GLOBAL;fmt=abc</miscellaneous-field></miscellaneous></attributes>",
+                diag);
+
+        AbcIo.AbcParsedPartRenderData part = new AbcIo.AbcParsedPartRenderData("V1",
+                Arrays.asList(notes), new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcIo.AbcMeter>(),
+                new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcIo.AbcMeasureMeta>());
+        AbcIo.AbcRenderedMeasureMiscXml rendered = AbcIo.buildAbcRenderedMeasureMiscXml(
+                new AbcIo.AbcRenderedMeasureMiscContext(part, 0, 1, notes, true, true,
+                        Arrays.asList(diagnostics.get(0),
+                                new AbcIo.AbcImportDiagnostic("warn", "OTHER", "abc", "", "V2", null, "", null)),
+                        "X:1"));
+        assertEquals(AbcIo.buildAbcMeasureDebugMiscXml(notes, 1), rendered.getDebugMiscXml());
+        assertEquals(true, rendered.getDiagMiscXml().contains("code=OVERFULL"));
+        assertEquals(false, rendered.getDiagMiscXml().contains("code=OTHER"));
+        assertEquals(true, rendered.getSourceMiscXml().contains("mks:src:abc:raw-encoding"));
+    }
+
+    @Test
+    public void buildsAbcRenderedPartMeasureXml() {
+        List<AbcIo.AbcMeasureNote> upperNotes = Arrays.asList(new AbcIo.AbcMeasureNote("V1", 960, false, false));
+        List<AbcIo.AbcMeasureNote> lowerNotes = Arrays.asList(new AbcIo.AbcMeasureNote("V2", 960, false, false));
+        List<AbcIo.AbcParsedStaffVoice> staffVoices = Arrays.asList(
+                new AbcIo.AbcParsedStaffVoice("V1", 1, "treble", Arrays.asList(upperNotes)),
+                new AbcIo.AbcParsedStaffVoice("V2", 2, "bass", Arrays.asList(lowerNotes)));
+        AbcIo.AbcParsedPartHeader partHeader = new AbcIo.AbcParsedPartHeader("treble", null, staffVoices);
+        assertEquals(true, AbcIo.hasAbcGroupedStaffVoices(partHeader));
+        assertEquals(false, AbcIo.hasAbcGroupedStaffVoices(new AbcIo.AbcParsedPartHeader("treble", null,
+                Arrays.asList(new AbcIo.AbcParsedStaffVoice(1, "treble")))));
+
+        AbcIo.AbcMeasureNotesXmlBuilder noteBuilder = new AbcIo.AbcMeasureNotesXmlBuilder() {
+            public String build(List<AbcIo.AbcMeasureNote> notes, Integer staffNumber) {
+                return "<note><voice>" + notes.get(0).getVoice() + "</voice>"
+                        + (staffNumber == null ? "" : "<staff>" + staffNumber + "</staff>") + "</note>";
+            }
+        };
+        assertEquals(
+                "<note><voice>V1</voice><staff>1</staff></note><backup><duration>3840</duration></backup><note><voice>V2</voice><staff>2</staff></note>",
+                AbcIo.buildAbcGroupedStaffMeasureNotesXml(staffVoices, 0, 3840, noteBuilder));
+
+        AbcIo.AbcMeasureMeta meta = new AbcIo.AbcMeasureMeta("P1", false, true, true, Integer.valueOf(2), "", "",
+                "");
+        AbcIo.AbcParsedPartRenderData part = new AbcIo.AbcParsedPartRenderData("V1", Arrays.asList(upperNotes),
+                new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcIo.AbcMeter>(),
+                new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcIo.AbcMeasureMeta>());
+        String xml = AbcIo.buildAbcRenderedPartMeasureXml(new AbcIo.AbcRenderedPartMeasureContext(partHeader, part, 0,
+                0, 1, upperNotes, meta, null, null, null, 0, new AbcIo.AbcMeter(4, 4), Integer.valueOf(120),
+                3840, false, true, true,
+                Arrays.asList(new AbcIo.AbcImportDiagnostic("warn", "ABC", "abc", "message", "V1",
+                        Integer.valueOf(1), "", null)),
+                "X:1", noteBuilder));
+        assertEquals(true, xml.startsWith("<measure number=\"P1\">"));
+        assertEquals(true, xml.contains("<staves>2</staves>"));
+        assertEquals(true, xml.contains("<repeat direction=\"forward\" winged=\"none\"/>"));
+        assertEquals(true, xml.contains("<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>120</per-minute></metronome></direction-type><sound tempo=\"120\"/></direction>"));
+        assertEquals(true, xml.contains("<backup><duration>3840</duration></backup>"));
+        assertEquals(true, xml.contains("mks:dbg:abc:meta:count"));
+        assertEquals(true, xml.contains("code=ABC"));
+        assertEquals(true, xml.contains("mks:src:abc:raw-encoding"));
+        assertEquals(true, xml.contains("<repeat direction=\"backward\" winged=\"none\" times=\"2\"/>"));
+    }
+
+    @Test
+    public void buildsAbcPartListAndBodyXml() {
+        List<AbcIo.AbcMeasureNote> firstMeasure = Arrays.asList(new AbcIo.AbcMeasureNote("V1", 960, false, false));
+        List<AbcIo.AbcMeasureNote> secondMeasure = Arrays.asList(new AbcIo.AbcMeasureNote("V1", 1920, false, false));
+        Map<Integer, AbcIo.AbcMeasureMeta> measureMetaByIndex = new LinkedHashMap<Integer, AbcIo.AbcMeasureMeta>();
+        measureMetaByIndex.put(Integer.valueOf(2),
+                new AbcIo.AbcMeasureMeta("B", false, false, false, null, "", "", ""));
+        AbcIo.AbcParsedPart part = new AbcIo.AbcParsedPart("P&1", "Piano <One>", "V1", "treble", null,
+                new ArrayList<AbcIo.AbcParsedStaffVoice>(), Arrays.asList(firstMeasure, secondMeasure),
+                new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcIo.AbcMeter>(),
+                new LinkedHashMap<Integer, Integer>(), measureMetaByIndex);
+        AbcIo.AbcMeasureNotesXmlBuilder noteBuilder = new AbcIo.AbcMeasureNotesXmlBuilder() {
+            public String build(List<AbcIo.AbcMeasureNote> notes, Integer staffNumber) {
+                if (notes.isEmpty()) {
+                    return "<note><rest/><duration>3840</duration></note>";
+                }
+                return "<note><voice>" + notes.get(0).getVoice() + "</voice><duration>"
+                        + notes.get(0).getDuration() + "</duration></note>";
+            }
+        };
+
+        String partListXml = AbcIo.buildAbcPartListXml(Arrays.asList(part, new AbcIo.AbcParsedPart("P10", "Drums")));
+        assertEquals(true, partListXml.contains("<score-part id=\"P&amp;1\">"));
+        assertEquals(true, partListXml.contains("<part-name>Piano &lt;One&gt;</part-name>"));
+        assertEquals(true, partListXml.contains("<midi-channel>1</midi-channel>"));
+        assertEquals(true, partListXml.contains("<midi-channel>2</midi-channel>"));
+
+        String bodyXml = AbcIo.buildAbcPartBodyXml(Arrays.asList(part), 2, 0, 4, 4, Integer.valueOf(90), false,
+                false, new ArrayList<AbcIo.AbcImportDiagnostic>(), "", noteBuilder);
+        assertEquals(true, bodyXml.startsWith("<part id=\"P&amp;1\">"));
+        assertEquals(true, bodyXml.contains("<measure number=\"1\" implicit=\"yes\">"));
+        assertEquals(true, bodyXml.contains("<measure number=\"B\">"));
+        assertEquals(true, bodyXml.contains("<duration>960</duration>"));
+        assertEquals(true, bodyXml.contains("<duration>1920</duration>"));
+        assertEquals(true, bodyXml.endsWith("</part>"));
+
+        String document = AbcIo.buildAbcScorePartwiseXmlDocument("T&A", "C<1>", partListXml, bodyXml);
+        assertEquals(true, document.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+        assertEquals(true, document.contains("<score-partwise version=\"4.0\">"));
+        assertEquals(true, document.contains("<work-title>T&amp;A</work-title>"));
+        assertEquals(true, document.contains("<creator type=\"composer\">C&lt;1&gt;</creator>"));
+        assertEquals(true, document.contains("<part-list>" + partListXml + "</part-list>"));
+        assertEquals(true, document.endsWith("</score-partwise>"));
+    }
+
+    @Test
+    public void buildsMusicXmlExportContextAndDocumentFromParsedAbc() {
+        List<AbcIo.AbcMeasureNote> lowNotes = Arrays.asList(new AbcIo.AbcMeasureNote("V1", 3840, false, false,
+                false, "C", Integer.valueOf(3), Integer.valueOf(0), "whole"));
+        AbcIo.AbcParsedPart part = new AbcIo.AbcParsedPart("P1", "Bass Voice", "V1", "", null,
+                new ArrayList<AbcIo.AbcParsedStaffVoice>(), Arrays.asList(lowNotes),
+                new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcIo.AbcMeter>(),
+                new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcIo.AbcMeasureMeta>());
+        AbcIo.AbcParsedResult parsed = new AbcIo.AbcParsedResult(
+                new AbcIo.AbcParsedMeta("ABC Title", "ABC Composer", new AbcIo.AbcMeter(3, 8),
+                        new AbcIo.AbcKeyInfo(-2), Integer.valueOf(400)),
+                Arrays.asList(part), new ArrayList<String>(),
+                Arrays.asList(new AbcIo.AbcImportDiagnostic("warn", "D1", "abc", "diag", "V1", Integer.valueOf(1),
+                        "", null)));
+
+        AbcIo.AbcMusicXmlExportContext context = AbcIo.buildAbcMusicXmlExportContext(parsed);
+        assertEquals(1, context.getMeasureCount());
+        assertEquals("ABC Title", context.getTitle());
+        assertEquals("ABC Composer", context.getComposer());
+        assertEquals(3, context.getBeats());
+        assertEquals(8, context.getBeatType());
+        assertEquals(-2, context.getDefaultFifths());
+        assertEquals(960, context.getDivisions());
+        assertEquals(480, context.getBeatDiv());
+        assertEquals(1440, context.getMeasureDurationDiv());
+        assertEquals("quarter", context.getEmptyMeasureRestType());
+        assertEquals(Integer.valueOf(300), context.getTempoBpm());
+        assertEquals("bass", context.getResolvedParts().get(0).getClef());
+
+        AbcIo.AbcMeasureNotesXmlBuilder noteBuilder = new AbcIo.AbcMeasureNotesXmlBuilder() {
+            public String build(List<AbcIo.AbcMeasureNote> notes, Integer staffNumber) {
+                return "<note><voice>" + notes.get(0).getVoice() + "</voice><duration>"
+                        + notes.get(0).getDuration() + "</duration></note>";
+            }
+        };
+        String xml = AbcIo.buildMusicXmlFromAbcParsed(parsed, "X:1",
+                new AbcIo.AbcImportOptions(Boolean.TRUE, Boolean.FALSE, Boolean.TRUE, null), noteBuilder);
+        assertEquals(true, xml.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+        assertEquals(true, xml.contains("<work-title>ABC Title</work-title>"));
+        assertEquals(true, xml.contains("<part-name>Bass Voice</part-name>"));
+        assertEquals(true, xml.contains("<clef><sign>F</sign><line>4</line></clef>"));
+        assertEquals(true, xml.contains("<sound tempo=\"300\"/>"));
+        assertEquals(true, xml.contains("mks:src:abc:raw-encoding"));
+    }
+
+    @Test
+    public void buildsAbcMeasureNotesXmlCoreSubset() {
+        assertEquals("<note><rest/><duration>1440</duration><voice>1</voice><type>quarter</type><staff>2</staff></note>",
+                AbcIo.buildAbcEmptyMeasureNotesXml(1440, "quarter", Integer.valueOf(2)));
+
+        AbcIo.AbcMeasureNote pitched = new AbcIo.AbcMeasureNote("V12", 480, false, false, false, "D",
+                Integer.valueOf(5), Integer.valueOf(1), "eighth", Integer.valueOf(1), "sharp", true, true, true,
+                false, false, "", "la & le", "begin", true, Integer.valueOf(3), Integer.valueOf(2),
+                Arrays.asList("say <go>"), true, true, "A&1", true, true, true, true, true, true, true, true,
+                "mf", true);
+        assertEquals("<pitch><step>D</step><alter>1</alter><octave>5</octave></pitch>",
+                AbcIo.buildAbcNotePitchOrRestXml(pitched));
+        assertEquals("<accidental editorial=\"yes\" cautionary=\"yes\">sharp</accidental>",
+                AbcIo.buildAbcNoteAccidentalXml(pitched));
+        assertEquals("<lyric><syllabic>begin</syllabic><text>la &amp; le</text><extend/></lyric>",
+                AbcIo.buildAbcNoteLyricXml(pitched));
+        assertEquals("<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>",
+                AbcIo.buildAbcNoteTimeModificationXml(pitched));
+        assertEquals(
+                "<direction><direction-type><words>say &lt;go&gt;</words></direction-type></direction>",
+                AbcIo.buildAbcNoteHarmonyAndWordsDirectionXml(pitched));
+        assertEquals(
+                "<direction><direction-type><segno/></direction-type></direction><direction><direction-type><coda/></direction-type></direction><direction><direction-type><rehearsal>A&amp;1</rehearsal></direction-type></direction><direction><sound fine=\"yes\"/></direction><direction><sound dacapo=\"yes\"/></direction><direction><sound dalsegno=\"segno\"/></direction><direction><sound tocoda=\"coda\"/></direction><direction><direction-type><wedge type=\"crescendo\"/></direction-type></direction><direction><direction-type><wedge type=\"diminuendo\"/></direction-type></direction><direction><direction-type><wedge type=\"stop\"/></direction-type></direction><direction><direction-type><dynamics><mf/></dynamics></direction-type></direction><direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction>",
+                AbcIo.buildAbcNoteControlDirectionXml(pitched));
+        assertEquals(
+                "<direction><direction-type><words>say &lt;go&gt;</words></direction-type></direction><direction><direction-type><segno/></direction-type></direction><direction><direction-type><coda/></direction-type></direction><direction><direction-type><rehearsal>A&amp;1</rehearsal></direction-type></direction><direction><sound fine=\"yes\"/></direction><direction><sound dacapo=\"yes\"/></direction><direction><sound dalsegno=\"segno\"/></direction><direction><sound tocoda=\"coda\"/></direction><direction><direction-type><wedge type=\"crescendo\"/></direction-type></direction><direction><direction-type><wedge type=\"diminuendo\"/></direction-type></direction><direction><direction-type><wedge type=\"stop\"/></direction-type></direction><direction><direction-type><dynamics><mf/></dynamics></direction-type></direction><direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction><note><pitch><step>D</step><alter>1</alter><octave>5</octave></pitch><duration>480</duration><voice>12</voice><staff>1</staff><lyric><syllabic>begin</syllabic><text>la &amp; le</text><extend/></lyric><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><accidental editorial=\"yes\" cautionary=\"yes\">sharp</accidental><tie type=\"start\"/><notations><tied type=\"start\"/></notations></note>",
+                AbcIo.buildAbcNoteXml(pitched, 0, null, new LinkedHashMap<Integer, String>()));
+
+        AbcIo.AbcMeasureNote rest = new AbcIo.AbcMeasureNote("V2", 960, false, false, true, "C",
+                Integer.valueOf(4), Integer.valueOf(0), "quarter");
+        assertEquals(
+                "<direction><direction-type><words>say &lt;go&gt;</words></direction-type></direction><direction><direction-type><segno/></direction-type></direction><direction><direction-type><coda/></direction-type></direction><direction><direction-type><rehearsal>A&amp;1</rehearsal></direction-type></direction><direction><sound fine=\"yes\"/></direction><direction><sound dacapo=\"yes\"/></direction><direction><sound dalsegno=\"segno\"/></direction><direction><sound tocoda=\"coda\"/></direction><direction><direction-type><wedge type=\"crescendo\"/></direction-type></direction><direction><direction-type><wedge type=\"diminuendo\"/></direction-type></direction><direction><direction-type><wedge type=\"stop\"/></direction-type></direction><direction><direction-type><dynamics><mf/></dynamics></direction-type></direction><direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction><note><pitch><step>D</step><alter>1</alter><octave>5</octave></pitch><duration>480</duration><voice>12</voice><staff>2</staff><lyric><syllabic>begin</syllabic><text>la &amp; le</text><extend/></lyric><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><accidental editorial=\"yes\" cautionary=\"yes\">sharp</accidental><tie type=\"start\"/><notations><tied type=\"start\"/></notations></note><note><rest/><duration>960</duration><voice>2</voice><staff>2</staff><type>quarter</type></note>",
+                AbcIo.buildAbcMeasureNotesXml(Arrays.asList(pitched, rest), 3840, "whole", 960, Integer.valueOf(2)));
+    }
+
+    @Test
+    public void buildsAbcBeamXmlByNoteIndex() {
+        List<AbcIo.AbcMeasureNote> notes = Arrays.asList(
+                new AbcIo.AbcMeasureNote("V1", 480, false, false, false, "C", Integer.valueOf(4),
+                        Integer.valueOf(0), "eighth"),
+                new AbcIo.AbcMeasureNote("V1", 480, false, false, false, "D", Integer.valueOf(4),
+                        Integer.valueOf(0), "eighth"),
+                new AbcIo.AbcMeasureNote("V1", 480, false, false, false, "E", Integer.valueOf(4),
+                        Integer.valueOf(0), "eighth"),
+                new AbcIo.AbcMeasureNote("V1", 480, false, false, false, "F", Integer.valueOf(4),
+                        Integer.valueOf(0), "eighth"));
+
+        Map<Integer, String> beams = AbcIo.buildAbcBeamXmlByNoteIndex(notes, 960);
+        assertEquals("<beam number=\"1\">begin</beam>", beams.get(Integer.valueOf(0)));
+        assertEquals("<beam number=\"1\">end</beam>", beams.get(Integer.valueOf(1)));
+        assertEquals("<beam number=\"1\">begin</beam>", beams.get(Integer.valueOf(2)));
+        assertEquals("<beam number=\"1\">end</beam>", beams.get(Integer.valueOf(3)));
+        assertEquals(true, AbcIo.buildAbcMeasureNotesXml(notes, 3840, "whole", 960, null)
+                .contains("<beam number=\"1\">begin</beam>"));
+
+        List<AbcIo.AbcMeasureNote> explicit = Arrays.asList(
+                new AbcIo.AbcMeasureNote("V2", 240, false, false, false, "C", Integer.valueOf(4),
+                        Integer.valueOf(0), "16th", null, "", false, false, false, false, false, "begin"),
+                new AbcIo.AbcMeasureNote("V2", 240, false, false, false, "D", Integer.valueOf(4),
+                        Integer.valueOf(0), "16th", null, "", false, false, false, false, false, "mid"));
+        Map<Integer, String> explicitBeams = AbcIo.buildAbcBeamXmlByNoteIndex(explicit, 960);
+        assertEquals("<beam number=\"1\">begin</beam><beam number=\"2\">begin</beam>",
+                explicitBeams.get(Integer.valueOf(0)));
+        assertEquals("<beam number=\"1\">end</beam><beam number=\"2\">end</beam>",
+                explicitBeams.get(Integer.valueOf(1)));
+    }
+
     private static void assertFraction(int num, int den, AbcIo.Fraction actual) {
         assertEquals(num, actual.getNum());
         assertEquals(den, actual.getDen());

@@ -106,6 +106,73 @@
   - [x] notation meta と hinted meta の merge behavior
   - [x] tempo clamp behavior
   - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML export XML helper slice を Java `AbcIo` に追加する
+  - [x] `xmlEscape`
+  - [x] `clefXmlFromAbcClef`
+  - [x] `buildAbcGroupedStaffClefXml`
+  - [x] `buildAbcPartTransposeXml`
+  - [x] `buildAbcTempoDirectionXml`
+  - [x] `buildAbcMeasureHeaderXml`
+  - [x] `buildAbcMeasureTempoDirectionXml`
+  - [x] `buildAbcMeasureRepeatStartXml`
+  - [x] `buildAbcMeasureRepeatEndXml`
+  - [x] `buildAbcMeasureXml`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の part measure render context slice を Java `AbcIo` に追加する
+  - [x] `createInitialAbcPartRenderState`
+  - [x] `buildAbcPartMeasureRenderContext`
+  - [x] key / meter / tempo hint state update
+  - [x] measure duration calculation
+  - [x] implicit pickup inference
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の rendered measure misc XML helper slice を Java `AbcIo` に追加する
+  - [x] `buildAbcMeasureDebugMiscXml`
+  - [x] `buildAbcSourceMiscXml`
+  - [x] `buildAbcDiagMiscXml`
+  - [x] `buildAbcRenderedMeasureMiscXml`
+  - [x] diagnostic voice filter behavior
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` / `src/ts/abc-layout.ts` の rendered part measure XML slice を Java `AbcIo` に追加する
+  - [x] `hasAbcGroupedStaffVoices`
+  - [x] `buildAbcGroupedStaffMeasureNotesXml`
+  - [x] `buildAbcRenderedPartMeasureXml`
+  - [x] grouped staff backup / staff-number handoff behavior
+  - [x] header / tempo / repeat / misc XML composition behavior
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の part list / part body XML integration slice を Java `AbcIo` に追加する
+  - [x] `buildAbcPartXml`
+  - [x] `buildAbcPartListXml`
+  - [x] `buildAbcPartBodyXml`
+  - [x] `buildAbcScorePartwiseXmlDocument`
+  - [x] `AbcParsedPart` carrier
+  - [x] per-part render state loop behavior
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML export context / parsed document integration slice を Java `AbcIo` に追加する
+  - [x] `resolveAbcParsedPartsForExport`
+  - [x] `buildAbcMusicXmlExportContext`
+  - [x] `buildMusicXmlFromAbcParsed`
+  - [x] `AbcParsedResult` / `AbcParsedMeta` / `AbcImportOptions` / `AbcMusicXmlExportContext` carrier
+  - [x] single-clef inference subset from `core/staffClefPolicy.ts`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の measure note XML core slice を Java `AbcIo` に追加する
+  - [x] `buildAbcEmptyMeasureNotesXml`
+  - [x] `buildAbcNotePitchOrRestXml`
+  - [x] `buildAbcNoteLyricXml`
+  - [x] `buildAbcNoteTimeModificationXml`
+  - [x] `buildAbcNoteLeadingDirectionXml`
+  - [x] `buildAbcNoteHarmonyAndWordsDirectionXml` annotations subset
+  - [x] `buildAbcNoteControlDirectionXml` navigation / wedge / dynamics subset
+  - [x] `buildAbcNoteAccidentalXml`
+  - [x] `buildAbcNoteCoreXml`
+  - [x] `buildAbcNoteNotationsXml` tie subset
+  - [x] `buildAbcMeasureNotesXml`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` / `src/ts/beam-common.ts` の ABC measure beam XML slice を Java `AbcIo` に追加する
+  - [x] `buildAbcBeamXmlByNoteIndex`
+  - [x] implicit beam grouping
+  - [x] beat boundary split behavior
+  - [x] explicit `begin` / `mid` beam mode subset
+  - [x] focused JUnit tests を追加する
 - [x] `mvn test` を primary verification として通す
 - [x] 実装後に `git status --short` と diff を確認する
 
@@ -207,6 +274,7 @@
   - measure capacity / occupied-time subset は overfull validation 用に partial 移植済み
 - [ ] `src/ts/beam-common.ts`
   - implicit beam assignment subset は `MusicXmlIo.applyImplicitBeamsToMusicXmlText` 用に partial 移植済み
+  - ABC measure beam XML 用の `computeBeamAssignments` subset は `AbcIo` に partial 移植済み
 - [ ] `core/accidentalSpelling.ts`
 - [ ] `core/staffClefPolicy.ts`
 - [ ] `core/xmlUtils.ts`
@@ -223,7 +291,19 @@
   - ABC voice directive tail helper slice は `AbcIo` に partial 移植済み
   - ABC header parsing helper slice は `AbcIo` に partial 移植済み
   - ABC voice measure meta helper slice は `AbcIo` に partial 移植済み
+  - ABC MusicXML export XML helper slice は `AbcIo` に partial 移植済み
+  - ABC part measure render context helper slice は `AbcIo` に partial 移植済み
+  - ABC rendered measure misc XML helper slice は `AbcIo` に partial 移植済み
+  - ABC rendered part measure XML helper slice は `AbcIo` に partial 移植済み
+  - ABC part list / part body XML integration slice は `AbcIo` に partial 移植済み
+  - ABC MusicXML export context / parsed document integration slice は `AbcIo` に partial 移植済み
+  - ABC measure note XML core slice は `AbcIo` に partial 移植済み
+  - ABC note lyric / time-modification XML slice は `AbcIo` に partial 移植済み
+  - ABC note leading direction XML slice は `AbcIo` に partial 移植済み
+  - ABC measure beam XML slice は `AbcIo` に partial 移植済み
   - ABC body import / MusicXML export integration は未移植
+- [ ] `src/ts/abc-layout.ts`
+  - grouped staff voice detection / grouped-staff measure note XML helper は `AbcIo` に partial 移植済み
 - [x] `src/ts/abc-lexer.ts`
   - `lexAbcLengthToken` / `lexAbcAccidental` / `lexAbcNote` を `AbcLexer` に移植済み
 - [ ] `src/ts/abc-parser.ts`

@@ -18,7 +18,7 @@ This file records the current `mikuscore-java` status and next migration items.
 - Format I/O: MusicXML / MXL / ZIP helper subset migrated; broader ABC / MuseScore / MIDI / MEI / LilyPond conversion remains pending
 - ABC lexer: first low-level `abc-lexer.ts` helper slice migrated
 - ABC parser: playable-event, structural token, body dispatcher, and grace group helper slices migrated
-- ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, and voice measure meta helper slices migrated
+- ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, and measure beam XML helper slices migrated
 - Render output: not migrated; `render svg` is constrained by upstream `verovio.js` browser runtime dependency
 
 ## Current Scope
@@ -124,6 +124,49 @@ Out of scope for the initial Java conversion:
   - key / meter / tempo hint collection
   - notation meta and hinted meta merge behavior
   - tempo clamp behavior
+- [x] Add ABC I/O MusicXML export XML helper slice from `src/ts/abc-io.ts`
+  - XML escaping
+  - clef / grouped-staff clef XML
+  - part transpose XML
+  - tempo direction XML
+  - measure header / repeat / measure wrapper XML
+- [x] Add ABC I/O part measure render context slice from `src/ts/abc-io.ts`
+  - initial part render state
+  - key / meter / tempo hint state update
+  - measure duration calculation
+  - implicit pickup inference
+- [x] Add ABC I/O rendered measure misc XML helper slice from `src/ts/abc-io.ts`
+  - debug miscellaneous metadata XML
+  - source miscellaneous metadata XML
+  - diagnostic miscellaneous metadata XML
+  - diagnostic voice filter behavior
+- [x] Add ABC I/O rendered part measure XML helper slice from `src/ts/abc-io.ts` and `src/ts/abc-layout.ts`
+  - grouped staff detection and per-staff note XML assembly
+  - backup insertion before later staves
+  - header / tempo / repeat / misc XML composition
+  - measure-number and implicit pickup handoff
+- [x] Add ABC I/O part list / part body XML integration slice from `src/ts/abc-io.ts`
+  - score-part list XML
+  - per-part render state loop
+  - part body XML assembly through rendered measure helper
+  - score-partwise document wrapper
+- [x] Add ABC I/O MusicXML export context / parsed document integration slice from `src/ts/abc-io.ts`
+  - resolved parts fallback
+  - meta-derived measure count, meter, key, tempo, and duration context
+  - parsed result to score-partwise document assembly
+  - single-clef inference subset from `core/staffClefPolicy.ts`
+- [x] Add ABC I/O measure note XML core slice from `src/ts/abc-io.ts`
+  - empty measure rest XML
+  - pitch / rest / duration / voice / staff / type XML
+  - lyric XML
+  - time-modification XML
+  - leading direction annotations / navigation / wedge / dynamics XML subset
+  - accidental XML
+  - tie / tied XML subset
+- [x] Add ABC I/O measure beam XML slice from `src/ts/abc-io.ts` and `src/ts/beam-common.ts`
+  - implicit beam grouping
+  - beat boundary split behavior
+  - explicit `begin` / `mid` beam mode subset
 - [ ] Continue ABC migration with `src/ts/abc-io.ts` body import and MusicXML export integration
 - [x] Decide whether SVG render can be implemented directly in Java or must be recorded as constrained by upstream runtime dependencies
   - current decision: keep `render svg` unsupported in the Java initial slice until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen
