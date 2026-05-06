@@ -293,6 +293,757 @@ public final class AbcIo {
         return new AbcVoiceMeasureMetaByIndex(keyByMeasure, meterByMeasure, tempoByMeasure, measureMetaByIndex);
     }
 
+    public static String xmlEscape(String text) {
+        String value = text == null ? "" : text;
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
+    }
+
+    public static String clefXmlFromAbcClef(String rawClef) {
+        String clef = trimToEmpty(rawClef).toLowerCase();
+        if ("bass".equals(clef) || "f".equals(clef)) {
+            return "<clef><sign>F</sign><line>4</line></clef>";
+        }
+        if ("alto".equals(clef) || "c3".equals(clef)) {
+            return "<clef><sign>C</sign><line>3</line></clef>";
+        }
+        if ("tenor".equals(clef) || "c4".equals(clef)) {
+            return "<clef><sign>C</sign><line>4</line></clef>";
+        }
+        return "<clef><sign>G</sign><line>2</line></clef>";
+    }
+
+    public static String buildAbcGroupedStaffClefXml(List<AbcParsedStaffVoice> staffVoices) {
+        StringBuilder builder = new StringBuilder();
+        if (staffVoices == null) {
+            return "";
+        }
+        for (AbcParsedStaffVoice staffVoice : staffVoices) {
+            String clefXml = clefXmlFromAbcClef(staffVoice == null ? "" : staffVoice.getClef());
+            int staff = staffVoice == null ? 1 : staffVoice.getStaff();
+            builder.append(clefXml.replace("<clef>", "<clef number=\"" + staff + "\">"));
+        }
+        return builder.toString();
+    }
+
+    public static boolean hasAbcGroupedStaffVoices(AbcParsedPartHeader part) {
+        return part != null && part.getStaffVoices() != null && part.getStaffVoices().size() > 1;
+    }
+
+    public static String buildAbcGroupedStaffMeasureNotesXml(List<AbcParsedStaffVoice> staffVoices, int measureIndex,
+            int currentMeasureDurationDiv, AbcMeasureNotesXmlBuilder buildMeasureNotesXml) {
+        if (staffVoices == null || buildMeasureNotesXml == null) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int staffIndex = 0; staffIndex < staffVoices.size(); staffIndex++) {
+            AbcParsedStaffVoice staffVoice = staffVoices.get(staffIndex);
+            List<AbcMeasureNote> staffNotes = staffVoice == null
+                    ? new ArrayList<AbcMeasureNote>()
+                    : staffVoice.getMeasure(measureIndex);
+            String xml = buildMeasureNotesXml.build(staffNotes,
+                    staffVoice == null ? Integer.valueOf(1) : Integer.valueOf(staffVoice.getStaff()));
+            if (staffIndex > 0) {
+                builder.append("<backup><duration>").append(currentMeasureDurationDiv).append("</duration></backup>");
+            }
+            builder.append(xml);
+        }
+        return builder.toString();
+    }
+
+    public static String buildAbcPartTransposeXml(AbcTransposeMeta transpose) {
+        if (transpose == null || (transpose.getChromatic() == null && transpose.getDiatonic() == null)) {
+            return "";
+        }
+        return "<transpose>"
+                + (transpose.getDiatonic() != null ? "<diatonic>" + Math.round(transpose.getDiatonic()) + "</diatonic>"
+                        : "")
+                + (transpose.getChromatic() != null
+                        ? "<chromatic>" + Math.round(transpose.getChromatic()) + "</chromatic>"
+                        : "")
+                + "</transpose>";
+    }
+
+    public static String buildAbcTempoDirectionXml(Integer tempo, boolean include) {
+        if (!include || tempo == null) {
+            return "";
+        }
+        return "<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>" + tempo
+                + "</per-minute></metronome></direction-type><sound tempo=\"" + tempo + "\"/></direction>";
+    }
+
+    public static AbcMeasureHeaderXml buildAbcMeasureHeaderXml(AbcParsedPartHeader part, int partIndex,
+            int measureIndex, int currentPartFifths, AbcMeter currentPartMeter, Integer currentPartTempo,
+            Integer hintedFifths, AbcMeter hintedMeter) {
+        AbcMeter meter = currentPartMeter == null ? new AbcMeter(4, 4) : currentPartMeter;
+        if (measureIndex == 0) {
+            boolean grouped = hasAbcGroupedStaffVoices(part);
+            String headerXml = "<attributes>"
+                    + "<divisions>960</divisions>"
+                    + "<key><fifths>" + Math.round(currentPartFifths) + "</fifths></key>"
+                    + "<time><beats>" + Math.round(meter.getBeats()) + "</beats><beat-type>"
+                    + Math.round(meter.getBeatType()) + "</beat-type></time>"
+                    + (grouped ? "<staves>" + part.getStaffVoices().size() + "</staves>" : "")
+                    + buildAbcPartTransposeXml(part == null ? null : part.getTranspose())
+                    + (grouped ? buildAbcGroupedStaffClefXml(part.getStaffVoices())
+                            : clefXmlFromAbcClef(part == null ? "" : part.getClef()))
+                    + "</attributes>"
+                    + buildAbcTempoDirectionXml(currentPartTempo, partIndex == 0);
+            return new AbcMeasureHeaderXml(headerXml, "");
+        }
+        String headerXml = hintedFifths != null || hintedMeter != null
+                ? "<attributes>"
+                        + (hintedFifths != null
+                                ? "<key><fifths>" + Math.round(currentPartFifths) + "</fifths></key>"
+                                : "")
+                        + (hintedMeter != null
+                                ? "<time><beats>" + Math.round(meter.getBeats()) + "</beats><beat-type>"
+                                        + Math.round(meter.getBeatType()) + "</beat-type></time>"
+                                : "")
+                        + "</attributes>"
+                : "";
+        return new AbcMeasureHeaderXml(headerXml, "");
+    }
+
+    public static String buildAbcMeasureTempoDirectionXml(Integer hintedTempo, int partIndex, int measureIndex) {
+        return buildAbcTempoDirectionXml(hintedTempo, measureIndex > 0 && partIndex == 0);
+    }
+
+    public static String buildAbcMeasureRepeatStartXml(AbcMeasureMeta measureMeta) {
+        StringBuilder chunks = new StringBuilder();
+        if (measureMeta != null && trimToEmpty(measureMeta.getEndingStart()).length() > 0) {
+            chunks.append("<ending number=\"").append(xmlEscape(measureMeta.getEndingStart()))
+                    .append("\" type=\"start\"/>");
+        }
+        if (measureMeta != null && measureMeta.isRepeatStart()) {
+            chunks.append("<repeat direction=\"forward\" winged=\"none\"/>");
+        }
+        return chunks.length() > 0 ? "<barline location=\"left\">" + chunks.toString() + "</barline>" : "";
+    }
+
+    public static String buildAbcMeasureRepeatEndXml(AbcMeasureMeta measureMeta) {
+        StringBuilder chunks = new StringBuilder();
+        if (measureMeta != null && trimToEmpty(measureMeta.getEndingStop()).length() > 0) {
+            chunks.append("<ending number=\"").append(xmlEscape(measureMeta.getEndingStop())).append("\" type=\"")
+                    .append(trimToEmpty(measureMeta.getEndingStopType()).length() > 0
+                            ? xmlEscape(measureMeta.getEndingStopType())
+                            : "stop")
+                    .append("\"/>");
+        }
+        if (measureMeta != null && measureMeta.isRepeatEnd()) {
+            chunks.append("<repeat direction=\"backward\" winged=\"none\"");
+            if (measureMeta.getRepeatTimes() != null && measureMeta.getRepeatTimes().intValue() > 1) {
+                chunks.append(" times=\"").append(Math.round(measureMeta.getRepeatTimes())).append("\"");
+            }
+            chunks.append("/>");
+        }
+        return chunks.length() > 0 ? "<barline location=\"right\">" + chunks.toString() + "</barline>" : "";
+    }
+
+    public static String buildAbcMeasureXml(int measureNo, String measureNumberText, boolean implicit,
+            String repeatStartXml, String headerXml, String tempoDirectionXml, String debugMiscXml,
+            String diagMiscXml, String sourceMiscXml, String notesXml, String repeatEndXml) {
+        String xmlMeasureNumber = xmlEscape(trimToEmpty(measureNumberText).length() > 0 ? measureNumberText
+                : String.valueOf(measureNo));
+        String implicitAttr = implicit ? " implicit=\"yes\"" : "";
+        return "<measure number=\"" + xmlMeasureNumber + "\"" + implicitAttr + ">"
+                + nullToEmpty(repeatStartXml)
+                + nullToEmpty(headerXml)
+                + nullToEmpty(tempoDirectionXml)
+                + nullToEmpty(debugMiscXml)
+                + nullToEmpty(diagMiscXml)
+                + nullToEmpty(sourceMiscXml)
+                + nullToEmpty(notesXml)
+                + nullToEmpty(repeatEndXml)
+                + "</measure>";
+    }
+
+    public static String buildAbcMeasureDebugMiscXml(List<AbcMeasureNote> notes, int measureNo) {
+        if (notes == null || notes.isEmpty()) {
+            return "";
+        }
+        StringBuilder xml = new StringBuilder("<attributes><miscellaneous>");
+        xml.append("<miscellaneous-field name=\"mks:dbg:abc:meta:count\">").append(toHex(notes.size(), 4))
+                .append("</miscellaneous-field>");
+        for (int index = 0; index < notes.size(); index++) {
+            AbcMeasureNote note = notes.get(index);
+            String voice = normalizeVoiceForMusicXml(note == null ? "" : note.getVoice());
+            String step = note == null || note.isRest() ? "R" : normalizeStep(note.getStep());
+            int octave = note == null || note.getOctave() == null ? 4
+                    : Math.max(0, Math.min(9, note.getOctave().intValue()));
+            int alter = note == null || note.getAlter() == null ? 0 : note.getAlter().intValue();
+            int duration = note == null || note.isGrace() ? 0 : Math.max(1, note.getDuration());
+            String payload = "idx=" + toHex(index, 4)
+                    + ";m=" + toHex(measureNo, 4)
+                    + ";v=" + xmlEscape(voice)
+                    + ";r=" + (note != null && note.isRest() ? "1" : "0")
+                    + ";g=" + (note != null && note.isGrace() ? "1" : "0")
+                    + ";ch=" + (note != null && note.isChord() ? "1" : "0")
+                    + ";st=" + step
+                    + ";al=" + alter
+                    + ";oc=" + toHex(octave, 2)
+                    + ";dd=" + toHex(duration, 4)
+                    + ";tp=" + xmlEscape(normalizeTypeForMusicXml(note == null ? "" : note.getType()));
+            xml.append("<miscellaneous-field name=\"mks:dbg:abc:meta:")
+                    .append(padLeft(index + 1, 4))
+                    .append("\">")
+                    .append(payload)
+                    .append("</miscellaneous-field>");
+        }
+        xml.append("</miscellaneous></attributes>");
+        return xml.toString();
+    }
+
+    public static String buildAbcSourceMiscXml(String abcSource) {
+        String source = abcSource == null ? "" : abcSource;
+        if (source.length() == 0) {
+            return "";
+        }
+        String encoded = source.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n");
+        int chunkSize = 240;
+        int maxChunks = 512;
+        List<String> chunks = new ArrayList<String>();
+        for (int index = 0; index < encoded.length() && chunks.size() < maxChunks; index += chunkSize) {
+            chunks.add(encoded.substring(index, Math.min(encoded.length(), index + chunkSize)));
+        }
+        boolean truncated = joinStrings(chunks).length() < encoded.length();
+        StringBuilder xml = new StringBuilder("<attributes><miscellaneous>");
+        xml.append("<miscellaneous-field name=\"mks:src:abc:raw-encoding\">escape-v1</miscellaneous-field>");
+        xml.append("<miscellaneous-field name=\"mks:src:abc:raw-length\">").append(xmlEscape(String.valueOf(source.length())))
+                .append("</miscellaneous-field>");
+        xml.append("<miscellaneous-field name=\"mks:src:abc:raw-encoded-length\">")
+                .append(xmlEscape(String.valueOf(encoded.length()))).append("</miscellaneous-field>");
+        xml.append("<miscellaneous-field name=\"mks:src:abc:raw-chunks\">").append(xmlEscape(String.valueOf(chunks.size())))
+                .append("</miscellaneous-field>");
+        xml.append("<miscellaneous-field name=\"mks:src:abc:raw-truncated\">").append(truncated ? "1" : "0")
+                .append("</miscellaneous-field>");
+        for (int index = 0; index < chunks.size(); index++) {
+            xml.append("<miscellaneous-field name=\"mks:src:abc:raw-").append(padLeft(index + 1, 4)).append("\">")
+                    .append(xmlEscape(chunks.get(index))).append("</miscellaneous-field>");
+        }
+        xml.append("</miscellaneous></attributes>");
+        return xml.toString();
+    }
+
+    public static String buildAbcDiagMiscXml(List<AbcImportDiagnostic> diagnostics) {
+        if (diagnostics == null || diagnostics.isEmpty()) {
+            return "";
+        }
+        int maxEntries = Math.min(256, diagnostics.size());
+        StringBuilder xml = new StringBuilder("<attributes><miscellaneous>");
+        xml.append("<miscellaneous-field name=\"mks:diag:count\">").append(maxEntries).append("</miscellaneous-field>");
+        for (int index = 0; index < maxEntries; index++) {
+            AbcImportDiagnostic item = diagnostics.get(index);
+            List<String> payload = new ArrayList<String>();
+            payload.add("level=" + item.getLevel());
+            payload.add("code=" + item.getCode());
+            payload.add("fmt=" + item.getFmt());
+            if (item.getMeasure() != null) {
+                payload.add("measure=" + Math.max(1, item.getMeasure().intValue()));
+            }
+            if (trimToEmpty(item.getVoiceId()).length() > 0) {
+                payload.add("voice=" + xmlEscape(item.getVoiceId()));
+            }
+            if (trimToEmpty(item.getAction()).length() > 0) {
+                payload.add("action=" + xmlEscape(item.getAction()));
+            }
+            if (trimToEmpty(item.getMessage()).length() > 0) {
+                payload.add("message=" + xmlEscape(item.getMessage()));
+            }
+            if (item.getMovedEvents() != null) {
+                payload.add("movedEvents=" + Math.max(0, item.getMovedEvents().intValue()));
+            }
+            xml.append("<miscellaneous-field name=\"mks:diag:").append(padLeft(index + 1, 4)).append("\">")
+                    .append(joinSemicolon(payload)).append("</miscellaneous-field>");
+        }
+        xml.append("</miscellaneous></attributes>");
+        return xml.toString();
+    }
+
+    public static AbcRenderedMeasureMiscXml buildAbcRenderedMeasureMiscXml(AbcRenderedMeasureMiscContext context) {
+        if (context == null) {
+            return new AbcRenderedMeasureMiscXml("", "", "");
+        }
+        List<AbcImportDiagnostic> filteredDiagnostics = new ArrayList<AbcImportDiagnostic>();
+        if (context.getDiagnostics() != null) {
+            String partVoiceId = context.getPart() == null ? "" : context.getPart().getVoiceId();
+            for (AbcImportDiagnostic diagnostic : context.getDiagnostics()) {
+                if (diagnostic == null || trimToEmpty(diagnostic.getVoiceId()).length() == 0
+                        || trimToEmpty(diagnostic.getVoiceId()).equals(partVoiceId)) {
+                    filteredDiagnostics.add(diagnostic);
+                }
+            }
+        }
+        String debugMiscXml = context.isDebugMetadata()
+                ? buildAbcMeasureDebugMiscXml(context.getNotes(), context.getMeasureNo())
+                : "";
+        String diagMiscXml = context.getPartIndex() == 0 && context.getMeasureNo() == 1
+                ? buildAbcDiagMiscXml(filteredDiagnostics)
+                : "";
+        String sourceMiscXml = context.isSourceMetadata() && context.getPartIndex() == 0 && context.getMeasureNo() == 1
+                ? buildAbcSourceMiscXml(context.getAbcSource())
+                : "";
+        return new AbcRenderedMeasureMiscXml(debugMiscXml, diagMiscXml, sourceMiscXml);
+    }
+
+    public static String buildAbcRenderedPartMeasureXml(AbcRenderedPartMeasureContext context) {
+        if (context == null) {
+            return "";
+        }
+        AbcMeasureHeaderXml header = buildAbcMeasureHeaderXml(context.getPartHeader(), context.getPartIndex(),
+                context.getMeasureIndex(), context.getCurrentPartFifths(), context.getCurrentPartMeter(),
+                context.getCurrentPartTempo(), context.getHintedFifths(), context.getHintedMeter());
+        String tempoDirectionXml = header.getTempoDirectionXml().length() > 0
+                ? header.getTempoDirectionXml()
+                : buildAbcMeasureTempoDirectionXml(context.getHintedTempo(), context.getPartIndex(),
+                        context.getMeasureIndex());
+        String notesXml = hasAbcGroupedStaffVoices(context.getPartHeader())
+                ? buildAbcGroupedStaffMeasureNotesXml(context.getPartHeader().getStaffVoices(),
+                        context.getMeasureIndex(), context.getCurrentMeasureDurationDiv(),
+                        context.getBuildMeasureNotesXml())
+                : context.getBuildMeasureNotesXml().build(context.getNotes(), null);
+        String repeatStartXml = buildAbcMeasureRepeatStartXml(context.getMeasureMeta());
+        String repeatEndXml = buildAbcMeasureRepeatEndXml(context.getMeasureMeta());
+        AbcRenderedMeasureMiscXml miscXml = buildAbcRenderedMeasureMiscXml(new AbcRenderedMeasureMiscContext(
+                context.getPart(), context.getPartIndex(), context.getMeasureNo(), context.getNotes(),
+                context.isDebugMetadata(), context.isSourceMetadata(), context.getDiagnostics(),
+                context.getAbcSource()));
+        String measureNumber = context.getMeasureMeta() != null && trimToEmpty(context.getMeasureMeta().getNumber()).length() > 0
+                ? context.getMeasureMeta().getNumber()
+                : String.valueOf(context.getMeasureNo());
+        return buildAbcMeasureXml(context.getMeasureNo(), measureNumber,
+                context.getMeasureMeta() != null && context.getMeasureMeta().isImplicit()
+                        || context.isInferredImplicitPickup(),
+                repeatStartXml, header.getHeaderXml(), tempoDirectionXml, miscXml.getDebugMiscXml(),
+                miscXml.getDiagMiscXml(), miscXml.getSourceMiscXml(), notesXml, repeatEndXml);
+    }
+
+    public static String buildAbcPartXml(AbcParsedPart part, int partIndex, int measureCount, int defaultFifths,
+            int beats, int beatType, Integer tempoBpm, boolean debugMetadata, boolean sourceMetadata,
+            List<AbcImportDiagnostic> diagnostics, String abcSource, AbcMeasureNotesXmlBuilder buildMeasureNotesXml) {
+        AbcParsedPart safePart = part == null ? new AbcParsedPart("P1", "Voice 1") : part;
+        StringBuilder measuresXml = new StringBuilder();
+        AbcPartRenderState state = createInitialAbcPartRenderState(defaultFifths, beats, beatType, tempoBpm);
+        AbcParsedPartRenderData renderData = safePart.toRenderData();
+        AbcParsedPartHeader header = safePart.toPartHeader();
+        for (int index = 0; index < measureCount; index++) {
+            int measureNo = index + 1;
+            AbcPartMeasureRenderContext measureContext = buildAbcPartMeasureRenderContext(renderData, index, state,
+                    beats, beatType);
+            state = measureContext.getNextState();
+            measuresXml.append(buildAbcRenderedPartMeasureXml(new AbcRenderedPartMeasureContext(header, renderData,
+                    partIndex, index, measureNo, measureContext.getNotes(), measureContext.getMeasureMeta(),
+                    measureContext.getHintedFifths(), measureContext.getHintedMeter(),
+                    measureContext.getHintedTempo(), state.getCurrentPartFifths(), state.getCurrentPartMeter(),
+                    state.getCurrentPartTempo(), measureContext.getCurrentMeasureDurationDiv(),
+                    measureContext.isInferredImplicitPickup(), debugMetadata, sourceMetadata, diagnostics, abcSource,
+                    buildMeasureNotesXml)));
+        }
+        return "<part id=\"" + xmlEscape(safePart.getPartId()) + "\">" + measuresXml.toString() + "</part>";
+    }
+
+    public static String buildAbcPartListXml(List<AbcParsedPart> resolvedParts) {
+        if (resolvedParts == null || resolvedParts.isEmpty()) {
+            resolvedParts = java.util.Arrays.asList(new AbcParsedPart("P1", "Voice 1"));
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < resolvedParts.size(); index++) {
+            AbcParsedPart part = resolvedParts.get(index) == null ? new AbcParsedPart("P" + (index + 1), "Voice "
+                    + (index + 1)) : resolvedParts.get(index);
+            int rawChannel = (index % 16) + 1;
+            int midiChannel = rawChannel == 10 ? 11 : rawChannel;
+            String partId = trimToEmpty(part.getPartId()).length() == 0 ? "P" + (index + 1) : part.getPartId();
+            String partName = trimToEmpty(part.getPartName()).length() == 0 ? partId : part.getPartName();
+            builder.append("<score-part id=\"").append(xmlEscape(partId)).append("\">")
+                    .append("<part-name>").append(xmlEscape(partName)).append("</part-name>")
+                    .append("<midi-instrument id=\"").append(xmlEscape(partId)).append("-I1\">")
+                    .append("<midi-channel>").append(midiChannel).append("</midi-channel>")
+                    .append("<midi-program>6</midi-program>")
+                    .append("</midi-instrument>")
+                    .append("</score-part>");
+        }
+        return builder.toString();
+    }
+
+    public static String buildAbcPartBodyXml(List<AbcParsedPart> resolvedParts, int measureCount, int defaultFifths,
+            int beats, int beatType, Integer tempoBpm, boolean debugMetadata, boolean sourceMetadata,
+            List<AbcImportDiagnostic> diagnostics, String abcSource, AbcMeasureNotesXmlBuilder buildMeasureNotesXml) {
+        if (resolvedParts == null || resolvedParts.isEmpty()) {
+            resolvedParts = java.util.Arrays.asList(new AbcParsedPart("P1", "Voice 1"));
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < resolvedParts.size(); index++) {
+            builder.append(buildAbcPartXml(resolvedParts.get(index), index, measureCount, defaultFifths, beats,
+                    beatType, tempoBpm, debugMetadata, sourceMetadata, diagnostics, abcSource, buildMeasureNotesXml));
+        }
+        return builder.toString();
+    }
+
+    public static String buildAbcScorePartwiseXmlDocument(String title, String composer, String partListXml,
+            String partBodyXml) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"4.0\">"
+                + "<work><work-title>" + xmlEscape(title) + "</work-title></work>"
+                + "<identification><creator type=\"composer\">" + xmlEscape(composer)
+                + "</creator></identification>"
+                + "<part-list>" + nullToEmpty(partListXml) + "</part-list>"
+                + nullToEmpty(partBodyXml)
+                + "</score-partwise>";
+    }
+
+    public static String buildAbcEmptyMeasureNotesXml(int measureDurationDiv, String emptyMeasureRestType,
+            Integer staffOverride) {
+        return "<note><rest/><duration>" + Math.max(1, measureDurationDiv)
+                + "</duration><voice>1</voice><type>" + normalizeTypeForMusicXml(emptyMeasureRestType) + "</type>"
+                + (staffOverride != null ? "<staff>" + Math.max(1, staffOverride.intValue()) + "</staff>" : "")
+                + "</note>";
+    }
+
+    public static Map<Integer, String> buildAbcBeamXmlByNoteIndex(List<AbcMeasureNote> notes, int beatDiv) {
+        Map<Integer, String> out = new LinkedHashMap<Integer, String>();
+        if (notes == null || notes.isEmpty()) {
+            return out;
+        }
+        Map<String, List<AbcBeamNoteEvent>> byVoice = new LinkedHashMap<String, List<AbcBeamNoteEvent>>();
+        for (int index = 0; index < notes.size(); index++) {
+            AbcMeasureNote note = notes.get(index);
+            String voice = normalizeVoiceForMusicXml(note == null ? "" : note.getVoice());
+            if (!byVoice.containsKey(voice)) {
+                byVoice.put(voice, new ArrayList<AbcBeamNoteEvent>());
+            }
+            byVoice.get(voice).add(new AbcBeamNoteEvent(note, index));
+        }
+        for (List<AbcBeamNoteEvent> events : byVoice.values()) {
+            List<AbcBeamNoteEvent> primary = new ArrayList<AbcBeamNoteEvent>();
+            for (AbcBeamNoteEvent event : events) {
+                if (event.getNote() == null || !event.getNote().isChord()) {
+                    primary.add(event);
+                }
+            }
+            Map<Integer, AbcBeamAssignment> assignments = computeAbcBeamAssignments(primary, beatDiv, true);
+            for (Map.Entry<Integer, AbcBeamAssignment> entry : assignments.entrySet()) {
+                AbcBeamAssignment assignment = entry.getValue();
+                if (assignment == null || assignment.getLevels() <= 0) {
+                    continue;
+                }
+                StringBuilder beamXml = new StringBuilder();
+                for (int level = 1; level <= assignment.getLevels(); level++) {
+                    beamXml.append("<beam number=\"").append(level).append("\">").append(assignment.getState())
+                            .append("</beam>");
+                }
+                AbcBeamNoteEvent target = primary.get(entry.getKey().intValue());
+                out.put(Integer.valueOf(target.getNoteIndex()), beamXml.toString());
+            }
+        }
+        return out;
+    }
+
+    public static String buildAbcNotePitchOrRestXml(AbcMeasureNote note) {
+        if (note == null || note.isRest()) {
+            return "<rest/>";
+        }
+        String step = normalizeStep(note.getStep());
+        int octave = note.getOctave() == null ? 4 : Math.max(0, Math.min(9, note.getOctave().intValue()));
+        String alterXml = note.getAlter() != null && note.getAlter().intValue() != 0
+                ? "<alter>" + Math.round(note.getAlter().intValue()) + "</alter>"
+                : "";
+        return "<pitch><step>" + step + "</step>" + alterXml + "<octave>" + octave + "</octave></pitch>";
+    }
+
+    public static String buildAbcNoteAccidentalXml(AbcMeasureNote note) {
+        if (note == null || trimToEmpty(note.getAccidentalText()).length() == 0) {
+            return "";
+        }
+        List<String> attrs = new ArrayList<String>();
+        if (note.isAccidentalEditorial()) {
+            attrs.add("editorial=\"yes\"");
+        }
+        if (note.isAccidentalCautionary()) {
+            attrs.add("cautionary=\"yes\"");
+        }
+        String attrText = attrs.isEmpty() ? "" : " " + joinStringsWithSeparator(attrs, " ");
+        return "<accidental" + attrText + ">" + xmlEscape(note.getAccidentalText()) + "</accidental>";
+    }
+
+    public static String buildAbcNoteLyricXml(AbcMeasureNote note) {
+        if (note == null || trimToEmpty(note.getLyricText()).length() == 0) {
+            return "";
+        }
+        return "<lyric><syllabic>" + xmlEscape(trimToEmpty(note.getLyricSyllabic()).length() == 0 ? "single"
+                : note.getLyricSyllabic()) + "</syllabic><text>" + xmlEscape(note.getLyricText()) + "</text>"
+                + (note.isLyricExtend() ? "<extend/>" : "") + "</lyric>";
+    }
+
+    public static String buildAbcNoteTimeModificationXml(AbcMeasureNote note) {
+        if (note == null || note.getTimeModificationActual() == null || note.getTimeModificationNormal() == null
+                || note.getTimeModificationActual().intValue() <= 0 || note.getTimeModificationNormal().intValue() <= 0) {
+            return "";
+        }
+        return "<time-modification><actual-notes>" + Math.round(note.getTimeModificationActual().intValue())
+                + "</actual-notes><normal-notes>" + Math.round(note.getTimeModificationNormal().intValue())
+                + "</normal-notes></time-modification>";
+    }
+
+    public static String buildAbcNoteHarmonyAndWordsDirectionXml(AbcMeasureNote note) {
+        if (note == null || note.isChord()) {
+            return "";
+        }
+        StringBuilder chunks = new StringBuilder();
+        for (String annotation : note.getAnnotations()) {
+            if (trimToEmpty(annotation).length() == 0) {
+                continue;
+            }
+            chunks.append("<direction><direction-type><words>").append(xmlEscape(annotation))
+                    .append("</words></direction-type></direction>");
+        }
+        return chunks.toString();
+    }
+
+    public static String buildAbcNoteControlDirectionXml(AbcMeasureNote note) {
+        if (note == null || note.isChord()) {
+            return "";
+        }
+        StringBuilder chunks = new StringBuilder();
+        if (note.isSegno()) {
+            chunks.append("<direction><direction-type><segno/></direction-type></direction>");
+        }
+        if (note.isCoda()) {
+            chunks.append("<direction><direction-type><coda/></direction-type></direction>");
+        }
+        if (trimToEmpty(note.getRehearsalMark()).length() > 0) {
+            chunks.append("<direction><direction-type><rehearsal>")
+                    .append(xmlEscape(note.getRehearsalMark()))
+                    .append("</rehearsal></direction-type></direction>");
+        }
+        if (note.isFine()) {
+            chunks.append("<direction><sound fine=\"yes\"/></direction>");
+        }
+        if (note.isDaCapo()) {
+            chunks.append("<direction><sound dacapo=\"yes\"/></direction>");
+        }
+        if (note.isDalSegno()) {
+            chunks.append("<direction><sound dalsegno=\"segno\"/></direction>");
+        }
+        if (note.isToCoda()) {
+            chunks.append("<direction><sound tocoda=\"coda\"/></direction>");
+        }
+        if (note.isCrescendoStart()) {
+            chunks.append("<direction><direction-type><wedge type=\"crescendo\"/></direction-type></direction>");
+        }
+        if (note.isDiminuendoStart()) {
+            chunks.append("<direction><direction-type><wedge type=\"diminuendo\"/></direction-type></direction>");
+        }
+        if (note.isCrescendoStop() || note.isDiminuendoStop()) {
+            chunks.append("<direction><direction-type><wedge type=\"stop\"/></direction-type></direction>");
+        }
+        if (trimToEmpty(note.getDynamicMark()).length() > 0) {
+            chunks.append("<direction><direction-type><dynamics><")
+                    .append(xmlEscape(note.getDynamicMark()))
+                    .append("/></dynamics></direction-type></direction>");
+        }
+        if (note.isSfz()) {
+            chunks.append("<direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction>");
+        }
+        return chunks.toString();
+    }
+
+    public static String buildAbcNoteLeadingDirectionXml(AbcMeasureNote note) {
+        return buildAbcNoteHarmonyAndWordsDirectionXml(note) + buildAbcNoteControlDirectionXml(note);
+    }
+
+    public static String buildAbcNoteCoreXml(AbcMeasureNote note, int noteIndex, Integer staffOverride,
+            Map<Integer, String> beamXmlByNoteIndex) {
+        AbcMeasureNote safeNote = note == null ? new AbcMeasureNote("1", 1, false, false, true, "C",
+                Integer.valueOf(4), Integer.valueOf(0), "quarter") : note;
+        StringBuilder chunks = new StringBuilder();
+        chunks.append("<note>");
+        if (safeNote.isChord()) {
+            chunks.append("<chord/>");
+        }
+        if (safeNote.isGrace()) {
+            chunks.append(safeNote.isGraceSlash() ? "<grace slash=\"yes\"/>" : "<grace/>");
+        }
+        chunks.append(buildAbcNotePitchOrRestXml(safeNote));
+        if (!safeNote.isGrace()) {
+            chunks.append("<duration>").append(Math.max(1, safeNote.getDuration())).append("</duration>");
+        }
+        chunks.append("<voice>").append(xmlEscape(normalizeVoiceForMusicXml(safeNote.getVoice()))).append("</voice>");
+        Integer staffNumber = staffOverride != null ? staffOverride : safeNote.getStaff();
+        if (staffNumber != null) {
+            chunks.append("<staff>").append(Math.max(1, staffNumber.intValue())).append("</staff>");
+        }
+        chunks.append(buildAbcNoteLyricXml(safeNote));
+        chunks.append("<type>").append(normalizeTypeForMusicXml(safeNote.getType())).append("</type>");
+        if (!safeNote.isChord() && beamXmlByNoteIndex != null && beamXmlByNoteIndex.containsKey(Integer.valueOf(noteIndex))) {
+            chunks.append(beamXmlByNoteIndex.get(Integer.valueOf(noteIndex)));
+        }
+        chunks.append(buildAbcNoteTimeModificationXml(safeNote));
+        chunks.append(buildAbcNoteAccidentalXml(safeNote));
+        if (safeNote.isTieStart()) {
+            chunks.append("<tie type=\"start\"/>");
+        }
+        if (safeNote.isTieStop()) {
+            chunks.append("<tie type=\"stop\"/>");
+        }
+        return chunks.toString();
+    }
+
+    public static String buildAbcNoteNotationsXml(AbcMeasureNote note) {
+        if (note == null || !(note.isTieStart() || note.isTieStop())) {
+            return "";
+        }
+        StringBuilder chunks = new StringBuilder("<notations>");
+        if (note.isTieStart()) {
+            chunks.append("<tied type=\"start\"/>");
+        }
+        if (note.isTieStop()) {
+            chunks.append("<tied type=\"stop\"/>");
+        }
+        chunks.append("</notations>");
+        return chunks.toString();
+    }
+
+    public static String buildAbcNoteXml(AbcMeasureNote note, int noteIndex, Integer staffOverride,
+            Map<Integer, String> beamXmlByNoteIndex) {
+        return buildAbcNoteLeadingDirectionXml(note)
+                + buildAbcNoteCoreXml(note, noteIndex, staffOverride, beamXmlByNoteIndex)
+                + buildAbcNoteNotationsXml(note)
+                + "</note>";
+    }
+
+    public static String buildAbcMeasureNotesXml(List<AbcMeasureNote> notes, int measureDurationDiv,
+            String emptyMeasureRestType, int beatDiv, Integer staffOverride) {
+        if (notes == null || notes.isEmpty()) {
+            return buildAbcEmptyMeasureNotesXml(measureDurationDiv, emptyMeasureRestType, staffOverride);
+        }
+        Map<Integer, String> beamXmlByNoteIndex = buildAbcBeamXmlByNoteIndex(notes, beatDiv);
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < notes.size(); index++) {
+            builder.append(buildAbcNoteXml(notes.get(index), index, staffOverride, beamXmlByNoteIndex));
+        }
+        return builder.toString();
+    }
+
+    public static List<AbcParsedPart> resolveAbcParsedPartsForExport(List<AbcParsedPart> parts) {
+        List<AbcParsedPart> safeParts = parts == null || parts.isEmpty()
+                ? java.util.Arrays.asList(new AbcParsedPart("P1", "Voice 1", "", "", null,
+                        new ArrayList<AbcParsedStaffVoice>(),
+                        java.util.Arrays.asList(new ArrayList<AbcMeasureNote>()),
+                        new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcMeter>(),
+                        new LinkedHashMap<Integer, Integer>(), new LinkedHashMap<Integer, AbcMeasureMeta>()))
+                : parts;
+        List<AbcParsedPart> resolved = new ArrayList<AbcParsedPart>();
+        for (AbcParsedPart part : safeParts) {
+            AbcParsedPart safePart = part == null ? new AbcParsedPart("P1", "Voice 1") : part;
+            resolved.add(safePart.withClef(resolveAbcImportClef(safePart)));
+        }
+        return resolved;
+    }
+
+    public static AbcMusicXmlExportContext buildAbcMusicXmlExportContext(AbcParsedResult parsed) {
+        AbcParsedResult safeParsed = parsed == null ? new AbcParsedResult(new AbcParsedMeta(), null, null, null)
+                : parsed;
+        AbcParsedMeta meta = safeParsed.getMeta() == null ? new AbcParsedMeta() : safeParsed.getMeta();
+        List<AbcParsedPart> resolvedParts = resolveAbcParsedPartsForExport(safeParsed.getParts());
+        int measureCount = 1;
+        for (AbcParsedPart part : resolvedParts) {
+            measureCount = Math.max(measureCount, part == null ? 0 : part.getMeasures().size());
+        }
+        int beats = meta.getMeter() == null ? 4 : meta.getMeter().getBeats();
+        int beatType = meta.getMeter() == null ? 4 : meta.getMeter().getBeatType();
+        int defaultFifths = meta.getKeyInfo() == null ? 0 : meta.getKeyInfo().getFifths();
+        int divisions = 960;
+        int beatDiv = Math.max(1, (int) Math.round((divisions * 4.0) / Math.max(1, Math.round(beatType))));
+        int measureDurationDiv = Math.max(1,
+                (int) Math.round((divisions * 4.0 * Math.max(1, Math.round(beats)))
+                        / Math.max(1, Math.round(beatType))));
+        String emptyMeasureRestType = normalizeTypeForMusicXml(typeFromDuration(measureDurationDiv, divisions));
+        Integer tempoBpm = meta.getTempoBpm() != null && meta.getTempoBpm().intValue() > 0
+                ? Integer.valueOf(clampRoundedTempo(meta.getTempoBpm().intValue()))
+                : null;
+        return new AbcMusicXmlExportContext(resolvedParts, measureCount,
+                trimToEmpty(meta.getTitle()).length() == 0 ? "mikuscore" : meta.getTitle(),
+                trimToEmpty(meta.getComposer()).length() == 0 ? "Unknown" : meta.getComposer(),
+                beats, beatType, defaultFifths, divisions, beatDiv, measureDurationDiv, emptyMeasureRestType,
+                tempoBpm);
+    }
+
+    public static String buildMusicXmlFromAbcParsed(AbcParsedResult parsed, String abcSource,
+            AbcImportOptions options, AbcMeasureNotesXmlBuilder buildMeasureNotesXml) {
+        AbcImportOptions safeOptions = options == null ? new AbcImportOptions() : options;
+        boolean debugMetadata = safeOptions.getDebugMetadata() == null ? true
+                : safeOptions.getDebugMetadata().booleanValue();
+        boolean sourceMetadata = safeOptions.getSourceMetadata() == null ? true
+                : safeOptions.getSourceMetadata().booleanValue();
+        boolean debugPrettyPrint = safeOptions.getDebugPrettyPrint() == null ? debugMetadata
+                : safeOptions.getDebugPrettyPrint().booleanValue();
+        AbcMusicXmlExportContext exportContext = buildAbcMusicXmlExportContext(parsed);
+        AbcMeasureNotesXmlBuilder notesXmlBuilder = buildMeasureNotesXml == null ? new AbcMeasureNotesXmlBuilder() {
+            public String build(List<AbcMeasureNote> notes, Integer staffNumber) {
+                return buildAbcMeasureNotesXml(notes, exportContext.getMeasureDurationDiv(),
+                        exportContext.getEmptyMeasureRestType(), exportContext.getBeatDiv(), staffNumber);
+            }
+        } : buildMeasureNotesXml;
+        String partListXml = buildAbcPartListXml(exportContext.getResolvedParts());
+        String partBodyXml = buildAbcPartBodyXml(exportContext.getResolvedParts(), exportContext.getMeasureCount(),
+                exportContext.getDefaultFifths(), exportContext.getBeats(), exportContext.getBeatType(),
+                exportContext.getTempoBpm(), debugMetadata, sourceMetadata,
+                parsed == null ? null : parsed.getDiagnostics(), abcSource, notesXmlBuilder);
+        String xml = buildAbcScorePartwiseXmlDocument(exportContext.getTitle(), exportContext.getComposer(),
+                partListXml, partBodyXml);
+        return debugPrettyPrint ? prettyPrintXml(xml) : xml;
+    }
+
+    public static String buildMusicXmlFromAbcParsed(AbcParsedResult parsed, String abcSource,
+            AbcImportOptions options) {
+        return buildMusicXmlFromAbcParsed(parsed, abcSource, options, null);
+    }
+
+    public static AbcPartRenderState createInitialAbcPartRenderState(int defaultFifths, int beats, int beatType,
+            Integer tempoBpm) {
+        return new AbcPartRenderState(Math.max(-7, Math.min(7, (int) Math.round(defaultFifths))),
+                new AbcMeter((int) Math.round(beats), (int) Math.round(beatType)), tempoBpm);
+    }
+
+    public static AbcPartMeasureRenderContext buildAbcPartMeasureRenderContext(AbcParsedPartRenderData part,
+            int measureIndex, AbcPartRenderState state, int beats, int beatType) {
+        int measureNo = measureIndex + 1;
+        List<AbcMeasureNote> notes = part == null ? new ArrayList<AbcMeasureNote>() : part.getMeasure(measureIndex);
+        AbcMeasureMeta measureMeta = part == null ? null : part.getMeasureMetaByIndex().get(Integer.valueOf(measureNo));
+        Integer rawHintedFifths = part == null ? null : part.getKeyByMeasure().get(Integer.valueOf(measureNo));
+        Integer hintedFifths = rawHintedFifths == null ? null
+                : Integer.valueOf(Math.max(-7, Math.min(7, (int) Math.round(rawHintedFifths.intValue()))));
+        AbcMeter hintedMeter = part == null ? null : part.getMeterByMeasure().get(Integer.valueOf(measureNo));
+        Integer rawHintedTempo = part == null ? null : part.getTempoByMeasure().get(Integer.valueOf(measureNo));
+        Integer hintedTempo = rawHintedTempo == null ? null : Integer.valueOf(clampRoundedTempo(rawHintedTempo));
+        AbcPartRenderState normalizedState = state == null
+                ? createInitialAbcPartRenderState(0, beats, beatType, null)
+                : state;
+        AbcMeter nextMeter = hintedMeter != null
+                ? new AbcMeter(Math.max(1, (int) Math.round(hintedMeter.getBeats() == 0 ? beats
+                        : hintedMeter.getBeats())),
+                        Math.max(1, (int) Math.round(hintedMeter.getBeatType() == 0 ? beatType
+                                : hintedMeter.getBeatType())))
+                : normalizedState.getCurrentPartMeter();
+        AbcPartRenderState nextState = new AbcPartRenderState(
+                hintedFifths != null ? hintedFifths.intValue() : normalizedState.getCurrentPartFifths(),
+                nextMeter,
+                hintedTempo != null ? hintedTempo : normalizedState.getCurrentPartTempo());
+        int currentMeasureDurationDiv = Math.max(1,
+                (int) Math.round((960.0 * 4.0 * Math.max(1, Math.round(nextState.getCurrentPartMeter().getBeats())))
+                        / Math.max(1, Math.round(nextState.getCurrentPartMeter().getBeatType()))));
+        int currentMeasureContentDiv = estimateAbcMeasureContentDiv(notes);
+        boolean inferredImplicitPickup = measureIndex == 0
+                && !(measureMeta != null && measureMeta.isImplicit())
+                && currentMeasureContentDiv > 0
+                && currentMeasureContentDiv < currentMeasureDurationDiv;
+        return new AbcPartMeasureRenderContext(notes, measureMeta, hintedFifths, hintedMeter, hintedTempo, nextState,
+                currentMeasureDurationDiv, inferredImplicitPickup);
+    }
+
     public static boolean isAbcjsWrapperLine(String text) {
         String value = text == null ? "" : text.trim();
         return value.matches("^\\[\\s*/?\\s*abcjs(?:-[A-Za-z0-9_-]+)?(?:\\s+[^\\]]*)?\\]$");
@@ -921,6 +1672,215 @@ public final class AbcIo {
         return trimToEmpty(fallback);
     }
 
+    private static String nullToEmpty(String text) {
+        return text == null ? "" : text;
+    }
+
+    private static String toHex(int value, int width) {
+        int safe = Math.max(0, value);
+        String hex = Integer.toHexString(safe).toUpperCase();
+        while (hex.length() < width) {
+            hex = "0" + hex;
+        }
+        return "0x" + hex;
+    }
+
+    private static String padLeft(int value, int width) {
+        String text = String.valueOf(value);
+        while (text.length() < width) {
+            text = "0" + text;
+        }
+        return text;
+    }
+
+    private static String normalizeStep(String step) {
+        String value = trimToEmpty(step).toUpperCase();
+        return value.matches("^[A-G]$") ? value : "C";
+    }
+
+    private static String normalizeTypeForMusicXml(String type) {
+        String raw = trimToEmpty(type);
+        if (raw.length() == 0) {
+            return "quarter";
+        }
+        if ("16th".equals(raw) || "32nd".equals(raw) || "64th".equals(raw) || "128th".equals(raw)) {
+            return raw;
+        }
+        if ("whole".equals(raw) || "half".equals(raw) || "quarter".equals(raw) || "eighth".equals(raw)) {
+            return raw;
+        }
+        return "quarter";
+    }
+
+    private static String typeFromDuration(int duration, int divisionsPerQuarter) {
+        double whole = ((double) duration) / (4.0 * Math.max(1, divisionsPerQuarter));
+        if (whole >= 1.0) {
+            return "whole";
+        }
+        if (whole >= 0.5) {
+            return "half";
+        }
+        if (whole >= 0.25) {
+            return "quarter";
+        }
+        if (whole >= 0.125) {
+            return "eighth";
+        }
+        if (whole >= 0.0625) {
+            return "16th";
+        }
+        return "32nd";
+    }
+
+    private static String resolveAbcImportClef(AbcParsedPart part) {
+        String explicit = part == null ? "" : trimToEmpty(part.getClef()).toLowerCase();
+        if (explicit.length() > 0) {
+            return explicit;
+        }
+        List<Integer> keys = new ArrayList<Integer>();
+        if (part != null) {
+            for (List<AbcMeasureNote> measure : part.getMeasures()) {
+                if (measure == null) {
+                    continue;
+                }
+                for (AbcMeasureNote note : measure) {
+                    Integer midi = noteToMidiForAbcClefInference(note);
+                    if (midi != null) {
+                        keys.add(midi);
+                    }
+                }
+            }
+        }
+        if (keys.isEmpty()) {
+            return "";
+        }
+        return "F".equals(chooseSingleClefByKeys(keys)) ? "bass" : "treble";
+    }
+
+    private static Integer noteToMidiForAbcClefInference(AbcMeasureNote note) {
+        if (note == null || note.isRest()) {
+            return null;
+        }
+        String step = normalizeStep(note.getStep());
+        int octave = note.getOctave() == null ? 4 : (int) Math.round(note.getOctave().intValue());
+        int alter = note.getAlter() == null ? 0 : (int) Math.round(note.getAlter().intValue());
+        return Integer.valueOf((octave + 1) * 12 + midiByStepForAbcImport(step) + alter);
+    }
+
+    private static int midiByStepForAbcImport(String step) {
+        if ("D".equals(step)) {
+            return 2;
+        }
+        if ("E".equals(step)) {
+            return 4;
+        }
+        if ("F".equals(step)) {
+            return 5;
+        }
+        if ("G".equals(step)) {
+            return 7;
+        }
+        if ("A".equals(step)) {
+            return 9;
+        }
+        if ("B".equals(step)) {
+            return 11;
+        }
+        return 0;
+    }
+
+    private static String chooseSingleClefByKeys(List<Integer> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return "G";
+        }
+        List<Integer> sorted = new ArrayList<Integer>(keys);
+        java.util.Collections.sort(sorted);
+        int minKey = sorted.get(0).intValue();
+        if (minKey >= 55) {
+            return "G";
+        }
+        int median = sorted.get(sorted.size() / 2).intValue();
+        return median < 60 ? "F" : "G";
+    }
+
+    private static String prettyPrintXml(String xml) {
+        String compact = String.valueOf(xml == null ? "" : xml).replaceAll(">\\s+<", "><").trim();
+        if (compact.length() == 0) {
+            return "";
+        }
+        String[] split = compact.replaceAll("(>)(<)(/?)", "$1\n$2$3").split("\n");
+        int indent = 0;
+        StringBuilder out = new StringBuilder();
+        for (String rawToken : split) {
+            String token = rawToken.trim();
+            if (token.length() == 0) {
+                continue;
+            }
+            if (token.startsWith("</")) {
+                indent = Math.max(0, indent - 1);
+            }
+            if (out.length() > 0) {
+                out.append('\n');
+            }
+            for (int index = 0; index < indent; index++) {
+                out.append("  ");
+            }
+            out.append(token);
+            boolean opening = token.matches("^<[^!?/][^>]*>$");
+            boolean selfClosing = token.endsWith("/>");
+            if (opening && !selfClosing) {
+                indent++;
+            }
+        }
+        return out.toString();
+    }
+
+    private static String normalizeVoiceForMusicXml(String voice) {
+        String raw = trimToEmpty(voice);
+        if (raw.length() == 0) {
+            return "1";
+        }
+        if (raw.matches("^[1-9]\\d*$")) {
+            return raw;
+        }
+        Matcher matcher = Pattern.compile("\\d+").matcher(raw);
+        if (!matcher.find()) {
+            return "1";
+        }
+        int value = parseInt(matcher.group(0), 1);
+        return value <= 0 ? "1" : String.valueOf(value);
+    }
+
+    private static String joinStrings(List<String> values) {
+        StringBuilder builder = new StringBuilder();
+        for (String value : values) {
+            builder.append(value);
+        }
+        return builder.toString();
+    }
+
+    private static String joinSemicolon(List<String> values) {
+        StringBuilder builder = new StringBuilder();
+        for (String value : values) {
+            if (builder.length() > 0) {
+                builder.append(";");
+            }
+            builder.append(value);
+        }
+        return builder.toString();
+    }
+
+    private static String joinStringsWithSeparator(List<String> values, String separator) {
+        StringBuilder builder = new StringBuilder();
+        for (String value : values) {
+            if (builder.length() > 0) {
+                builder.append(separator == null ? "" : separator);
+            }
+            builder.append(value);
+        }
+        return builder.toString();
+    }
+
     private static String trimToEmpty(String value) {
         return value == null ? "" : value.trim();
     }
@@ -928,6 +1888,156 @@ public final class AbcIo {
     private static boolean isTruthy(String value) {
         String normalized = trimToEmpty(value).toLowerCase();
         return "1".equals(normalized) || "true".equals(normalized) || "yes".equals(normalized);
+    }
+
+    private static Map<Integer, AbcBeamAssignment> computeAbcBeamAssignments(List<AbcBeamNoteEvent> events,
+            int beatDiv, boolean splitAtBeatBoundaryWhenImplicit) {
+        Map<Integer, AbcBeamAssignment> assignmentByIndex = new LinkedHashMap<Integer, AbcBeamAssignment>();
+        List<AbcBeamEventInfo> infos = new ArrayList<AbcBeamEventInfo>();
+        if (events == null) {
+            return assignmentByIndex;
+        }
+        for (AbcBeamNoteEvent event : events) {
+            infos.add(resolveAbcBeamEventInfo(event == null ? null : event.getNote()));
+        }
+
+        boolean hasExplicitBeamMode = false;
+        for (AbcBeamEventInfo info : infos) {
+            if (info.isTimed() && ("begin".equals(info.getExplicitMode()) || "mid".equals(info.getExplicitMode()))) {
+                hasExplicitBeamMode = true;
+                break;
+            }
+        }
+        if (!hasExplicitBeamMode) {
+            List<Integer> currentGroup = new ArrayList<Integer>();
+            int cursorDiv = 0;
+            int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
+            for (int index = 0; index < infos.size(); index++) {
+                AbcBeamEventInfo info = infos.get(index);
+                if (splitAtBeatBoundaryWhenImplicit && info.isTimed()) {
+                    boolean startsAtBeatBoundary = cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0;
+                    if (startsAtBeatBoundary) {
+                        flushAbcBeamGroup(infos, currentGroup, assignmentByIndex);
+                        currentGroup.clear();
+                    }
+                }
+                if (!info.isChord() || !isAbcBeamableTimedEvent(info)) {
+                    flushAbcBeamGroup(infos, currentGroup, assignmentByIndex);
+                    currentGroup.clear();
+                    if (info.isTimed()) {
+                        cursorDiv += Math.max(0, info.getDurationDiv());
+                    }
+                    continue;
+                }
+                currentGroup.add(Integer.valueOf(index));
+                if (info.isTimed()) {
+                    cursorDiv += Math.max(0, info.getDurationDiv());
+                }
+            }
+            flushAbcBeamGroup(infos, currentGroup, assignmentByIndex);
+            return assignmentByIndex;
+        }
+
+        List<Integer> activeGroup = new ArrayList<Integer>();
+        int cursorDiv = 0;
+        int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
+        for (int index = 0; index < infos.size(); index++) {
+            AbcBeamEventInfo info = infos.get(index);
+            if (!info.isTimed()) {
+                flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
+                activeGroup.clear();
+                continue;
+            }
+            boolean startsAtBeatBoundary = cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0;
+            if (startsAtBeatBoundary) {
+                flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
+                activeGroup.clear();
+            }
+            if (!isAbcBeamableTimedEvent(info)) {
+                flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
+                activeGroup.clear();
+                continue;
+            }
+            if ("begin".equals(info.getExplicitMode())) {
+                flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
+                activeGroup.clear();
+                activeGroup.add(Integer.valueOf(index));
+                cursorDiv += Math.max(0, info.getDurationDiv());
+                continue;
+            }
+            if ("mid".equals(info.getExplicitMode())) {
+                if (activeGroup.isEmpty()) {
+                    AbcBeamEventInfo previous = index > 0 ? infos.get(index - 1) : null;
+                    if (isAbcBeamableTimedEvent(previous)) {
+                        activeGroup.add(Integer.valueOf(index - 1));
+                    }
+                    activeGroup.add(Integer.valueOf(index));
+                } else {
+                    activeGroup.add(Integer.valueOf(index));
+                }
+                cursorDiv += Math.max(0, info.getDurationDiv());
+                continue;
+            }
+            if (activeGroup.isEmpty()) {
+                activeGroup.add(Integer.valueOf(index));
+            } else {
+                activeGroup.add(Integer.valueOf(index));
+            }
+            cursorDiv += Math.max(0, info.getDurationDiv());
+        }
+        flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
+        return assignmentByIndex;
+    }
+
+    private static AbcBeamEventInfo resolveAbcBeamEventInfo(AbcMeasureNote note) {
+        String type = normalizeTypeForMusicXml(note == null ? "" : note.getType());
+        return new AbcBeamEventInfo(true, note != null && !note.isRest(), note != null && note.isGrace(),
+                note != null && note.isGrace() ? 0 : Math.max(1, note == null ? 1 : note.getDuration()),
+                beamLevelsFromType(type), note == null ? "" : note.getBeamMode());
+    }
+
+    private static boolean isAbcBeamableTimedEvent(AbcBeamEventInfo info) {
+        return info != null && info.isTimed() && !info.isGrace() && info.getLevels() > 0;
+    }
+
+    private static void flushAbcBeamGroup(List<AbcBeamEventInfo> infos, List<Integer> indices,
+            Map<Integer, AbcBeamAssignment> assignmentByIndex) {
+        List<Integer> chordIndices = new ArrayList<Integer>();
+        for (Integer index : indices) {
+            AbcBeamEventInfo info = infos.get(index.intValue());
+            if (info.isChord() && !info.isGrace()) {
+                chordIndices.add(index);
+            }
+        }
+        if (chordIndices.size() < 2) {
+            return;
+        }
+        for (int groupIndex = 0; groupIndex < chordIndices.size(); groupIndex++) {
+            int index = chordIndices.get(groupIndex).intValue();
+            AbcBeamEventInfo info = infos.get(index);
+            if (info.getLevels() <= 0) {
+                continue;
+            }
+            String state = groupIndex == 0 ? "begin" : (groupIndex == chordIndices.size() - 1 ? "end" : "continue");
+            assignmentByIndex.put(Integer.valueOf(index), new AbcBeamAssignment(state, info.getLevels()));
+        }
+    }
+
+    private static int beamLevelsFromType(String typeText) {
+        String type = trimToEmpty(typeText).toLowerCase();
+        if ("eighth".equals(type)) {
+            return 1;
+        }
+        if ("16th".equals(type)) {
+            return 2;
+        }
+        if ("32nd".equals(type)) {
+            return 3;
+        }
+        if ("64th".equals(type)) {
+            return 4;
+        }
+        return 0;
     }
 
     private static String repeat(String text, int count) {
@@ -1022,17 +2132,984 @@ public final class AbcIo {
         }
     }
 
+    public static final class AbcParsedStaffVoice {
+        private final String voiceId;
+        private final int staff;
+        private final String clef;
+        private final List<List<AbcMeasureNote>> measures;
+
+        public AbcParsedStaffVoice(int staff, String clef) {
+            this("", staff, clef, new ArrayList<List<AbcMeasureNote>>());
+        }
+
+        public AbcParsedStaffVoice(String voiceId, int staff, String clef, List<List<AbcMeasureNote>> measures) {
+            this.voiceId = trimToEmpty(voiceId);
+            this.staff = staff;
+            this.clef = trimToEmpty(clef);
+            this.measures = measures == null ? new ArrayList<List<AbcMeasureNote>>() : measures;
+        }
+
+        public String getVoiceId() {
+            return voiceId;
+        }
+
+        public int getStaff() {
+            return staff;
+        }
+
+        public String getClef() {
+            return clef;
+        }
+
+        public List<AbcMeasureNote> getMeasure(int measureIndex) {
+            if (measureIndex < 0 || measureIndex >= measures.size() || measures.get(measureIndex) == null) {
+                return new ArrayList<AbcMeasureNote>();
+            }
+            return measures.get(measureIndex);
+        }
+
+        public List<List<AbcMeasureNote>> getMeasures() {
+            return measures;
+        }
+    }
+
+    public static final class AbcParsedPartHeader {
+        private final String clef;
+        private final AbcTransposeMeta transpose;
+        private final List<AbcParsedStaffVoice> staffVoices;
+
+        public AbcParsedPartHeader(String clef, AbcTransposeMeta transpose, List<AbcParsedStaffVoice> staffVoices) {
+            this.clef = trimToEmpty(clef);
+            this.transpose = transpose;
+            this.staffVoices = staffVoices == null ? new ArrayList<AbcParsedStaffVoice>() : staffVoices;
+        }
+
+        public String getClef() {
+            return clef;
+        }
+
+        public AbcTransposeMeta getTranspose() {
+            return transpose;
+        }
+
+        public List<AbcParsedStaffVoice> getStaffVoices() {
+            return staffVoices;
+        }
+    }
+
+    public static final class AbcMeasureHeaderXml {
+        private final String headerXml;
+        private final String tempoDirectionXml;
+
+        public AbcMeasureHeaderXml(String headerXml, String tempoDirectionXml) {
+            this.headerXml = headerXml == null ? "" : headerXml;
+            this.tempoDirectionXml = tempoDirectionXml == null ? "" : tempoDirectionXml;
+        }
+
+        public String getHeaderXml() {
+            return headerXml;
+        }
+
+        public String getTempoDirectionXml() {
+            return tempoDirectionXml;
+        }
+    }
+
+    public static final class AbcParsedPartRenderData {
+        private final String voiceId;
+        private final List<List<AbcMeasureNote>> measures;
+        private final Map<Integer, Integer> keyByMeasure;
+        private final Map<Integer, AbcMeter> meterByMeasure;
+        private final Map<Integer, Integer> tempoByMeasure;
+        private final Map<Integer, AbcMeasureMeta> measureMetaByIndex;
+
+        public AbcParsedPartRenderData(List<List<AbcMeasureNote>> measures, Map<Integer, Integer> keyByMeasure,
+                Map<Integer, AbcMeter> meterByMeasure, Map<Integer, Integer> tempoByMeasure,
+                Map<Integer, AbcMeasureMeta> measureMetaByIndex) {
+            this("", measures, keyByMeasure, meterByMeasure, tempoByMeasure, measureMetaByIndex);
+        }
+
+        public AbcParsedPartRenderData(String voiceId, List<List<AbcMeasureNote>> measures,
+                Map<Integer, Integer> keyByMeasure, Map<Integer, AbcMeter> meterByMeasure,
+                Map<Integer, Integer> tempoByMeasure, Map<Integer, AbcMeasureMeta> measureMetaByIndex) {
+            this.voiceId = trimToEmpty(voiceId);
+            this.measures = measures == null ? new ArrayList<List<AbcMeasureNote>>() : measures;
+            this.keyByMeasure = keyByMeasure == null ? new LinkedHashMap<Integer, Integer>() : keyByMeasure;
+            this.meterByMeasure = meterByMeasure == null ? new LinkedHashMap<Integer, AbcMeter>() : meterByMeasure;
+            this.tempoByMeasure = tempoByMeasure == null ? new LinkedHashMap<Integer, Integer>() : tempoByMeasure;
+            this.measureMetaByIndex = measureMetaByIndex == null ? new LinkedHashMap<Integer, AbcMeasureMeta>()
+                    : measureMetaByIndex;
+        }
+
+        public String getVoiceId() {
+            return voiceId;
+        }
+
+        public List<AbcMeasureNote> getMeasure(int measureIndex) {
+            if (measureIndex < 0 || measureIndex >= measures.size() || measures.get(measureIndex) == null) {
+                return new ArrayList<AbcMeasureNote>();
+            }
+            return measures.get(measureIndex);
+        }
+
+        public List<List<AbcMeasureNote>> getMeasures() {
+            return measures;
+        }
+
+        public Map<Integer, Integer> getKeyByMeasure() {
+            return keyByMeasure;
+        }
+
+        public Map<Integer, AbcMeter> getMeterByMeasure() {
+            return meterByMeasure;
+        }
+
+        public Map<Integer, Integer> getTempoByMeasure() {
+            return tempoByMeasure;
+        }
+
+        public Map<Integer, AbcMeasureMeta> getMeasureMetaByIndex() {
+            return measureMetaByIndex;
+        }
+    }
+
+    public static final class AbcParsedPart {
+        private final String partId;
+        private final String partName;
+        private final String voiceId;
+        private final String clef;
+        private final AbcTransposeMeta transpose;
+        private final List<AbcParsedStaffVoice> staffVoices;
+        private final List<List<AbcMeasureNote>> measures;
+        private final Map<Integer, Integer> keyByMeasure;
+        private final Map<Integer, AbcMeter> meterByMeasure;
+        private final Map<Integer, Integer> tempoByMeasure;
+        private final Map<Integer, AbcMeasureMeta> measureMetaByIndex;
+
+        public AbcParsedPart(String partId, String partName) {
+            this(partId, partName, "", "", null, new ArrayList<AbcParsedStaffVoice>(),
+                    new ArrayList<List<AbcMeasureNote>>(), new LinkedHashMap<Integer, Integer>(),
+                    new LinkedHashMap<Integer, AbcMeter>(), new LinkedHashMap<Integer, Integer>(),
+                    new LinkedHashMap<Integer, AbcMeasureMeta>());
+        }
+
+        public AbcParsedPart(String partId, String partName, String voiceId, String clef,
+                AbcTransposeMeta transpose, List<AbcParsedStaffVoice> staffVoices,
+                List<List<AbcMeasureNote>> measures, Map<Integer, Integer> keyByMeasure,
+                Map<Integer, AbcMeter> meterByMeasure, Map<Integer, Integer> tempoByMeasure,
+                Map<Integer, AbcMeasureMeta> measureMetaByIndex) {
+            this.partId = trimToEmpty(partId).length() == 0 ? "P1" : trimToEmpty(partId);
+            this.partName = trimToEmpty(partName);
+            this.voiceId = trimToEmpty(voiceId);
+            this.clef = trimToEmpty(clef);
+            this.transpose = transpose;
+            this.staffVoices = staffVoices == null ? new ArrayList<AbcParsedStaffVoice>() : staffVoices;
+            this.measures = measures == null ? new ArrayList<List<AbcMeasureNote>>() : measures;
+            this.keyByMeasure = keyByMeasure == null ? new LinkedHashMap<Integer, Integer>() : keyByMeasure;
+            this.meterByMeasure = meterByMeasure == null ? new LinkedHashMap<Integer, AbcMeter>() : meterByMeasure;
+            this.tempoByMeasure = tempoByMeasure == null ? new LinkedHashMap<Integer, Integer>() : tempoByMeasure;
+            this.measureMetaByIndex = measureMetaByIndex == null ? new LinkedHashMap<Integer, AbcMeasureMeta>()
+                    : measureMetaByIndex;
+        }
+
+        public String getPartId() {
+            return partId;
+        }
+
+        public String getPartName() {
+            return partName;
+        }
+
+        public String getVoiceId() {
+            return voiceId;
+        }
+
+        public String getClef() {
+            return clef;
+        }
+
+        public AbcTransposeMeta getTranspose() {
+            return transpose;
+        }
+
+        public List<AbcParsedStaffVoice> getStaffVoices() {
+            return staffVoices;
+        }
+
+        public List<List<AbcMeasureNote>> getMeasures() {
+            return measures;
+        }
+
+        public Map<Integer, Integer> getKeyByMeasure() {
+            return keyByMeasure;
+        }
+
+        public Map<Integer, AbcMeter> getMeterByMeasure() {
+            return meterByMeasure;
+        }
+
+        public Map<Integer, Integer> getTempoByMeasure() {
+            return tempoByMeasure;
+        }
+
+        public Map<Integer, AbcMeasureMeta> getMeasureMetaByIndex() {
+            return measureMetaByIndex;
+        }
+
+        public AbcParsedPartHeader toPartHeader() {
+            return new AbcParsedPartHeader(clef, transpose, staffVoices);
+        }
+
+        public AbcParsedPartRenderData toRenderData() {
+            return new AbcParsedPartRenderData(voiceId, measures, keyByMeasure, meterByMeasure, tempoByMeasure,
+                    measureMetaByIndex);
+        }
+
+        public AbcParsedPart withClef(String resolvedClef) {
+            return new AbcParsedPart(partId, partName, voiceId, resolvedClef, transpose, staffVoices, measures,
+                    keyByMeasure, meterByMeasure, tempoByMeasure, measureMetaByIndex);
+        }
+    }
+
+    public static final class AbcParsedMeta {
+        private final String title;
+        private final String composer;
+        private final AbcMeter meter;
+        private final AbcKeyInfo keyInfo;
+        private final Integer tempoBpm;
+
+        public AbcParsedMeta() {
+            this("mikuscore", "Unknown", new AbcMeter(4, 4), new AbcKeyInfo(0), null);
+        }
+
+        public AbcParsedMeta(String title, String composer, AbcMeter meter, AbcKeyInfo keyInfo, Integer tempoBpm) {
+            this.title = trimToEmpty(title);
+            this.composer = trimToEmpty(composer);
+            this.meter = meter == null ? new AbcMeter(4, 4) : meter;
+            this.keyInfo = keyInfo == null ? new AbcKeyInfo(0) : keyInfo;
+            this.tempoBpm = tempoBpm;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getComposer() {
+            return composer;
+        }
+
+        public AbcMeter getMeter() {
+            return meter;
+        }
+
+        public AbcKeyInfo getKeyInfo() {
+            return keyInfo;
+        }
+
+        public Integer getTempoBpm() {
+            return tempoBpm;
+        }
+    }
+
+    public static final class AbcParsedResult {
+        private final AbcParsedMeta meta;
+        private final List<AbcParsedPart> parts;
+        private final List<String> warnings;
+        private final List<AbcImportDiagnostic> diagnostics;
+
+        public AbcParsedResult(AbcParsedMeta meta, List<AbcParsedPart> parts, List<String> warnings,
+                List<AbcImportDiagnostic> diagnostics) {
+            this.meta = meta == null ? new AbcParsedMeta() : meta;
+            this.parts = parts == null ? new ArrayList<AbcParsedPart>() : parts;
+            this.warnings = warnings == null ? new ArrayList<String>() : warnings;
+            this.diagnostics = diagnostics == null ? new ArrayList<AbcImportDiagnostic>() : diagnostics;
+        }
+
+        public AbcParsedMeta getMeta() {
+            return meta;
+        }
+
+        public List<AbcParsedPart> getParts() {
+            return parts;
+        }
+
+        public List<String> getWarnings() {
+            return warnings;
+        }
+
+        public List<AbcImportDiagnostic> getDiagnostics() {
+            return diagnostics;
+        }
+    }
+
+    public static final class AbcImportOptions {
+        private final Boolean debugMetadata;
+        private final Boolean debugPrettyPrint;
+        private final Boolean sourceMetadata;
+        private final Boolean overfullCompatibilityMode;
+
+        public AbcImportOptions() {
+            this(null, null, null, null);
+        }
+
+        public AbcImportOptions(Boolean debugMetadata, Boolean debugPrettyPrint, Boolean sourceMetadata,
+                Boolean overfullCompatibilityMode) {
+            this.debugMetadata = debugMetadata;
+            this.debugPrettyPrint = debugPrettyPrint;
+            this.sourceMetadata = sourceMetadata;
+            this.overfullCompatibilityMode = overfullCompatibilityMode;
+        }
+
+        public Boolean getDebugMetadata() {
+            return debugMetadata;
+        }
+
+        public Boolean getDebugPrettyPrint() {
+            return debugPrettyPrint;
+        }
+
+        public Boolean getSourceMetadata() {
+            return sourceMetadata;
+        }
+
+        public Boolean getOverfullCompatibilityMode() {
+            return overfullCompatibilityMode;
+        }
+    }
+
+    public static final class AbcMusicXmlExportContext {
+        private final List<AbcParsedPart> resolvedParts;
+        private final int measureCount;
+        private final String title;
+        private final String composer;
+        private final int beats;
+        private final int beatType;
+        private final int defaultFifths;
+        private final int divisions;
+        private final int beatDiv;
+        private final int measureDurationDiv;
+        private final String emptyMeasureRestType;
+        private final Integer tempoBpm;
+
+        public AbcMusicXmlExportContext(List<AbcParsedPart> resolvedParts, int measureCount, String title,
+                String composer, int beats, int beatType, int defaultFifths, int divisions, int beatDiv,
+                int measureDurationDiv, String emptyMeasureRestType, Integer tempoBpm) {
+            this.resolvedParts = resolvedParts == null ? new ArrayList<AbcParsedPart>() : resolvedParts;
+            this.measureCount = measureCount;
+            this.title = trimToEmpty(title);
+            this.composer = trimToEmpty(composer);
+            this.beats = beats;
+            this.beatType = beatType;
+            this.defaultFifths = defaultFifths;
+            this.divisions = divisions;
+            this.beatDiv = beatDiv;
+            this.measureDurationDiv = measureDurationDiv;
+            this.emptyMeasureRestType = trimToEmpty(emptyMeasureRestType);
+            this.tempoBpm = tempoBpm;
+        }
+
+        public List<AbcParsedPart> getResolvedParts() {
+            return resolvedParts;
+        }
+
+        public int getMeasureCount() {
+            return measureCount;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getComposer() {
+            return composer;
+        }
+
+        public int getBeats() {
+            return beats;
+        }
+
+        public int getBeatType() {
+            return beatType;
+        }
+
+        public int getDefaultFifths() {
+            return defaultFifths;
+        }
+
+        public int getDivisions() {
+            return divisions;
+        }
+
+        public int getBeatDiv() {
+            return beatDiv;
+        }
+
+        public int getMeasureDurationDiv() {
+            return measureDurationDiv;
+        }
+
+        public String getEmptyMeasureRestType() {
+            return emptyMeasureRestType;
+        }
+
+        public Integer getTempoBpm() {
+            return tempoBpm;
+        }
+    }
+
+    public static final class AbcPartRenderState {
+        private final int currentPartFifths;
+        private final AbcMeter currentPartMeter;
+        private final Integer currentPartTempo;
+
+        public AbcPartRenderState(int currentPartFifths, AbcMeter currentPartMeter, Integer currentPartTempo) {
+            this.currentPartFifths = currentPartFifths;
+            this.currentPartMeter = currentPartMeter == null ? new AbcMeter(4, 4) : currentPartMeter;
+            this.currentPartTempo = currentPartTempo;
+        }
+
+        public int getCurrentPartFifths() {
+            return currentPartFifths;
+        }
+
+        public AbcMeter getCurrentPartMeter() {
+            return currentPartMeter;
+        }
+
+        public Integer getCurrentPartTempo() {
+            return currentPartTempo;
+        }
+    }
+
+    public static final class AbcPartMeasureRenderContext {
+        private final List<AbcMeasureNote> notes;
+        private final AbcMeasureMeta measureMeta;
+        private final Integer hintedFifths;
+        private final AbcMeter hintedMeter;
+        private final Integer hintedTempo;
+        private final AbcPartRenderState nextState;
+        private final int currentMeasureDurationDiv;
+        private final boolean inferredImplicitPickup;
+
+        public AbcPartMeasureRenderContext(List<AbcMeasureNote> notes, AbcMeasureMeta measureMeta,
+                Integer hintedFifths, AbcMeter hintedMeter, Integer hintedTempo, AbcPartRenderState nextState,
+                int currentMeasureDurationDiv, boolean inferredImplicitPickup) {
+            this.notes = notes == null ? new ArrayList<AbcMeasureNote>() : notes;
+            this.measureMeta = measureMeta;
+            this.hintedFifths = hintedFifths;
+            this.hintedMeter = hintedMeter;
+            this.hintedTempo = hintedTempo;
+            this.nextState = nextState;
+            this.currentMeasureDurationDiv = currentMeasureDurationDiv;
+            this.inferredImplicitPickup = inferredImplicitPickup;
+        }
+
+        public List<AbcMeasureNote> getNotes() {
+            return notes;
+        }
+
+        public AbcMeasureMeta getMeasureMeta() {
+            return measureMeta;
+        }
+
+        public Integer getHintedFifths() {
+            return hintedFifths;
+        }
+
+        public AbcMeter getHintedMeter() {
+            return hintedMeter;
+        }
+
+        public Integer getHintedTempo() {
+            return hintedTempo;
+        }
+
+        public AbcPartRenderState getNextState() {
+            return nextState;
+        }
+
+        public int getCurrentMeasureDurationDiv() {
+            return currentMeasureDurationDiv;
+        }
+
+        public boolean isInferredImplicitPickup() {
+            return inferredImplicitPickup;
+        }
+    }
+
+    public static final class AbcImportDiagnostic {
+        private final String level;
+        private final String code;
+        private final String fmt;
+        private final String message;
+        private final String voiceId;
+        private final Integer measure;
+        private final String action;
+        private final Integer movedEvents;
+
+        public AbcImportDiagnostic(String level, String code, String fmt, String message, String voiceId,
+                Integer measure, String action, Integer movedEvents) {
+            this.level = trimToEmpty(level).length() == 0 ? "warn" : trimToEmpty(level);
+            this.code = trimToEmpty(code);
+            this.fmt = trimToEmpty(fmt).length() == 0 ? "abc" : trimToEmpty(fmt);
+            this.message = trimToEmpty(message);
+            this.voiceId = trimToEmpty(voiceId);
+            this.measure = measure;
+            this.action = trimToEmpty(action);
+            this.movedEvents = movedEvents;
+        }
+
+        public String getLevel() {
+            return level;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        public String getFmt() {
+            return fmt;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public String getVoiceId() {
+            return voiceId;
+        }
+
+        public Integer getMeasure() {
+            return measure;
+        }
+
+        public String getAction() {
+            return action;
+        }
+
+        public Integer getMovedEvents() {
+            return movedEvents;
+        }
+    }
+
+    public static final class AbcRenderedMeasureMiscContext {
+        private final AbcParsedPartRenderData part;
+        private final int partIndex;
+        private final int measureNo;
+        private final List<AbcMeasureNote> notes;
+        private final boolean debugMetadata;
+        private final boolean sourceMetadata;
+        private final List<AbcImportDiagnostic> diagnostics;
+        private final String abcSource;
+
+        public AbcRenderedMeasureMiscContext(AbcParsedPartRenderData part, int partIndex, int measureNo,
+                List<AbcMeasureNote> notes, boolean debugMetadata, boolean sourceMetadata,
+                List<AbcImportDiagnostic> diagnostics, String abcSource) {
+            this.part = part;
+            this.partIndex = partIndex;
+            this.measureNo = measureNo;
+            this.notes = notes == null ? new ArrayList<AbcMeasureNote>() : notes;
+            this.debugMetadata = debugMetadata;
+            this.sourceMetadata = sourceMetadata;
+            this.diagnostics = diagnostics == null ? new ArrayList<AbcImportDiagnostic>() : diagnostics;
+            this.abcSource = abcSource == null ? "" : abcSource;
+        }
+
+        public AbcParsedPartRenderData getPart() {
+            return part;
+        }
+
+        public int getPartIndex() {
+            return partIndex;
+        }
+
+        public int getMeasureNo() {
+            return measureNo;
+        }
+
+        public List<AbcMeasureNote> getNotes() {
+            return notes;
+        }
+
+        public boolean isDebugMetadata() {
+            return debugMetadata;
+        }
+
+        public boolean isSourceMetadata() {
+            return sourceMetadata;
+        }
+
+        public List<AbcImportDiagnostic> getDiagnostics() {
+            return diagnostics;
+        }
+
+        public String getAbcSource() {
+            return abcSource;
+        }
+    }
+
+    public static final class AbcRenderedMeasureMiscXml {
+        private final String debugMiscXml;
+        private final String diagMiscXml;
+        private final String sourceMiscXml;
+
+        public AbcRenderedMeasureMiscXml(String debugMiscXml, String diagMiscXml, String sourceMiscXml) {
+            this.debugMiscXml = debugMiscXml == null ? "" : debugMiscXml;
+            this.diagMiscXml = diagMiscXml == null ? "" : diagMiscXml;
+            this.sourceMiscXml = sourceMiscXml == null ? "" : sourceMiscXml;
+        }
+
+        public String getDebugMiscXml() {
+            return debugMiscXml;
+        }
+
+        public String getDiagMiscXml() {
+            return diagMiscXml;
+        }
+
+        public String getSourceMiscXml() {
+            return sourceMiscXml;
+        }
+    }
+
+    public static final class AbcRenderedPartMeasureContext {
+        private final AbcParsedPartHeader partHeader;
+        private final AbcParsedPartRenderData part;
+        private final int partIndex;
+        private final int measureIndex;
+        private final int measureNo;
+        private final List<AbcMeasureNote> notes;
+        private final AbcMeasureMeta measureMeta;
+        private final Integer hintedFifths;
+        private final AbcMeter hintedMeter;
+        private final Integer hintedTempo;
+        private final int currentPartFifths;
+        private final AbcMeter currentPartMeter;
+        private final Integer currentPartTempo;
+        private final int currentMeasureDurationDiv;
+        private final boolean inferredImplicitPickup;
+        private final boolean debugMetadata;
+        private final boolean sourceMetadata;
+        private final List<AbcImportDiagnostic> diagnostics;
+        private final String abcSource;
+        private final AbcMeasureNotesXmlBuilder buildMeasureNotesXml;
+
+        public AbcRenderedPartMeasureContext(AbcParsedPartHeader partHeader, AbcParsedPartRenderData part,
+                int partIndex, int measureIndex, int measureNo, List<AbcMeasureNote> notes,
+                AbcMeasureMeta measureMeta, Integer hintedFifths, AbcMeter hintedMeter, Integer hintedTempo,
+                int currentPartFifths, AbcMeter currentPartMeter, Integer currentPartTempo,
+                int currentMeasureDurationDiv, boolean inferredImplicitPickup, boolean debugMetadata,
+                boolean sourceMetadata, List<AbcImportDiagnostic> diagnostics, String abcSource,
+                AbcMeasureNotesXmlBuilder buildMeasureNotesXml) {
+            this.partHeader = partHeader == null
+                    ? new AbcParsedPartHeader("", null, new ArrayList<AbcParsedStaffVoice>())
+                    : partHeader;
+            this.part = part;
+            this.partIndex = partIndex;
+            this.measureIndex = measureIndex;
+            this.measureNo = measureNo;
+            this.notes = notes == null ? new ArrayList<AbcMeasureNote>() : notes;
+            this.measureMeta = measureMeta;
+            this.hintedFifths = hintedFifths;
+            this.hintedMeter = hintedMeter;
+            this.hintedTempo = hintedTempo;
+            this.currentPartFifths = currentPartFifths;
+            this.currentPartMeter = currentPartMeter == null ? new AbcMeter(4, 4) : currentPartMeter;
+            this.currentPartTempo = currentPartTempo;
+            this.currentMeasureDurationDiv = currentMeasureDurationDiv;
+            this.inferredImplicitPickup = inferredImplicitPickup;
+            this.debugMetadata = debugMetadata;
+            this.sourceMetadata = sourceMetadata;
+            this.diagnostics = diagnostics == null ? new ArrayList<AbcImportDiagnostic>() : diagnostics;
+            this.abcSource = abcSource == null ? "" : abcSource;
+            this.buildMeasureNotesXml = buildMeasureNotesXml == null ? new AbcMeasureNotesXmlBuilder() {
+                public String build(List<AbcMeasureNote> notes, Integer staffNumber) {
+                    return "";
+                }
+            } : buildMeasureNotesXml;
+        }
+
+        public AbcParsedPartHeader getPartHeader() {
+            return partHeader;
+        }
+
+        public AbcParsedPartRenderData getPart() {
+            return part;
+        }
+
+        public int getPartIndex() {
+            return partIndex;
+        }
+
+        public int getMeasureIndex() {
+            return measureIndex;
+        }
+
+        public int getMeasureNo() {
+            return measureNo;
+        }
+
+        public List<AbcMeasureNote> getNotes() {
+            return notes;
+        }
+
+        public AbcMeasureMeta getMeasureMeta() {
+            return measureMeta;
+        }
+
+        public Integer getHintedFifths() {
+            return hintedFifths;
+        }
+
+        public AbcMeter getHintedMeter() {
+            return hintedMeter;
+        }
+
+        public Integer getHintedTempo() {
+            return hintedTempo;
+        }
+
+        public int getCurrentPartFifths() {
+            return currentPartFifths;
+        }
+
+        public AbcMeter getCurrentPartMeter() {
+            return currentPartMeter;
+        }
+
+        public Integer getCurrentPartTempo() {
+            return currentPartTempo;
+        }
+
+        public int getCurrentMeasureDurationDiv() {
+            return currentMeasureDurationDiv;
+        }
+
+        public boolean isInferredImplicitPickup() {
+            return inferredImplicitPickup;
+        }
+
+        public boolean isDebugMetadata() {
+            return debugMetadata;
+        }
+
+        public boolean isSourceMetadata() {
+            return sourceMetadata;
+        }
+
+        public List<AbcImportDiagnostic> getDiagnostics() {
+            return diagnostics;
+        }
+
+        public String getAbcSource() {
+            return abcSource;
+        }
+
+        public AbcMeasureNotesXmlBuilder getBuildMeasureNotesXml() {
+            return buildMeasureNotesXml;
+        }
+    }
+
+    private static final class AbcBeamNoteEvent {
+        private final AbcMeasureNote note;
+        private final int noteIndex;
+
+        private AbcBeamNoteEvent(AbcMeasureNote note, int noteIndex) {
+            this.note = note;
+            this.noteIndex = noteIndex;
+        }
+
+        private AbcMeasureNote getNote() {
+            return note;
+        }
+
+        private int getNoteIndex() {
+            return noteIndex;
+        }
+    }
+
+    private static final class AbcBeamEventInfo {
+        private final boolean timed;
+        private final boolean chord;
+        private final boolean grace;
+        private final int durationDiv;
+        private final int levels;
+        private final String explicitMode;
+
+        private AbcBeamEventInfo(boolean timed, boolean chord, boolean grace, int durationDiv, int levels,
+                String explicitMode) {
+            this.timed = timed;
+            this.chord = chord;
+            this.grace = grace;
+            this.durationDiv = durationDiv;
+            this.levels = levels;
+            this.explicitMode = trimToEmpty(explicitMode);
+        }
+
+        private boolean isTimed() {
+            return timed;
+        }
+
+        private boolean isChord() {
+            return chord;
+        }
+
+        private boolean isGrace() {
+            return grace;
+        }
+
+        private int getDurationDiv() {
+            return durationDiv;
+        }
+
+        private int getLevels() {
+            return levels;
+        }
+
+        private String getExplicitMode() {
+            return explicitMode;
+        }
+    }
+
+    private static final class AbcBeamAssignment {
+        private final String state;
+        private final int levels;
+
+        private AbcBeamAssignment(String state, int levels) {
+            this.state = trimToEmpty(state);
+            this.levels = levels;
+        }
+
+        private String getState() {
+            return state;
+        }
+
+        private int getLevels() {
+            return levels;
+        }
+    }
+
     public static final class AbcMeasureNote {
         private final String voice;
         private final int duration;
         private final boolean chord;
         private final boolean grace;
+        private final boolean rest;
+        private final String step;
+        private final Integer octave;
+        private final Integer alter;
+        private final String type;
+        private final Integer staff;
+        private final String accidentalText;
+        private final boolean accidentalEditorial;
+        private final boolean accidentalCautionary;
+        private final boolean tieStart;
+        private final boolean tieStop;
+        private final boolean graceSlash;
+        private final String beamMode;
+        private final String lyricText;
+        private final String lyricSyllabic;
+        private final boolean lyricExtend;
+        private final Integer timeModificationActual;
+        private final Integer timeModificationNormal;
+        private final List<String> annotations;
+        private final boolean segno;
+        private final boolean coda;
+        private final String rehearsalMark;
+        private final boolean fine;
+        private final boolean daCapo;
+        private final boolean dalSegno;
+        private final boolean toCoda;
+        private final boolean crescendoStart;
+        private final boolean crescendoStop;
+        private final boolean diminuendoStart;
+        private final boolean diminuendoStop;
+        private final String dynamicMark;
+        private final boolean sfz;
 
         public AbcMeasureNote(String voice, int duration, boolean chord, boolean grace) {
+            this(voice, duration, chord, grace, false, "C", Integer.valueOf(4), Integer.valueOf(0), "quarter");
+        }
+
+        public AbcMeasureNote(String voice, int duration, boolean chord, boolean grace, boolean rest, String step,
+                Integer octave, Integer alter, String type) {
+            this(voice, duration, chord, grace, rest, step, octave, alter, type, null, "", false, false, false, false,
+                    false);
+        }
+
+        public AbcMeasureNote(String voice, int duration, boolean chord, boolean grace, boolean rest, String step,
+                Integer octave, Integer alter, String type, Integer staff, String accidentalText,
+                boolean accidentalEditorial, boolean accidentalCautionary, boolean tieStart, boolean tieStop,
+                boolean graceSlash) {
+            this(voice, duration, chord, grace, rest, step, octave, alter, type, staff, accidentalText,
+                    accidentalEditorial, accidentalCautionary, tieStart, tieStop, graceSlash, "");
+        }
+
+        public AbcMeasureNote(String voice, int duration, boolean chord, boolean grace, boolean rest, String step,
+                Integer octave, Integer alter, String type, Integer staff, String accidentalText,
+                boolean accidentalEditorial, boolean accidentalCautionary, boolean tieStart, boolean tieStop,
+                boolean graceSlash, String beamMode) {
+            this(voice, duration, chord, grace, rest, step, octave, alter, type, staff, accidentalText,
+                    accidentalEditorial, accidentalCautionary, tieStart, tieStop, graceSlash, beamMode, "", "single",
+                    false, null, null);
+        }
+
+        public AbcMeasureNote(String voice, int duration, boolean chord, boolean grace, boolean rest, String step,
+                Integer octave, Integer alter, String type, Integer staff, String accidentalText,
+                boolean accidentalEditorial, boolean accidentalCautionary, boolean tieStart, boolean tieStop,
+                boolean graceSlash, String beamMode, String lyricText, String lyricSyllabic, boolean lyricExtend,
+                Integer timeModificationActual, Integer timeModificationNormal) {
+            this(voice, duration, chord, grace, rest, step, octave, alter, type, staff, accidentalText,
+                    accidentalEditorial, accidentalCautionary, tieStart, tieStop, graceSlash, beamMode, lyricText,
+                    lyricSyllabic, lyricExtend, timeModificationActual, timeModificationNormal,
+                    new ArrayList<String>(), false, false, "", false, false, false, false, false, false, false,
+                    false, "", false);
+        }
+
+        public AbcMeasureNote(String voice, int duration, boolean chord, boolean grace, boolean rest, String step,
+                Integer octave, Integer alter, String type, Integer staff, String accidentalText,
+                boolean accidentalEditorial, boolean accidentalCautionary, boolean tieStart, boolean tieStop,
+                boolean graceSlash, String beamMode, String lyricText, String lyricSyllabic, boolean lyricExtend,
+                Integer timeModificationActual, Integer timeModificationNormal, List<String> annotations,
+                boolean segno, boolean coda, String rehearsalMark, boolean fine, boolean daCapo, boolean dalSegno,
+                boolean toCoda, boolean crescendoStart, boolean crescendoStop, boolean diminuendoStart,
+                boolean diminuendoStop, String dynamicMark, boolean sfz) {
             this.voice = voice;
             this.duration = duration;
             this.chord = chord;
             this.grace = grace;
+            this.rest = rest;
+            this.step = trimToEmpty(step);
+            this.octave = octave;
+            this.alter = alter;
+            this.type = trimToEmpty(type);
+            this.staff = staff;
+            this.accidentalText = trimToEmpty(accidentalText);
+            this.accidentalEditorial = accidentalEditorial;
+            this.accidentalCautionary = accidentalCautionary;
+            this.tieStart = tieStart;
+            this.tieStop = tieStop;
+            this.graceSlash = graceSlash;
+            this.beamMode = trimToEmpty(beamMode);
+            this.lyricText = trimToEmpty(lyricText);
+            this.lyricSyllabic = trimToEmpty(lyricSyllabic);
+            this.lyricExtend = lyricExtend;
+            this.timeModificationActual = timeModificationActual;
+            this.timeModificationNormal = timeModificationNormal;
+            this.annotations = annotations == null ? new ArrayList<String>() : annotations;
+            this.segno = segno;
+            this.coda = coda;
+            this.rehearsalMark = trimToEmpty(rehearsalMark);
+            this.fine = fine;
+            this.daCapo = daCapo;
+            this.dalSegno = dalSegno;
+            this.toCoda = toCoda;
+            this.crescendoStart = crescendoStart;
+            this.crescendoStop = crescendoStop;
+            this.diminuendoStart = diminuendoStart;
+            this.diminuendoStop = diminuendoStop;
+            this.dynamicMark = trimToEmpty(dynamicMark);
+            this.sfz = sfz;
         }
 
         public String getVoice() {
@@ -1049,6 +3126,134 @@ public final class AbcIo {
 
         public boolean isGrace() {
             return grace;
+        }
+
+        public boolean isRest() {
+            return rest;
+        }
+
+        public String getStep() {
+            return step;
+        }
+
+        public Integer getOctave() {
+            return octave;
+        }
+
+        public Integer getAlter() {
+            return alter;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public Integer getStaff() {
+            return staff;
+        }
+
+        public String getAccidentalText() {
+            return accidentalText;
+        }
+
+        public boolean isAccidentalEditorial() {
+            return accidentalEditorial;
+        }
+
+        public boolean isAccidentalCautionary() {
+            return accidentalCautionary;
+        }
+
+        public boolean isTieStart() {
+            return tieStart;
+        }
+
+        public boolean isTieStop() {
+            return tieStop;
+        }
+
+        public boolean isGraceSlash() {
+            return graceSlash;
+        }
+
+        public String getBeamMode() {
+            return beamMode;
+        }
+
+        public String getLyricText() {
+            return lyricText;
+        }
+
+        public String getLyricSyllabic() {
+            return lyricSyllabic;
+        }
+
+        public boolean isLyricExtend() {
+            return lyricExtend;
+        }
+
+        public Integer getTimeModificationActual() {
+            return timeModificationActual;
+        }
+
+        public Integer getTimeModificationNormal() {
+            return timeModificationNormal;
+        }
+
+        public List<String> getAnnotations() {
+            return annotations;
+        }
+
+        public boolean isSegno() {
+            return segno;
+        }
+
+        public boolean isCoda() {
+            return coda;
+        }
+
+        public String getRehearsalMark() {
+            return rehearsalMark;
+        }
+
+        public boolean isFine() {
+            return fine;
+        }
+
+        public boolean isDaCapo() {
+            return daCapo;
+        }
+
+        public boolean isDalSegno() {
+            return dalSegno;
+        }
+
+        public boolean isToCoda() {
+            return toCoda;
+        }
+
+        public boolean isCrescendoStart() {
+            return crescendoStart;
+        }
+
+        public boolean isCrescendoStop() {
+            return crescendoStop;
+        }
+
+        public boolean isDiminuendoStart() {
+            return diminuendoStart;
+        }
+
+        public boolean isDiminuendoStop() {
+            return diminuendoStop;
+        }
+
+        public String getDynamicMark() {
+            return dynamicMark;
+        }
+
+        public boolean isSfz() {
+            return sfz;
         }
     }
 
@@ -1147,6 +3352,10 @@ public final class AbcIo {
 
     public interface OverlaySplitter {
         List<AbcOverlaySegment> split(String text, String baseVoiceId);
+    }
+
+    public interface AbcMeasureNotesXmlBuilder {
+        String build(List<AbcMeasureNote> notes, Integer staffNumber);
     }
 
     public static final class AbcImportVoiceRegistry {
