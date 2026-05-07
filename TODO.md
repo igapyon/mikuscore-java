@@ -173,6 +173,122 @@
   - [x] beat boundary split behavior
   - [x] explicit `begin` / `mid` beam mode subset
   - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の note notations decoration XML slice を Java `AbcIo` に追加する
+  - [x] `buildAbcNoteOrnamentsXml`
+  - [x] `buildAbcNoteArticulationsXml`
+  - [x] `buildAbcNoteTechnicalXml`
+  - [x] `buildAbcNoteNotationsXml` の slur / tuplet / fermata / decoration integration
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の body import voice stores helper slice を Java `AbcIo` に追加する
+  - [x] `createAbcVoiceStores`
+  - [x] `ensureAbcVoiceMeasures`
+  - [x] `ensureAbcNotationMeasureMeta`
+  - [x] `ensureAbcMeterByMeasure`
+  - [x] `ensureAbcTempoByMeasure`
+  - [x] `finalizeAbcActiveEndings`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の body field state update slice を Java `AbcIo` に追加する
+  - [x] `tokenizeAbcLyricLine`
+  - [x] `applyAbcLyricsToMeasures`
+  - [x] `keySignatureAlterByStep`
+  - [x] `applyAbcBodyField`
+  - [x] `AbcBodyFieldContext`
+  - [x] `AbcBodyFieldResult`
+  - [x] K / L / M / Q inline field state update
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の body import barline processing slice を Java `AbcIo` に追加する
+  - [x] `processAbcBarlineEntry`
+  - [x] `AbcBarlineEntryContext`
+  - [x] repeat start / repeat end state handoff
+  - [x] active ending stop / bare repeat ending start handoff
+  - [x] measure advance / measure accidental clear / beam reset handoff
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の non-playable body entry dispatch slice を Java `AbcIo` に追加する
+  - [x] `processAbcNonPlayableBodyEntry`
+  - [x] `AbcNonPlayableBodyEntryContext`
+  - [x] barline entry dispatch
+  - [x] standalone body field dispatch / unsupported warning
+  - [x] unsupported token / number warning and index handoff
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の simple body token dispatch slice を Java `AbcIo` に追加する
+  - [x] `processAbcSimpleBodyToken`
+  - [x] `AbcSimpleBodyTokenHandlerContext`
+  - [x] broken-rhythm / decoration / paren / quoted-string dispatch
+  - [x] single-char-shorthand / slur-stop / tie dispatch
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の bracket / grace / fallback body dispatch slice を Java `AbcIo` に追加する
+  - [x] `processAbcBracketBodyToken`
+  - [x] `processAbcGraceGroup`
+  - [x] `processAbcBodyFallback`
+  - [x] inline-field / repeat-ending / playable bracket dispatch
+  - [x] grace group append and parse-failure warning
+  - [x] closing notation / unsupported punctuation / parse-error fallback dispatch
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の pending note state helper slice を Java `AbcIo` に追加する
+  - [x] `applyAbcPendingStateToPlayableNote`
+  - [x] `applyAbcPendingNoteValue`
+  - [x] `applyAbcPendingNoteOptionalValue`
+  - [x] `applyAbcPendingNoteArray`
+  - [x] tie-stop handoff and rest warning behavior
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の ABC chord harmony XML helper slice を Java `AbcIo` に追加する
+  - [x] `abcQuotedTextEscape`
+  - [x] `normalizeChordToken`
+  - [x] `isLikelyAbcChordSymbol`
+  - [x] `xmlHarmonyKindFromChordSuffix`
+  - [x] `buildHarmonyXmlFromChordSymbol`
+  - [x] `buildAbcNoteHarmonyAndWordsDirectionXml` chord symbol integration
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC harmony / lyric helper slice を Java `AbcIo` に追加する
+  - [x] `abcChordSymbolFromHarmony`
+  - [x] `abcLyricTokenFromMusicXml`
+  - [x] DOM direct child helper subset
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC DOM utility helper slice を Java `AbcIo` に追加する
+  - [x] `abcClefFromMusicXmlPart`
+  - [x] `accidentalTextToAlter`
+  - [x] `parseOptionalNumber`
+  - [x] nested direct-child path helper subset
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC lane definition helper slice を Java `AbcIo` に追加する
+  - [x] `abcClefFromMusicXmlClef`
+  - [x] `resolveMusicXmlPartLaneClef`
+  - [x] `collectMusicXmlPartLaneDefs`
+  - [x] `AbcMusicXmlLaneDef`
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC meta line helper slice を Java `AbcIo` に追加する
+  - [x] `buildMusicXmlPartTransposeMetaLines`
+  - [x] `buildMusicXmlMeasureDiagMetaLines`
+  - [x] `encodeURIComponent` 相当の URI component encoding
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC measure meta helper slice を Java `AbcIo` に追加する
+  - [x] `buildMusicXmlMeasureMetaLines`
+  - [x] implicit / raw measure number / repeat-times / ending-stop meta restoration
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC measure state helper slice を Java `AbcIo` に追加する
+  - [x] `updateMusicXmlMeasureState`
+  - [x] `AbcMusicXmlMeasureState`
+  - [x] divisions / fifths / beats / beat-type state update
+  - [x] inline key-change flag and key accidental map handoff
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC direction token helper slice を Java `AbcIo` に追加する
+  - [x] `collectMusicXmlDirectionTokens`
+  - [x] `AbcMusicXmlDirectionTokens`
+  - [x] rehearsal / words / segno / coda / sound navigation token extraction
+  - [x] wedge active state and dynamics token extraction
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC note lane / timing helper slice を Java `AbcIo` に追加する
+  - [x] `isMusicXmlNoteInLane`
+  - [x] `resolveMusicXmlNoteTiming`
+  - [x] `AbcMusicXmlNoteTiming`
+  - [x] staff / voice lane filtering and grace duration fallback
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC note ornament helper slice を Java `AbcIo` に追加する
+  - [x] `collectMusicXmlNoteOrnaments`
+  - [x] `AbcMusicXmlNoteOrnaments`
+  - [x] trill / wavy-line / turn / mordent / tremolo extraction
+  - [x] glissando / slide / schleifer / shake / arpeggiate extraction
+  - [x] focused JUnit tests を追加する
 - [x] `mvn test` を primary verification として通す
 - [x] 実装後に `git status --short` と diff を確認する
 

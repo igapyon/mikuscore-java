@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -15,6 +16,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.w3c.dom.Element;
 import org.junit.jupiter.api.Test;
 
 public class AbcIoTest {
@@ -716,6 +720,667 @@ public class AbcIoTest {
     }
 
     @Test
+    public void buildsHarmonyXmlFromAbcChordSymbols() {
+        assertEquals("C7/G", AbcIo.normalizeChordToken(" C 7 / G "));
+        assertEquals("A'b", AbcIo.abcQuotedTextEscape(" A\"b "));
+        assertEquals(true, AbcIo.isLikelyAbcChordSymbol("F#m7b5/C#"));
+        assertEquals(false, AbcIo.isLikelyAbcChordSymbol("not a chord"));
+        assertEquals("half-diminished", AbcIo.xmlHarmonyKindFromChordSuffix("m7b5"));
+        assertEquals("",
+                AbcIo.buildHarmonyXmlFromChordSymbol("Cunknown"));
+        assertEquals(
+                "<harmony><root><root-step>F</root-step><root-alter>1</root-alter></root>"
+                        + "<bass><bass-step>C</bass-step><bass-alter>1</bass-alter></bass>"
+                        + "<kind text=\"F#m7b5/C#\">half-diminished</kind></harmony>",
+                AbcIo.buildHarmonyXmlFromChordSymbol("F#m7b5/C#"));
+
+        AbcIo.AbcMeasureNote note = new AbcIo.AbcMeasureNote("V1", 480, false, false);
+        note.getChordSymbols().add("Bbmaj7/F");
+        assertEquals(
+                "<harmony><root><root-step>B</root-step><root-alter>-1</root-alter></root>"
+                        + "<bass><bass-step>F</bass-step></bass>"
+                        + "<kind text=\"Bbmaj7/F\">major-seventh</kind></harmony>",
+                AbcIo.buildAbcNoteHarmonyAndWordsDirectionXml(note));
+
+        AbcIo.AbcMeasureNote chordTone = new AbcIo.AbcMeasureNote("V1", 480, true, false);
+        chordTone.getChordSymbols().add("C");
+        assertEquals("", AbcIo.buildAbcNoteHarmonyAndWordsDirectionXml(chordTone));
+    }
+
+    @Test
+    public void readsAbcTokensFromMusicXmlHarmonyAndLyrics() throws Exception {
+        assertEquals("C'7 / G", AbcIo.abcChordSymbolFromHarmony(parseElement(
+                "<harmony><root><root-step>C</root-step></root><kind text=\" C&quot;7 / G \">dominant</kind></harmony>")));
+        assertEquals("F#m7b5/C#", AbcIo.abcChordSymbolFromHarmony(parseElement(
+                "<harmony><root><root-step>F</root-step><root-alter>1</root-alter></root>"
+                        + "<kind>half-diminished</kind><bass><bass-step>C</bass-step><bass-alter>1</bass-alter></bass></harmony>")));
+        assertEquals("Bbdim", AbcIo.abcChordSymbolFromHarmony(parseElement(
+                "<harmony><root><root-step>B</root-step><root-alter>-1</root-alter></root><kind>diminished</kind></harmony>")));
+        assertEquals("", AbcIo.abcChordSymbolFromHarmony(parseElement(
+                "<harmony><root><root-step>H</root-step></root><kind>major</kind></harmony>")));
+
+        assertEquals("hello~world-", AbcIo.abcLyricTokenFromMusicXml("hello world", "begin"));
+        assertEquals("middle-", AbcIo.abcLyricTokenFromMusicXml("middle", "middle"));
+        assertEquals("end", AbcIo.abcLyricTokenFromMusicXml("end", "end"));
+        assertEquals("*", AbcIo.abcLyricTokenFromMusicXml("   ", "single"));
+    }
+
+    @Test
+    public void readsMusicXmlToAbcDomUtilityValues() throws Exception {
+        assertEquals("bass", AbcIo.abcClefFromMusicXmlPart(parseElement(
+                "<part><measure><attributes><clef><sign>F</sign><line>4</line></clef></attributes></measure></part>")));
+        assertEquals("treble", AbcIo.abcClefFromMusicXmlPart(parseElement(
+                "<part><measure><attributes><clef><sign>G</sign><line>2</line></clef></attributes></measure></part>")));
+        assertEquals("alto", AbcIo.abcClefFromMusicXmlPart(parseElement(
+                "<part><measure><attributes><clef><sign>C</sign><line>3</line></clef></attributes></measure></part>")));
+        assertEquals("tenor", AbcIo.abcClefFromMusicXmlPart(parseElement(
+                "<part><measure><attributes><clef><sign>C</sign><line>4</line></clef></attributes></measure></part>")));
+        assertEquals("", AbcIo.abcClefFromMusicXmlPart(parseElement("<part><measure/></part>")));
+
+        assertEquals(Integer.valueOf(1), AbcIo.accidentalTextToAlter("sharp"));
+        assertEquals(Integer.valueOf(-1), AbcIo.accidentalTextToAlter("flat"));
+        assertEquals(Integer.valueOf(0), AbcIo.accidentalTextToAlter("natural"));
+        assertEquals(Integer.valueOf(2), AbcIo.accidentalTextToAlter("double-sharp"));
+        assertEquals(Integer.valueOf(-2), AbcIo.accidentalTextToAlter("flat-flat"));
+        assertNull(AbcIo.accidentalTextToAlter("quarter-flat"));
+
+        assertEquals(Double.valueOf(12.5), AbcIo.parseOptionalNumber("12.5"));
+        assertNull(AbcIo.parseOptionalNumber(""));
+        assertNull(AbcIo.parseOptionalNumber("bad"));
+    }
+
+    @Test
+    public void collectsMusicXmlPartLaneDefinitions() throws Exception {
+        Element part = parseElement("<part id=\"P&amp;bad\">"
+                + "<measure><attributes>"
+                + "<clef number=\"2\"><sign>F</sign><line>4</line></clef>"
+                + "<clef number=\"1\"><sign>G</sign><line>2</line></clef>"
+                + "</attributes>"
+                + "<note><voice>2</voice><staff>1</staff></note>"
+                + "<note><voice>1</voice><staff>1</staff></note>"
+                + "<note><voice>1</voice><staff>2</staff></note>"
+                + "</measure></part>");
+
+        List<AbcIo.AbcMusicXmlLaneDef> lanes = AbcIo.collectMusicXmlPartLaneDefs(part, "P&bad", "Piano");
+        assertEquals(3, lanes.size());
+        assertEquals("1", lanes.get(0).getStaff());
+        assertEquals("1", lanes.get(0).getVoice());
+        assertEquals("P&bad_s1_v1", lanes.get(0).getVoiceId());
+        assertEquals("P_bad_s1_v1", lanes.get(0).getNormalizedVoiceId());
+        assertEquals("Piano (Staff 1 Voice 1)", lanes.get(0).getLaneName());
+        assertEquals("treble", lanes.get(0).getClef());
+        assertEquals("2", lanes.get(1).getVoice());
+        assertEquals("P_bad_s1_v2", lanes.get(1).getNormalizedVoiceId());
+        assertEquals("2", lanes.get(2).getStaff());
+        assertEquals("bass", lanes.get(2).getClef());
+
+        List<AbcIo.AbcMusicXmlLaneDef> fallback = AbcIo.collectMusicXmlPartLaneDefs(
+                parseElement("<part><measure/></part>"), "P1", "Solo");
+        assertEquals(1, fallback.size());
+        assertNull(fallback.get(0).getStaff());
+        assertNull(fallback.get(0).getVoice());
+        assertEquals("P1", fallback.get(0).getVoiceId());
+        assertEquals("Solo", fallback.get(0).getLaneName());
+    }
+
+    @Test
+    public void buildsMusicXmlToAbcMetaLines() throws Exception {
+        Element part = parseElement("<part><measure><attributes><transpose>"
+                + "<chromatic>-2.4</chromatic><diatonic>-1.2</diatonic>"
+                + "</transpose></attributes></measure>"
+                + "<measure><attributes><transpose><chromatic>7</chromatic></transpose></attributes></measure></part>");
+        assertEquals(Arrays.asList("%@mks transpose voice=V1 chromatic=-2 diatonic=-1"),
+                AbcIo.buildMusicXmlPartTransposeMetaLines(part, "V1"));
+
+        Element implicitRepeatMeasure = parseElement("<measure number=\"pickup\" implicit=\"yes\">"
+                + "<barline location=\"right\"><ending number=\"2\" type=\"discontinue\"/>"
+                + "<repeat direction=\"backward\" times=\"4\"/></barline></measure>");
+        assertEquals(Arrays.asList(
+                "%@mks measure voice=V1 measure=1 number=pickup implicit=1 times=4 ending-stop=2 ending-type=discontinue"),
+                AbcIo.buildMusicXmlMeasureMetaLines("V1", implicitRepeatMeasure, 1));
+        assertEquals(new ArrayList<String>(), AbcIo.buildMusicXmlMeasureMetaLines("V1",
+                parseElement("<measure number=\"2\"><barline location=\"right\"><repeat direction=\"backward\" times=\"2\"/></barline></measure>"),
+                2));
+
+        Element measure = parseElement("<measure><attributes><miscellaneous>"
+                + "<miscellaneous-field name=\"mks:diag:0002\">second value</miscellaneous-field>"
+                + "<miscellaneous-field name=\"mks:src:abc:raw-length\">ignored</miscellaneous-field>"
+                + "<miscellaneous-field name=\"mks:diag:count\">2</miscellaneous-field>"
+                + "<miscellaneous-field name=\"mks:diag:0001\">warn &amp; move</miscellaneous-field>"
+                + "</miscellaneous></attributes></measure>");
+        assertEquals(Arrays.asList(
+                "%@mks diag voice=V1 measure=3 name=mks:diag:count enc=uri-v1 value=2",
+                "%@mks diag voice=V1 measure=3 name=mks:diag:0001 enc=uri-v1 value=warn%20%26%20move",
+                "%@mks diag voice=V1 measure=3 name=mks:diag:0002 enc=uri-v1 value=second%20value"),
+                AbcIo.buildMusicXmlMeasureDiagMetaLines("V1", measure, 3));
+    }
+
+    @Test
+    public void updatesMusicXmlToAbcMeasureState() throws Exception {
+        AbcIo.AbcMusicXmlMeasureState state = AbcIo.updateMusicXmlMeasureState(parseElement(
+                "<measure><attributes><divisions>960</divisions><key><fifths>-2.4</fifths></key>"
+                        + "<time><beats>6</beats><beat-type>8</beat-type></time></attributes></measure>"),
+                480, 0, 4, 4, Integer.valueOf(0));
+
+        assertEquals(Double.valueOf(960), Double.valueOf(state.getDivisions()));
+        assertEquals(-2, state.getFifths());
+        assertEquals(Double.valueOf(6), Double.valueOf(state.getBeats()));
+        assertEquals(Double.valueOf(8), Double.valueOf(state.getBeatType()));
+        assertEquals(true, state.isNeedsInlineKeyChange());
+        assertEquals(Integer.valueOf(-1), state.getKeyAlterByStep().get("B"));
+        assertEquals(Integer.valueOf(-1), state.getKeyAlterByStep().get("E"));
+        assertEquals(Integer.valueOf(0), state.getKeyAlterByStep().get("A"));
+        assertEquals(true, state.getMeasureAccidentalByStepOctave().isEmpty());
+
+        AbcIo.AbcMusicXmlMeasureState unchanged = AbcIo.updateMusicXmlMeasureState(
+                parseElement("<measure><attributes><divisions>0</divisions><time><beats>bad</beats></time></attributes></measure>"),
+                480, 1, 3, 4, Integer.valueOf(1));
+        assertEquals(Double.valueOf(480), Double.valueOf(unchanged.getDivisions()));
+        assertEquals(1, unchanged.getFifths());
+        assertEquals(Double.valueOf(3), Double.valueOf(unchanged.getBeats()));
+        assertEquals(Double.valueOf(4), Double.valueOf(unchanged.getBeatType()));
+        assertEquals(false, unchanged.isNeedsInlineKeyChange());
+    }
+
+    @Test
+    public void collectsMusicXmlToAbcDirectionTokens() throws Exception {
+        Element direction = parseElement("<direction>"
+                + "<direction-type><rehearsal>A &amp; B</rehearsal><words>go now</words><segno/><coda/>"
+                + "<wedge type=\"diminuendo\"/><dynamics><mf/><sfz/></dynamics></direction-type>"
+                + "<sound fine=\"yes\" dacapo=\"yes\" tocoda=\"coda\" dalsegno=\"segno\"/>"
+                + "</direction>");
+        AbcIo.AbcMusicXmlDirectionTokens tokens = AbcIo.collectMusicXmlDirectionTokens(direction, "");
+
+        assertEquals(Arrays.asList("go now"), tokens.getWords());
+        assertEquals(Arrays.asList("!rehearsal:A & B!", "!segno!", "!coda!", "!diminuendo(!", "!mf!", "!sfz!",
+                "!fine!", "!dacoda!", "!dalsegno!"), tokens.getDecorations());
+        assertEquals("diminuendo", tokens.getActiveWedgeType());
+
+        AbcIo.AbcMusicXmlDirectionTokens stop = AbcIo.collectMusicXmlDirectionTokens(parseElement(
+                "<direction><direction-type><wedge type=\"stop\"/></direction-type><sound tocoda=\"coda\"/></direction>"),
+                "diminuendo");
+        assertEquals(Arrays.asList("!diminuendo)!", "!tocoda!"), stop.getDecorations());
+        assertEquals("", stop.getActiveWedgeType());
+    }
+
+    @Test
+    public void resolvesMusicXmlToAbcNoteLaneAndTiming() throws Exception {
+        AbcIo.AbcMusicXmlLaneDef lane = new AbcIo.AbcMusicXmlLaneDef("2", "1", "P1_s2_v1", "P1_s2_v1",
+                "Piano (Staff 2 Voice 1)", "bass");
+        Element matchingNote = parseElement(
+                "<note><voice>1</voice><staff>2</staff><duration>240</duration><pitch><step>C</step></pitch></note>");
+        Element defaultVoiceNote = parseElement(
+                "<note><staff>2</staff><duration>240</duration><pitch><step>C</step></pitch></note>");
+        Element otherStaffNote = parseElement(
+                "<note><voice>1</voice><staff>1</staff><duration>240</duration><pitch><step>C</step></pitch></note>");
+
+        assertEquals(true, AbcIo.isMusicXmlNoteInLane(matchingNote, lane));
+        assertEquals(true, AbcIo.isMusicXmlNoteInLane(defaultVoiceNote, lane));
+        assertEquals(false, AbcIo.isMusicXmlNoteInLane(otherStaffNote, lane));
+
+        AbcIo.AbcMusicXmlNoteTiming timing = AbcIo.resolveMusicXmlNoteTiming(matchingNote, 480);
+        assertEquals(false, timing.isChord());
+        assertEquals(false, timing.isGrace());
+        assertEquals(240, timing.getDuration());
+        assertEquals(true, timing.isPlayable());
+
+        AbcIo.AbcMusicXmlNoteTiming graceFallback = AbcIo.resolveMusicXmlNoteTiming(
+                parseElement("<note><grace/><pitch><step>D</step></pitch></note>"), 480);
+        assertEquals(true, graceFallback.isGrace());
+        assertEquals(240, graceFallback.getDuration());
+        assertEquals(true, graceFallback.isPlayable());
+
+        AbcIo.AbcMusicXmlNoteTiming skipped = AbcIo.resolveMusicXmlNoteTiming(
+                parseElement("<note><pitch><step>E</step></pitch></note>"), 480);
+        assertEquals(false, skipped.isPlayable());
+    }
+
+    @Test
+    public void collectsMusicXmlToAbcNoteOrnaments() throws Exception {
+        Element note = parseElement("<note><notations>"
+                + "<ornaments><wavy-line type=\"start\"/><wavy-line type=\"stop\"/>"
+                + "<inverted-turn slash=\"yes\"/><delayed-turn/><mordent/>"
+                + "<tremolo type=\"start\">12</tremolo><accidental-mark>sharp</accidental-mark>"
+                + "<schleifer/><shake/></ornaments>"
+                + "<glissando type=\"start\"/><glissando type=\"stop\"/>"
+                + "<slide type=\"start\"/><slide type=\"stop\"/><arpeggiate/>"
+                + "</notations></note>");
+        AbcIo.AbcMusicXmlNoteOrnaments ornaments = AbcIo.collectMusicXmlNoteOrnaments(note);
+
+        assertEquals(true, ornaments.isTrill());
+        assertEquals(true, ornaments.isWavyLineStop());
+        assertEquals("sharp", ornaments.getTrillAccidentalText());
+        assertEquals("inverted-turn", ornaments.getTurnType());
+        assertEquals(true, ornaments.isTurnSlash());
+        assertEquals(true, ornaments.isDelayedTurn());
+        assertEquals("mordent", ornaments.getMordentType());
+        assertEquals("start", ornaments.getTremoloType());
+        assertEquals(Integer.valueOf(8), ornaments.getTremoloMarks());
+        assertEquals(true, ornaments.isGlissandoStart());
+        assertEquals(true, ornaments.isGlissandoStop());
+        assertEquals(true, ornaments.isSlideStart());
+        assertEquals(true, ornaments.isSlideStop());
+        assertEquals(true, ornaments.isSchleifer());
+        assertEquals(true, ornaments.isShake());
+        assertEquals(true, ornaments.isArpeggiate());
+
+        AbcIo.AbcMusicXmlNoteOrnaments none = AbcIo.collectMusicXmlNoteOrnaments(parseElement("<note/>"));
+        assertEquals(false, none.isTrill());
+        assertEquals("", none.getTurnType());
+        assertEquals("", none.getTremoloType());
+        assertEquals(Integer.valueOf(1), none.getTremoloMarks());
+    }
+
+    @Test
+    public void buildsAbcNoteNotationDecorationSubset() {
+        AbcIo.AbcMeasureNote decorated = new AbcIo.AbcMeasureNote("V1", 240, false, false, false, "E",
+                Integer.valueOf(5), Integer.valueOf(0), "16th", null, "", false, false, true, false, false,
+                "", "", "single", false, null, null, Arrays.asList("ornamented"), false, false, "", false, false,
+                false, false, false, false, false, false, "", false, true, true, true, false, true, true, false,
+                "sharp", "inverted-turn", true, true, "inverted-mordent", "start", Integer.valueOf(9), true,
+                true, true, true, true, true, true, true, true, true, true, true, true, "inverted", true, true,
+                true, "short <phrase>", true, true, true, true, true, true, Arrays.asList("1", "2&"),
+                Arrays.asList("3"), Arrays.asList("pizz <x>"), true, true, true, true, true);
+
+        assertEquals(
+                "<ornaments><trill-mark/><wavy-line type=\"start\"/><accidental-mark>sharp</accidental-mark></ornaments>"
+                        + "<ornaments><inverted-turn slash=\"yes\"/><delayed-turn/></ornaments>"
+                        + "<ornaments><inverted-mordent/></ornaments>"
+                        + "<ornaments><tremolo type=\"start\">8</tremolo></ornaments>"
+                        + "<glissando type=\"start\" number=\"1\">wavy</glissando>"
+                        + "<glissando type=\"stop\" number=\"1\">wavy</glissando>"
+                        + "<slide type=\"start\" number=\"1\"/><slide type=\"stop\" number=\"1\"/>"
+                        + "<ornaments><schleifer/></ornaments><ornaments><shake/></ornaments><arpeggiate/>",
+                AbcIo.buildAbcNoteOrnamentsXml(decorated));
+        assertEquals(
+                "<articulations><staccato/><staccatissimo/><accent/><tenuto/><stress/><unstress/>"
+                        + "<strong-accent/><breath-mark/><caesura/>"
+                        + "<other-articulation>short &lt;phrase&gt;</other-articulation></articulations>",
+                AbcIo.buildAbcNoteArticulationsXml(decorated));
+        assertEquals(
+                "<technical><up-bow/><down-bow/><double-tongue/><triple-tongue/><heel/><toe/>"
+                        + "<fingering>1</fingering><fingering>2&amp;</fingering><string>3</string>"
+                        + "<pluck>pizz &lt;x&gt;</pluck><open-string/><snap-pizzicato/><harmonic/>"
+                        + "<stopped/><thumb-position/></technical>",
+                AbcIo.buildAbcNoteTechnicalXml(decorated));
+        assertEquals(true, AbcIo.buildAbcNoteNotationsXml(decorated)
+                .contains("<slur type=\"start\"/><slur type=\"stop\"/><tuplet type=\"start\"/>"));
+        assertEquals(true, AbcIo.buildAbcNoteXml(decorated, 0, null, new LinkedHashMap<Integer, String>())
+                .contains("<fermata>inverted</fermata></notations></note>"));
+    }
+
+    @Test
+    public void managesAbcVoiceStoresForBodyImport() {
+        AbcIo.AbcVoiceStores stores = AbcIo.createAbcVoiceStores();
+        assertEquals(true, stores.getMeasuresByVoice().isEmpty());
+        assertEquals(true, stores.getNotationMeasureMetaByVoice().isEmpty());
+
+        List<List<AbcIo.AbcMeasureNote>> measures = AbcIo.ensureAbcVoiceMeasures(stores, "V1");
+        assertEquals(1, measures.size());
+        assertEquals(true, measures.get(0).isEmpty());
+        measures.get(0).add(new AbcIo.AbcMeasureNote("V1", 480, false, false));
+        measures.add(new ArrayList<AbcIo.AbcMeasureNote>());
+        measures.add(new ArrayList<AbcIo.AbcMeasureNote>());
+
+        AbcIo.AbcMeasureMeta firstMeta = AbcIo.ensureAbcNotationMeasureMeta(stores, "V1", 1);
+        assertEquals("1", firstMeta.getNumber());
+        assertEquals(false, firstMeta.isRepeatStart());
+
+        Map<Integer, AbcIo.AbcMeter> meterByMeasure = AbcIo.ensureAbcMeterByMeasure(stores, "V1");
+        meterByMeasure.put(Integer.valueOf(2), new AbcIo.AbcMeter(3, 4));
+        assertEquals(3, stores.getMeterByMeasureByVoice().get("V1").get(Integer.valueOf(2)).getBeats());
+
+        Map<Integer, Integer> tempoByMeasure = AbcIo.ensureAbcTempoByMeasure(stores, "V1");
+        tempoByMeasure.put(Integer.valueOf(2), Integer.valueOf(132));
+        assertEquals(Integer.valueOf(132), stores.getTempoByMeasureByVoice().get("V1").get(Integer.valueOf(2)));
+
+        stores.getCurrentKeyFifthsByVoice().put("V1", Integer.valueOf(2));
+        stores.getActiveEndingByVoice().put("V1", "1");
+        AbcIo.finalizeAbcActiveEndings(stores);
+        assertEquals(1, stores.getMeasuresByVoice().get("V1").size());
+        assertEquals("1", stores.getNotationMeasureMetaByVoice().get("V1").get(Integer.valueOf(1)).getEndingStop());
+        assertEquals("stop", stores.getNotationMeasureMetaByVoice().get("V1").get(Integer.valueOf(1)).getEndingStopType());
+        assertEquals(Integer.valueOf(2), stores.getCurrentKeyFifthsByVoice().get("V1"));
+    }
+
+    @Test
+    public void appliesAbcLyricsToMeasures() {
+        List<AbcIo.AbcLyricToken> tokens = AbcIo.tokenizeAbcLyricLine("hel-lo mid- dle _ * tail|end");
+        assertEquals("text", tokens.get(0).getType());
+        assertEquals("hel", tokens.get(0).getText());
+        assertEquals("begin", tokens.get(0).getSyllabic());
+        assertEquals("extend", tokens.get(4).getType());
+        assertEquals("skip", tokens.get(5).getType());
+
+        AbcIo.AbcMeasureNote first = new AbcIo.AbcMeasureNote("V1", 480, false, false);
+        AbcIo.AbcMeasureNote rest = new AbcIo.AbcMeasureNote("V1", 480, false, false, true, "C",
+                Integer.valueOf(4), Integer.valueOf(0), "quarter");
+        AbcIo.AbcMeasureNote chord = new AbcIo.AbcMeasureNote("V1", 480, true, false);
+        AbcIo.AbcMeasureNote second = new AbcIo.AbcMeasureNote("V1", 480, false, false);
+        Map<String, List<List<AbcIo.AbcMeasureNote>>> measuresByVoice =
+                new LinkedHashMap<String, List<List<AbcIo.AbcMeasureNote>>>();
+        measuresByVoice.put("V1", Arrays.asList(Arrays.asList(first, rest, chord, second)));
+        Map<String, List<AbcIo.AbcLyricEntry>> lyricsByVoice =
+                new LinkedHashMap<String, List<AbcIo.AbcLyricEntry>>();
+        lyricsByVoice.put("V1", Arrays.asList(new AbcIo.AbcLyricEntry("hel- _ lo", 3)));
+
+        AbcIo.applyAbcLyricsToMeasures(lyricsByVoice, measuresByVoice);
+
+        assertEquals("hel", first.getLyricText());
+        assertEquals("begin", first.getLyricSyllabic());
+        assertEquals(true, first.isLyricExtend());
+        assertEquals("lo", second.getLyricText());
+        assertEquals("end", second.getLyricSyllabic());
+        assertEquals(false, second.isLyricExtend());
+        assertEquals("", rest.getLyricText());
+    }
+
+    @Test
+    public void appliesAbcBodyFieldsForBodyImportState() {
+        AbcIo.AbcVoiceStores stores = AbcIo.createAbcVoiceStores();
+        Map<String, Integer> keyHints = new LinkedHashMap<String, Integer>();
+        Map<String, Integer> accidentals = new LinkedHashMap<String, Integer>();
+        accidentals.put("F", Integer.valueOf(1));
+        List<String> warnings = new ArrayList<String>();
+        AbcIo.AbcBodyFieldContext context = new AbcIo.AbcBodyFieldContext(0, new AbcIo.Fraction(1, 8),
+                new AbcIo.AbcMeter(4, 4), null, accidentals, stores, "V1", 2, keyHints, warnings);
+
+        AbcIo.AbcBodyFieldResult keyResult = AbcIo.applyAbcBodyField("K", "D", context);
+        assertEquals(true, keyResult.isHandled());
+        assertEquals(2, keyResult.getActiveKeyFifths());
+        assertEquals(Integer.valueOf(1), keyResult.getActiveKeySignatureAccidentals().get("F"));
+        assertEquals(Integer.valueOf(1), keyResult.getActiveKeySignatureAccidentals().get("C"));
+        assertEquals(true, keyResult.getMeasureAccidentals().isEmpty());
+        assertEquals(Integer.valueOf(2), stores.getCurrentKeyFifthsByVoice().get("V1"));
+        assertEquals(Integer.valueOf(2), keyHints.get("V1#2"));
+
+        AbcIo.AbcBodyFieldResult lengthResult = AbcIo.applyAbcBodyField("L", "1/16", context);
+        assertFraction(1, 16, lengthResult.getActiveUnitLength());
+
+        AbcIo.AbcBodyFieldResult meterResult = AbcIo.applyAbcBodyField("M", "3/8", context);
+        assertEquals(3, meterResult.getActiveMeter().getBeats());
+        assertEquals(8, stores.getMeterByMeasureByVoice().get("V1").get(Integer.valueOf(2)).getBeatType());
+
+        AbcIo.AbcBodyFieldResult tempoResult = AbcIo.applyAbcBodyField("Q", "1/8=900", context);
+        assertEquals(Integer.valueOf(300), tempoResult.getActiveTempoBpm());
+        assertEquals(Integer.valueOf(300), stores.getTempoByMeasureByVoice().get("V1").get(Integer.valueOf(2)));
+
+        AbcIo.AbcBodyFieldResult unsupported = AbcIo.applyAbcBodyField("X", "1", context);
+        assertEquals(false, unsupported.isHandled());
+    }
+
+    @Test
+    public void processesAbcBarlineEntriesForBodyImportState() {
+        Map<String, Integer> accidentals = new LinkedHashMap<String, Integer>();
+        accidentals.put("F", Integer.valueOf(1));
+        AbcParser.AbcParsedBarlineToken repeatEnd = AbcParser.parseAbcBarlineTokenAt(":|1 A", 0);
+        AbcIo.AbcBarlineEntryContext context = new AbcIo.AbcBarlineEntryContext(":|1 A", 0, "old", 1, 480, 1,
+                accidentals);
+
+        assertEquals(true, AbcIo.processAbcBarlineEntry(repeatEnd, context));
+
+        assertEquals(true, context.isRepeatEndMarked());
+        assertEquals(false, context.isRepeatStartMarked());
+        assertEquals(true, context.isActiveEndingStopped());
+        assertEquals(1, context.getStoppedEndingMeasureNo());
+        assertEquals(true, context.isAdvancedToNextMeasure());
+        assertEquals(2, context.getCurrentMeasureNo());
+        assertEquals(true, context.isMeasureAccidentalsCleared());
+        assertEquals(true, context.getMeasureAccidentals().isEmpty());
+        assertEquals(true, context.isLastNoteCleared());
+        assertEquals(true, context.isBeamContextReset());
+        assertEquals("1", context.getStartedEndingMarker());
+        assertEquals(3, context.getIdx());
+
+        AbcIo.AbcBarlineEntryContext repeatStartContext = new AbcIo.AbcBarlineEntryContext("|: C", 0, "", 2, 0, 1,
+                new LinkedHashMap<String, Integer>());
+        assertEquals(true, AbcIo.processAbcBarlineEntry(AbcParser.parseAbcBarlineTokenAt("|: C", 0),
+                repeatStartContext));
+        assertEquals(true, repeatStartContext.isRepeatStartMarked());
+        assertEquals(false, repeatStartContext.isRepeatEndMarked());
+        assertEquals(false, repeatStartContext.isAdvancedToNextMeasure());
+        assertEquals(2, repeatStartContext.getIdx());
+    }
+
+    @Test
+    public void processesAbcNonPlayableBodyEntriesForBodyImportState() {
+        List<String> warnings = new ArrayList<String>();
+        final List<String> handled = new ArrayList<String>();
+        AbcIo.AbcNonPlayableBodyEntryContext context = new AbcIo.AbcNonPlayableBodyEntryContext(0, warnings,
+                barlineToken -> {
+                    handled.add("barline:" + barlineToken.getNextIdx());
+                    return true;
+                },
+                (fieldName, fieldValue) -> {
+                    handled.add(fieldName + "=" + fieldValue);
+                    return "M".equals(fieldName);
+                });
+
+        assertEquals(true, AbcIo.processAbcNonPlayableBodyEntry(AbcParser.parseAbcBodyEntryAt("| C", 0), context));
+        assertEquals("barline:1", handled.get(0));
+
+        assertEquals(true, AbcIo.processAbcNonPlayableBodyEntry(AbcParser.parseAbcBodyEntryAt("M:3/4 C", 0),
+                context));
+        assertEquals("M=3/4", handled.get(1));
+        assertEquals(5, context.getIdx());
+
+        assertEquals(true, AbcIo.processAbcNonPlayableBodyEntry(AbcParser.parseAbcBodyEntryAt("Z:ignored C", 0),
+                context));
+        assertEquals("Skipped unsupported standalone body field token: Z:ignored", warnings.get(0));
+        assertEquals(9, context.getIdx());
+
+        assertEquals(true, AbcIo.processAbcNonPlayableBodyEntry(AbcParser.parseAbcBodyEntryAt("yabc C", 0),
+                context));
+        assertEquals("Skipped unsupported body token: yabc", warnings.get(1));
+        assertEquals(4, context.getIdx());
+
+        assertEquals(true, AbcIo.processAbcNonPlayableBodyEntry(AbcParser.parseAbcBodyEntryAt("123 C", 0),
+                context));
+        assertEquals("Skipped unsupported body number token: 123", warnings.get(2));
+        assertEquals(3, context.getIdx());
+
+        assertEquals(false, AbcIo.processAbcNonPlayableBodyEntry(AbcParser.parseAbcBodyEntryAt("!trill!C", 0),
+                context));
+        assertEquals(false, AbcIo.processAbcNonPlayableBodyEntry(null, context));
+    }
+
+    @Test
+    public void processesAbcSimpleBodyTokensForBodyImportState() {
+        final List<String> calls = new ArrayList<String>();
+        AbcIo.AbcSimpleBodyTokenHandlerContext context = new AbcIo.AbcSimpleBodyTokenHandlerContext("!",
+                bodyToken -> {
+                    calls.add("broken:" + bodyToken.getBrokenRhythm().getSymbol());
+                    return true;
+                },
+                (bodyToken, ch) -> {
+                    calls.add("decoration:" + bodyToken.getDecoration().getDecoration() + ":" + ch);
+                    return true;
+                },
+                bodyToken -> {
+                    calls.add("paren:" + bodyToken.getParenToken().getKind());
+                    return true;
+                },
+                bodyToken -> {
+                    calls.add("quoted:" + bodyToken.getQuotedString().getNormalizedText());
+                    return true;
+                },
+                (bodyToken, ch) -> {
+                    calls.add("shorthand:" + bodyToken.getShorthand().getKind() + ":" + ch);
+                    return true;
+                },
+                bodyToken -> {
+                    calls.add("slur-stop:" + bodyToken.getSlurStop().getNextIdx());
+                    return true;
+                },
+                bodyToken -> {
+                    calls.add("tie:" + bodyToken.getTie().getNextIdx());
+                    return true;
+                });
+
+        assertEquals(true, AbcIo.processAbcSimpleBodyToken(AbcParser.parseAbcBodyTokenAt(">A", 0), context));
+        assertEquals(true, AbcIo.processAbcSimpleBodyToken(AbcParser.parseAbcBodyTokenAt("!trill!C", 0), context));
+        assertEquals(true, AbcIo.processAbcSimpleBodyToken(AbcParser.parseAbcBodyTokenAt("(C", 0), context));
+        assertEquals(true, AbcIo.processAbcSimpleBodyToken(AbcParser.parseAbcBodyTokenAt("\"txt\"C", 0), context));
+        assertEquals(true, AbcIo.processAbcSimpleBodyToken(AbcParser.parseAbcBodyTokenAt(".C", 0), context));
+        assertEquals(true, AbcIo.processAbcSimpleBodyToken(AbcParser.parseAbcBodyTokenAt(")C", 0), context));
+        assertEquals(true, AbcIo.processAbcSimpleBodyToken(AbcParser.parseAbcBodyTokenAt("-C", 0), context));
+        assertEquals(false, AbcIo.processAbcSimpleBodyToken(AbcParser.parseAbcBodyTokenAt("[K:C]", 0), context));
+        assertEquals(false, AbcIo.processAbcSimpleBodyToken(null, context));
+
+        assertEquals("broken:>", calls.get(0));
+        assertEquals("decoration:trill:!", calls.get(1));
+        assertEquals("paren:slur-start", calls.get(2));
+        assertEquals("quoted:txt", calls.get(3));
+        assertEquals("shorthand:staccato:!", calls.get(4));
+        assertEquals("slur-stop:1", calls.get(5));
+        assertEquals("tie:1", calls.get(6));
+    }
+
+    @Test
+    public void processesAbcBracketGraceAndFallbackBodyTokens() {
+        final List<String> bracketCalls = new ArrayList<String>();
+        AbcIo.AbcBracketBodyTokenContext bracketContext = new AbcIo.AbcBracketBodyTokenContext("[K:G] [1 [CE]",
+                8,
+                bracketToken -> {
+                    bracketCalls.add("inline:" + bracketToken.getInlineField().getFieldName());
+                    return true;
+                },
+                bracketToken -> {
+                    bracketCalls.add("ending:" + bracketToken.getRepeatEndingMarker().getMarker());
+                    return true;
+                },
+                (playableEvent, fallbackToNextChar) -> {
+                    bracketCalls.add("playable:" + playableEvent.getKind() + ":" + fallbackToNextChar);
+                    return true;
+                });
+        assertEquals(true, AbcIo.processAbcBracketBodyToken(AbcParser.parseAbcBodyTokenAt("[K:G]", 0),
+                bracketContext));
+        assertEquals(true, AbcIo.processAbcBracketBodyToken(AbcParser.parseAbcBodyTokenAt("[1 A", 0),
+                bracketContext));
+        AbcIo.AbcBracketBodyTokenContext playableBracketContext = new AbcIo.AbcBracketBodyTokenContext("[CE]",
+                0, bracketContext::handleInlineFieldBracketToken, bracketContext::handleRepeatEndingBracketToken,
+                (playableEvent, fallbackToNextChar) -> {
+                    bracketCalls.add("playable:" + playableEvent.getKind() + ":" + fallbackToNextChar);
+                    return true;
+                });
+        assertEquals(true, AbcIo.processAbcBracketBodyToken(AbcParser.parseAbcBodyTokenAt("[CE]", 0),
+                playableBracketContext));
+        assertEquals(false, AbcIo.processAbcBracketBodyToken(AbcParser.parseAbcBodyTokenAt("A", 0),
+                bracketContext));
+        assertEquals("inline:K", bracketCalls.get(0));
+        assertEquals("ending:1", bracketCalls.get(1));
+        assertEquals("playable:playable:true", bracketCalls.get(2));
+
+        final List<AbcParser.AbcParsedGraceNote> graceNotes = new ArrayList<AbcParser.AbcParsedGraceNote>();
+        List<String> warnings = new ArrayList<String>();
+        AbcIo.AbcGraceGroupProcessResult graceResult = AbcIo.processAbcGraceGroup(
+                new AbcIo.AbcGraceGroupContext("{/c}A", 0, "{", 9, warnings, notes -> graceNotes.addAll(notes)));
+        assertEquals(true, graceResult.isHandled());
+        assertEquals(4, graceResult.getNextIdx());
+        assertEquals(1, graceNotes.size());
+        assertEquals(true, graceNotes.get(0).isGraceSlash());
+
+        AbcIo.AbcGraceGroupProcessResult ignoredGrace = AbcIo.processAbcGraceGroup(
+                new AbcIo.AbcGraceGroupContext("A", 0, "A", 9, warnings, notes -> graceNotes.addAll(notes)));
+        assertEquals(false, ignoredGrace.isHandled());
+        assertEquals(0, ignoredGrace.getNextIdx());
+
+        AbcIo.AbcGraceGroupProcessResult failedGrace = AbcIo.processAbcGraceGroup(
+                new AbcIo.AbcGraceGroupContext("{c", 0, "{", 9, warnings, notes -> graceNotes.addAll(notes)));
+        assertEquals(true, failedGrace.isHandled());
+        assertEquals(1, failedGrace.getNextIdx());
+        assertEquals(true, warnings.get(warnings.size() - 1).contains("Failed to parse grace group"));
+
+        final List<String> fallbackCalls = new ArrayList<String>();
+        assertEquals(true, AbcIo.processAbcBodyFallback(new AbcIo.AbcBodyFallbackContext(")", null,
+                ch -> {
+                    fallbackCalls.add("closing:" + ch);
+                    return true;
+                },
+                ch -> false,
+                () -> {
+                    throw new IllegalStateException("unexpected");
+                })));
+        assertEquals(true, AbcIo.processAbcBodyFallback(new AbcIo.AbcBodyFallbackContext("?", null,
+                ch -> false,
+                ch -> {
+                    fallbackCalls.add("punct:" + ch);
+                    return true;
+                },
+                () -> {
+                    throw new IllegalStateException("unexpected");
+                })));
+        assertThrows(IllegalStateException.class, () -> AbcIo.processAbcBodyFallback(
+                new AbcIo.AbcBodyFallbackContext("x", null, ch -> false, ch -> false, () -> {
+                    throw new IllegalStateException("parse");
+                })));
+        assertEquals(false, AbcIo.processAbcBodyFallback(new AbcIo.AbcBodyFallbackContext("x",
+                AbcParser.parseAbcBodyEntryAt("!trill!C", 0), ch -> false, ch -> false, null)));
+        assertEquals("closing:)", fallbackCalls.get(0));
+        assertEquals("punct:?", fallbackCalls.get(1));
+    }
+
+    @Test
+    public void appliesAbcPendingNoteStateHelpers() {
+        AbcIo.AbcMeasureNote note = new AbcIo.AbcMeasureNote("V1", 480, false, false, false, "C",
+                Integer.valueOf(4), Integer.valueOf(0), "quarter");
+        final List<String> calls = new ArrayList<String>();
+        final boolean[] pendingTie = new boolean[] { true };
+        AbcIo.applyAbcPendingStateToPlayableNote(new AbcIo.AbcPendingPlayableNoteContext(note,
+                new AbcIo.AbcPendingPlayableNoteOptions(Boolean.FALSE, null, "wide"),
+                (target, applySlurStart, trillHint) -> calls.add("ornament:" + applySlurStart + ":" + trillHint),
+                target -> calls.add("articulation"), target -> calls.add("direction"),
+                target -> calls.add("technical"), () -> pendingTie[0], () -> pendingTie[0] = false,
+                message -> calls.add("warn:" + message)));
+        assertEquals(true, note.isTieStop());
+        assertEquals(false, pendingTie[0]);
+        assertEquals("ornament:false:wide", calls.get(0));
+        assertEquals("articulation", calls.get(1));
+        assertEquals("direction", calls.get(2));
+        assertEquals("technical", calls.get(3));
+
+        AbcIo.AbcMeasureNote rest = new AbcIo.AbcMeasureNote("V1", 480, false, false, true, "C",
+                Integer.valueOf(4), Integer.valueOf(0), "quarter");
+        final boolean[] restPendingTie = new boolean[] { true };
+        AbcIo.applyAbcPendingStateToPlayableNote(new AbcIo.AbcPendingPlayableNoteContext(rest,
+                new AbcIo.AbcPendingPlayableNoteOptions(null, null, ""), null, null, null, null,
+                () -> restPendingTie[0], () -> restPendingTie[0] = false, message -> calls.add("warn:" + message)));
+        assertEquals(false, rest.isTieStop());
+        assertEquals(false, restPendingTie[0]);
+        assertEquals(true, calls.get(calls.size() - 1).contains("tie(-) was followed by a rest"));
+
+        final int[] applied = new int[] { 0 };
+        final int[] cleared = new int[] { 0 };
+        AbcIo.applyAbcPendingNoteValue(new AbcIo.AbcPendingNoteValueContext(note, true,
+                () -> applied[0] += 1, () -> cleared[0] += 1));
+        AbcIo.applyAbcPendingNoteValue(new AbcIo.AbcPendingNoteValueContext(rest, true,
+                () -> applied[0] += 10, () -> cleared[0] += 10));
+        assertEquals(1, applied[0]);
+        assertEquals(1, cleared[0]);
+
+        final List<String> optionalValues = new ArrayList<String>();
+        AbcIo.applyAbcPendingNoteOptionalValue(new AbcIo.AbcPendingNoteOptionalValueContext(note, "fermata",
+                value -> value == null || value.toString().length() == 0,
+                value -> optionalValues.add(value.toString()), () -> optionalValues.add("cleared")));
+        AbcIo.applyAbcPendingNoteOptionalValue(new AbcIo.AbcPendingNoteOptionalValueContext(note, "",
+                value -> value == null || value.toString().length() == 0,
+                value -> optionalValues.add("bad"), () -> optionalValues.add("bad-clear")));
+        assertEquals(Arrays.asList("fermata", "cleared"), optionalValues);
+
+        final List<String> arrayValues = new ArrayList<String>();
+        AbcIo.applyAbcPendingNoteArray(new AbcIo.AbcPendingNoteArrayContext(note, Arrays.asList("1", "2"),
+                values -> {
+                    for (Object value : values) {
+                        arrayValues.add(String.valueOf(value));
+                    }
+                },
+                () -> arrayValues.add("cleared")));
+        AbcIo.applyAbcPendingNoteArray(new AbcIo.AbcPendingNoteArrayContext(note, new ArrayList<String>(),
+                values -> arrayValues.add("bad"), () -> arrayValues.add("bad-clear")));
+        assertEquals(Arrays.asList("1", "2", "cleared"), arrayValues);
+    }
+
+    @Test
     public void buildsAbcBeamXmlByNoteIndex() {
         List<AbcIo.AbcMeasureNote> notes = Arrays.asList(
                 new AbcIo.AbcMeasureNote("V1", 480, false, false, false, "C", Integer.valueOf(4),
@@ -750,5 +1415,15 @@ public class AbcIoTest {
     private static void assertFraction(int num, int den, AbcIo.Fraction actual) {
         assertEquals(num, actual.getNum());
         assertEquals(den, actual.getDen());
+    }
+
+    private static Element parseElement(String xml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        return factory.newDocumentBuilder()
+                .parse(new ByteArrayInputStream(xml.getBytes("UTF-8")))
+                .getDocumentElement();
     }
 }
