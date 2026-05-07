@@ -948,6 +948,7 @@ public class AbcIoTest {
         AbcIo.AbcMusicXmlNoteOrnaments ornaments = AbcIo.collectMusicXmlNoteOrnaments(note);
 
         assertEquals(true, ornaments.isTrill());
+        assertEquals(true, ornaments.isWavyLineStart());
         assertEquals(true, ornaments.isWavyLineStop());
         assertEquals("sharp", ornaments.getTrillAccidentalText());
         assertEquals("inverted-turn", ornaments.getTurnType());
@@ -963,12 +964,115 @@ public class AbcIoTest {
         assertEquals(true, ornaments.isSchleifer());
         assertEquals(true, ornaments.isShake());
         assertEquals(true, ornaments.isArpeggiate());
+        assertEquals("!trill)!!delayedinvertedturn!!mordent!!tremolo-start-8!!gliss-start!!slide!!schleifer!!shake!!arpeggio!",
+                AbcIo.buildMusicXmlNoteOrnamentPrefix(ornaments));
 
         AbcIo.AbcMusicXmlNoteOrnaments none = AbcIo.collectMusicXmlNoteOrnaments(parseElement("<note/>"));
         assertEquals(false, none.isTrill());
         assertEquals("", none.getTurnType());
         assertEquals("", none.getTremoloType());
         assertEquals(Integer.valueOf(1), none.getTremoloMarks());
+        assertEquals("", AbcIo.buildMusicXmlNoteOrnamentPrefix(none));
+
+        assertEquals("!trill(!", AbcIo.buildMusicXmlNoteOrnamentPrefix(AbcIo.collectMusicXmlNoteOrnaments(
+                parseElement("<note><notations><ornaments><trill-mark/><wavy-line type=\"start\"/></ornaments></notations></note>"))));
+        assertEquals("!delayedturn!!pralltriller!!gliss-stop!!slide-stop!", AbcIo.buildMusicXmlNoteOrnamentPrefix(
+                AbcIo.collectMusicXmlNoteOrnaments(parseElement("<note><notations><ornaments><turn/><delayed-turn/>"
+                        + "<inverted-mordent/></ornaments><glissando type=\"stop\"/><slide type=\"stop\"/>"
+                        + "</notations></note>"))));
+    }
+
+    @Test
+    public void resolvesMusicXmlToAbcPitchTokens() throws Exception {
+        Map<String, Integer> keyAlterByStep = AbcIo.keySignatureAlterByStep(1);
+        Map<String, Integer> measureAccidentals = new LinkedHashMap<String, Integer>();
+
+        AbcIo.AbcMusicXmlPitchToken sharp = AbcIo.resolveMusicXmlNotePitchToken(parseElement(
+                "<note><pitch><step>C</step><octave>4</octave><alter>1</alter></pitch>"
+                        + "<accidental editorial=\"yes\">sharp</accidental></note>"),
+                keyAlterByStep, measureAccidentals);
+        assertEquals("!editorial!^C", sharp.getToken());
+        assertEquals("C4", sharp.getStepOctaveKey());
+        assertEquals(1, sharp.getTargetAlter());
+        assertEquals(Integer.valueOf(1), measureAccidentals.get("C4"));
+        assertEquals(true, sharp.isAccidentalEditorial());
+
+        AbcIo.AbcMusicXmlPitchToken natural = AbcIo.resolveMusicXmlNotePitchToken(parseElement(
+                "<note><pitch><step>F</step><octave>4</octave></pitch></note>"),
+                keyAlterByStep, measureAccidentals);
+        assertEquals("=F", natural.getToken());
+        assertEquals(Integer.valueOf(0), measureAccidentals.get("F4"));
+
+        AbcIo.AbcMusicXmlPitchToken courtesy = AbcIo.resolveMusicXmlNotePitchToken(parseElement(
+                "<note><pitch><step>G</step><octave>5</octave></pitch><accidental cautionary=\"yes\">sharp</accidental></note>"),
+                keyAlterByStep, measureAccidentals);
+        assertEquals("!courtesy!^g", courtesy.getToken());
+        assertEquals(true, courtesy.isAccidentalCautionary());
+
+        AbcIo.AbcMusicXmlPitchToken rest = AbcIo.resolveMusicXmlNotePitchToken(parseElement("<note><rest/></note>"),
+                keyAlterByStep, measureAccidentals);
+        assertEquals("z", rest.getToken());
+    }
+
+    @Test
+    public void collectsMusicXmlToAbcNoteArticulations() throws Exception {
+        Element note = parseElement("<note><notations><articulations>"
+                + "<staccato/><staccatissimo/><accent/><tenuto/><stress/><unstress/>"
+                + "<strong-accent/><breath-mark/><caesura/>"
+                + "<other-articulation>ignored</other-articulation>"
+                + "<other-articulation>mediumphrase</other-articulation>"
+                + "</articulations></notations></note>");
+        AbcIo.AbcMusicXmlNoteArticulations articulations = AbcIo.collectMusicXmlNoteArticulations(note);
+
+        assertEquals(true, articulations.isStaccato());
+        assertEquals(true, articulations.isStaccatissimo());
+        assertEquals(true, articulations.isAccent());
+        assertEquals(true, articulations.isTenuto());
+        assertEquals(true, articulations.isStress());
+        assertEquals(true, articulations.isUnstress());
+        assertEquals(true, articulations.isStrongAccent());
+        assertEquals(true, articulations.isBreathMark());
+        assertEquals(true, articulations.isCaesura());
+        assertEquals("mediumphrase", articulations.getPhraseMarkText());
+        assertEquals("!wedge!!accent!!tenuto!!stress!!unstress!!marcato!!breath!!caesura!!mediumphrase!",
+                AbcIo.buildMusicXmlNoteArticulationPrefix(articulations));
+
+        AbcIo.AbcMusicXmlNoteArticulations staccatoOnly = AbcIo.collectMusicXmlNoteArticulations(
+                parseElement("<note><notations><articulations><staccato/></articulations></notations></note>"));
+        assertEquals("!staccato!", AbcIo.buildMusicXmlNoteArticulationPrefix(staccatoOnly));
+        assertEquals("", AbcIo.buildMusicXmlNoteArticulationPrefix(
+                AbcIo.collectMusicXmlNoteArticulations(parseElement("<note/>"))));
+    }
+
+    @Test
+    public void collectsMusicXmlToAbcNoteTechnical() throws Exception {
+        Element note = parseElement("<note><notations><technical>"
+                + "<up-bow/><down-bow/><double-tongue/><triple-tongue/><heel/><toe/>"
+                + "<fingering>2</fingering><fingering>x</fingering><string>3</string><pluck>pizz</pluck>"
+                + "<open-string/><snap-pizzicato/><harmonic/><stopped/><thumb-position/>"
+                + "</technical></notations></note>");
+        AbcIo.AbcMusicXmlNoteTechnical technical = AbcIo.collectMusicXmlNoteTechnical(note);
+
+        assertEquals(true, technical.isUpBow());
+        assertEquals(true, technical.isDownBow());
+        assertEquals(true, technical.isDoubleTongue());
+        assertEquals(true, technical.isTripleTongue());
+        assertEquals(true, technical.isHeel());
+        assertEquals(true, technical.isToe());
+        assertEquals(Arrays.asList("2", "x"), technical.getFingerings());
+        assertEquals(Arrays.asList("3"), technical.getStrings());
+        assertEquals(Arrays.asList("pizz"), technical.getPlucks());
+        assertEquals(true, technical.isOpenString());
+        assertEquals(true, technical.isSnapPizzicato());
+        assertEquals(true, technical.isHarmonic());
+        assertEquals(true, technical.isStopped());
+        assertEquals(true, technical.isThumbPosition());
+        assertEquals("!upbow!!downbow!!doubletongue!!tripletongue!!heel!!toe!!2!!fingering:x!"
+                + "!string:3!!pluck:pizz!!open!!snap!!harmonic!!stopped!!thumb!",
+                AbcIo.buildMusicXmlNoteTechnicalPrefix(technical));
+
+        assertEquals("", AbcIo.buildMusicXmlNoteTechnicalPrefix(
+                AbcIo.collectMusicXmlNoteTechnical(parseElement("<note/>"))));
     }
 
     @Test

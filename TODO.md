@@ -289,6 +289,29 @@
   - [x] trill / wavy-line / turn / mordent / tremolo extraction
   - [x] glissando / slide / schleifer / shake / arpeggiate extraction
   - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC pitch token helper slice を Java `AbcIo` に追加する
+  - [x] `resolveMusicXmlNotePitchToken`
+  - [x] `AbcMusicXmlPitchToken`
+  - [x] MusicXML pitch / accidental to ABC pitch token conversion
+  - [x] key signature and measure accidental state update
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC note ornament prefix helper slice を Java `AbcIo` に追加する
+  - [x] `buildMusicXmlNoteOrnamentPrefix`
+  - [x] wavy-line / trill / turn / mordent / tremolo prefix conversion
+  - [x] glissando / slide / schleifer / shake / arpeggio prefix conversion
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC note articulation prefix helper slice を Java `AbcIo` に追加する
+  - [x] `collectMusicXmlNoteArticulations`
+  - [x] `buildMusicXmlNoteArticulationPrefix`
+  - [x] `AbcMusicXmlNoteArticulations`
+  - [x] staccato / accent / tenuto / stress / phrase mark prefix conversion
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の MusicXML to ABC note technical prefix helper slice を Java `AbcIo` に追加する
+  - [x] `collectMusicXmlNoteTechnical`
+  - [x] `buildMusicXmlNoteTechnicalPrefix`
+  - [x] `AbcMusicXmlNoteTechnical`
+  - [x] bow / tongue / fingering / string / pluck / open / harmonic prefix conversion
+  - [x] focused JUnit tests を追加する
 - [x] `mvn test` を primary verification として通す
 - [x] 実装後に `git status --short` と diff を確認する
 
