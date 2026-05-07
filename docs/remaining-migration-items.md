@@ -18,7 +18,7 @@ This file records the current `mikuscore-java` status and next migration items.
 - Format I/O: MusicXML / MXL / ZIP helper subset migrated; broader ABC / MuseScore / MIDI / MEI / LilyPond conversion remains pending
 - ABC lexer: first low-level `abc-lexer.ts` helper slice migrated
 - ABC parser: playable-event, structural token, body dispatcher, and grace group helper slices migrated
-- ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, and measure beam XML helper slices migrated
+- ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, measure beam XML, note notations decoration XML, body import voice stores helper, body lyric application, body field state update, body barline processing, non-playable body entry dispatch, simple body token dispatch, bracket / grace / fallback body dispatch, pending note state helper, ABC chord harmony XML helper, MusicXML to ABC harmony / lyric helper, MusicXML to ABC DOM utility helper, MusicXML to ABC lane definition helper, MusicXML to ABC meta line helper, MusicXML to ABC measure meta helper, MusicXML to ABC measure state helper, MusicXML to ABC direction token helper, MusicXML to ABC note lane / timing helper, and MusicXML to ABC note ornament helper slices migrated
 - Render output: not migrated; `render svg` is constrained by upstream `verovio.js` browser runtime dependency
 
 ## Current Scope
@@ -167,6 +167,55 @@ Out of scope for the initial Java conversion:
   - implicit beam grouping
   - beat boundary split behavior
   - explicit `begin` / `mid` beam mode subset
+- [x] Add ABC I/O note notations decoration XML slice from `src/ts/abc-io.ts`
+  - ornament XML helper
+  - articulation XML helper
+  - technical XML helper
+  - slur / tuplet / fermata / decoration integration in notations XML
+- [x] Add ABC I/O body import voice stores helper slice from `src/ts/abc-io.ts`
+  - voice measure store initialization
+  - notation measure meta initialization
+  - meter / tempo by-measure store initialization
+  - active ending finalization
+- [x] Add ABC I/O body field state update slice from `src/ts/abc-io.ts`
+  - lyric tokenization and measure lyric application
+  - key signature accidental map helper
+  - K / L / M / Q inline body field handling
+  - key / meter / tempo store update
+  - measure accidental reset for inline key changes
+- [x] Add ABC I/O body barline processing slice from `src/ts/abc-io.ts`
+  - repeat start / repeat end handoff
+  - active ending stop and bare repeat ending start handoff
+  - measure advance, measure accidental clear, last-note clear, and beam reset handoff
+- [x] Add ABC I/O non-playable body entry dispatch slice from `src/ts/abc-io.ts`
+  - barline dispatch
+  - standalone body field dispatch and unsupported warning
+  - unsupported token / number warning and index handoff
+- [x] Add ABC I/O simple body token dispatch slice from `src/ts/abc-io.ts`
+  - broken-rhythm / decoration / paren / quoted-string dispatch
+  - single-char-shorthand / slur-stop / tie dispatch
+- [x] Add ABC I/O bracket / grace / fallback body dispatch slice from `src/ts/abc-io.ts`
+  - inline-field / repeat-ending / playable bracket dispatch
+  - grace group append and parse-failure warning
+  - closing notation / unsupported punctuation / parse-error fallback dispatch
+- [x] Add ABC I/O pending note state helper slice from `src/ts/abc-io.ts`
+  - pending ornament / articulation / direction / technical state handoff
+  - pending value / optional value / array helper behavior
+  - tie-stop handoff and rest warning behavior
+- [x] Add ABC I/O chord harmony XML helper slice from `src/ts/abc-io.ts`
+  - quoted text / chord token normalization
+  - chord symbol detection and harmony kind mapping
+  - chord symbol to MusicXML harmony XML
+  - note harmony XML integration
+- [x] Add ABC I/O MusicXML to ABC harmony / lyric helper slice from `src/ts/abc-io.ts`
+  - MusicXML harmony element to ABC chord symbol
+  - MusicXML lyric text / syllabic to ABC lyric token
+  - direct child DOM helper subset
+- [x] Add ABC I/O MusicXML to ABC DOM utility helper slice from `src/ts/abc-io.ts`
+  - MusicXML part clef inference helper
+  - accidental text to alter helper
+  - optional number parser
+  - nested direct-child DOM path helper subset
 - [ ] Continue ABC migration with `src/ts/abc-io.ts` body import and MusicXML export integration
 - [x] Decide whether SVG render can be implemented directly in Java or must be recorded as constrained by upstream runtime dependencies
   - current decision: keep `render svg` unsupported in the Java initial slice until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen

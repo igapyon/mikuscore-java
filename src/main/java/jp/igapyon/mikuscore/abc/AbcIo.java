@@ -4,6 +4,8 @@
  */
 package jp.igapyon.mikuscore.abc;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -11,6 +13,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 public final class AbcIo {
     private static final Fraction DEFAULT_UNIT = new Fraction(1, 8);
@@ -29,6 +34,8 @@ public final class AbcIo {
             .compile("(\\d+)\\s*/\\s*(\\d+)\\s*=\\s*(\\d+(?:\\.\\d+)?)");
     private static final Pattern ABC_TEMPO_EQUALS_PATTERN = Pattern.compile("=\\s*(\\d+(?:\\.\\d+)?)");
     private static final Pattern ABC_TEMPO_NUMBER_PATTERN = Pattern.compile("^(\\d+(?:\\.\\d+)?)$");
+    private static final String[] ABC_MUSICXML_DIRECTION_DYNAMICS = { "pppp", "ppp", "pp", "p", "mp", "mf", "f",
+            "ff", "fff", "ffff", "fp", "fz", "rfz", "sf", "sfp", "sfz" };
 
     private AbcIo() {
     }
@@ -792,6 +799,9 @@ public final class AbcIo {
             return "";
         }
         StringBuilder chunks = new StringBuilder();
+        for (String chordSymbol : note.getChordSymbols()) {
+            chunks.append(buildHarmonyXmlFromChordSymbol(chordSymbol));
+        }
         for (String annotation : note.getAnnotations()) {
             if (trimToEmpty(annotation).length() == 0) {
                 continue;
@@ -800,6 +810,622 @@ public final class AbcIo {
                     .append("</words></direction-type></direction>");
         }
         return chunks.toString();
+    }
+
+    public static String abcQuotedTextEscape(String text) {
+        return trimToEmpty(text == null ? "" : text.replace('"', '\'').replaceAll("\\s+", " "));
+    }
+
+    public static String normalizeChordToken(String raw) {
+        return trimToEmpty(raw).replace("♯", "#").replace("♭", "b").replaceAll("\\s+", "");
+    }
+
+    public static boolean isLikelyAbcChordSymbol(String raw) {
+        return normalizeChordToken(raw).matches("^[A-G](?:#|b)?(?:[^/\\s\"]*)?(?:/[A-G](?:#|b)?)?$");
+    }
+
+    public static String xmlHarmonyKindFromChordSuffix(String suffixRaw) {
+        String suffix = trimToEmpty(suffixRaw).toLowerCase();
+        if (suffix.length() == 0) {
+            return "major";
+        }
+        if ("m".equals(suffix) || "min".equals(suffix)) {
+            return "minor";
+        }
+        if ("6".equals(suffix)) {
+            return "major-sixth";
+        }
+        if ("m6".equals(suffix) || "min6".equals(suffix)) {
+            return "minor-sixth";
+        }
+        if ("7".equals(suffix)) {
+            return "dominant";
+        }
+        if ("7sus4".equals(suffix) || "sus4".equals(suffix)) {
+            return "suspended-fourth";
+        }
+        if ("9".equals(suffix)) {
+            return "dominant-ninth";
+        }
+        if ("11".equals(suffix)) {
+            return "dominant-11th";
+        }
+        if ("13".equals(suffix)) {
+            return "dominant-13th";
+        }
+        if ("maj7".equals(suffix)) {
+            return "major-seventh";
+        }
+        if ("maj9".equals(suffix)) {
+            return "major-ninth";
+        }
+        if ("m9".equals(suffix) || "min9".equals(suffix)) {
+            return "minor-ninth";
+        }
+        if ("m7".equals(suffix) || "min7".equals(suffix)) {
+            return "minor-seventh";
+        }
+        if ("dim".equals(suffix)) {
+            return "diminished";
+        }
+        if ("dim7".equals(suffix)) {
+            return "diminished-seventh";
+        }
+        if ("aug".equals(suffix) || "+".equals(suffix)) {
+            return "augmented";
+        }
+        if ("sus2".equals(suffix)) {
+            return "suspended-second";
+        }
+        if ("m7b5".equals(suffix) || "min7b5".equals(suffix) || "ø".equals(suffix)) {
+            return "half-diminished";
+        }
+        return "";
+    }
+
+    public static String buildHarmonyXmlFromChordSymbol(String raw) {
+        String normalized = normalizeChordToken(raw);
+        Matcher matcher = Pattern.compile("^([A-G](?:#|b)?)([^/]*)?(?:/([A-G](?:#|b)?))?$").matcher(normalized);
+        if (!matcher.find()) {
+            return "";
+        }
+        AbcHarmonyPitch root = xmlHarmonyRootFromChordToken(matcher.group(1));
+        if (root == null) {
+            return "";
+        }
+        String suffix = matcher.group(2) == null ? "" : matcher.group(2);
+        AbcHarmonyPitch bass = matcher.group(3) == null ? null : xmlHarmonyRootFromChordToken(matcher.group(3));
+        String kind = xmlHarmonyKindFromChordSuffix(suffix);
+        if (kind.length() == 0) {
+            return "";
+        }
+        StringBuilder xml = new StringBuilder();
+        xml.append("<harmony>");
+        xml.append("<root><root-step>").append(xmlEscape(root.getStep())).append("</root-step>");
+        if (root.getAlter() != 0) {
+            xml.append("<root-alter>").append(root.getAlter()).append("</root-alter>");
+        }
+        xml.append("</root>");
+        if (bass != null) {
+            xml.append("<bass><bass-step>").append(xmlEscape(bass.getStep())).append("</bass-step>");
+            if (bass.getAlter() != 0) {
+                xml.append("<bass-alter>").append(bass.getAlter()).append("</bass-alter>");
+            }
+            xml.append("</bass>");
+        }
+        xml.append("<kind text=\"").append(xmlEscape(normalized)).append("\">").append(kind).append("</kind>");
+        xml.append("</harmony>");
+        return xml.toString();
+    }
+
+    public static String abcChordSymbolFromHarmony(Element harmony) {
+        if (harmony == null) {
+            return "";
+        }
+        Element root = directChild(harmony, "root");
+        String rootStep = directChildText(root, "root-step").trim().toUpperCase();
+        if (!rootStep.matches("^[A-G]$")) {
+            return "";
+        }
+        int rootAlter = parseInt(directChildText(root, "root-alter"), 0);
+        Element kindNode = directChild(harmony, "kind");
+        String kindTextAttr = kindNode == null ? "" : trimToEmpty(kindNode.getAttribute("text"));
+        if (kindTextAttr.length() > 0) {
+            return abcQuotedTextEscape(kindTextAttr);
+        }
+        String kindValue = elementText(kindNode).trim().toLowerCase();
+        String rootToken = rootStep + (rootAlter == 1 ? "#" : (rootAlter == -1 ? "b" : ""));
+        String suffix;
+        if ("major".equals(kindValue)) {
+            suffix = "";
+        } else if ("minor".equals(kindValue)) {
+            suffix = "m";
+        } else if ("major-sixth".equals(kindValue)) {
+            suffix = "6";
+        } else if ("minor-sixth".equals(kindValue)) {
+            suffix = "m6";
+        } else if ("dominant".equals(kindValue)) {
+            suffix = "7";
+        } else if ("dominant-11th".equals(kindValue)) {
+            suffix = "11";
+        } else if ("dominant-13th".equals(kindValue)) {
+            suffix = "13";
+        } else if ("dominant-ninth".equals(kindValue)) {
+            suffix = "9";
+        } else if ("major-seventh".equals(kindValue)) {
+            suffix = "maj7";
+        } else if ("major-ninth".equals(kindValue)) {
+            suffix = "maj9";
+        } else if ("minor-ninth".equals(kindValue)) {
+            suffix = "m9";
+        } else if ("minor-seventh".equals(kindValue)) {
+            suffix = "m7";
+        } else if ("diminished".equals(kindValue)) {
+            suffix = "dim";
+        } else if ("diminished-seventh".equals(kindValue)) {
+            suffix = "dim7";
+        } else if ("augmented".equals(kindValue)) {
+            suffix = "aug";
+        } else if ("suspended-fourth".equals(kindValue)) {
+            suffix = "sus4";
+        } else if ("suspended-second".equals(kindValue)) {
+            suffix = "sus2";
+        } else if ("half-diminished".equals(kindValue)) {
+            suffix = "m7b5";
+        } else {
+            suffix = "";
+        }
+        Element bass = directChild(harmony, "bass");
+        String bassStep = directChildText(bass, "bass-step").trim().toUpperCase();
+        int bassAlter = parseInt(directChildText(bass, "bass-alter"), 0);
+        String bassToken = bassStep.matches("^[A-G]$")
+                ? "/" + bassStep + (bassAlter == 1 ? "#" : (bassAlter == -1 ? "b" : ""))
+                : "";
+        return rootToken + suffix + bassToken;
+    }
+
+    public static String abcLyricTokenFromMusicXml(String text, String syllabic) {
+        String normalized = trimToEmpty(text).replaceAll("\\s+", "~");
+        String mode = trimToEmpty(syllabic).length() == 0 ? "single" : trimToEmpty(syllabic).toLowerCase();
+        if (normalized.length() == 0) {
+            return "*";
+        }
+        if ("begin".equals(mode) || "middle".equals(mode)) {
+            return normalized + "-";
+        }
+        return normalized;
+    }
+
+    public static String abcClefFromMusicXmlPart(Element part) {
+        Element firstClef = firstDescendantByPath(part, new String[] { "measure", "attributes", "clef" });
+        if (firstClef == null) {
+            return "";
+        }
+        String sign = directChildText(firstClef, "sign").trim().toUpperCase();
+        int line = parseInt(directChildText(firstClef, "line"), 0);
+        if ("F".equals(sign) && line == 4) {
+            return "bass";
+        }
+        if ("G".equals(sign) && line == 2) {
+            return "treble";
+        }
+        if ("C".equals(sign) && line == 3) {
+            return "alto";
+        }
+        if ("C".equals(sign) && line == 4) {
+            return "tenor";
+        }
+        return "";
+    }
+
+    public static String abcClefFromMusicXmlClef(Element clef) {
+        String sign = directChildText(clef, "sign").trim().toUpperCase();
+        int line = parseInt(directChildText(clef, "line"), 0);
+        if ("F".equals(sign) && line == 4) {
+            return "bass";
+        }
+        if ("G".equals(sign) && line == 2) {
+            return "treble";
+        }
+        if ("C".equals(sign) && line == 3) {
+            return "alto";
+        }
+        if ("C".equals(sign) && line == 4) {
+            return "tenor";
+        }
+        return "";
+    }
+
+    public static String resolveMusicXmlPartLaneClef(Element part, String staff) {
+        String normalizedStaff = trimToEmpty(staff);
+        if (normalizedStaff.length() == 0) {
+            return abcClefFromMusicXmlPart(part);
+        }
+        for (Element measure : directChildren(part, "measure")) {
+            Element attributes = directChild(measure, "attributes");
+            if (attributes == null) {
+                continue;
+            }
+            for (Element clef : directChildren(attributes, "clef")) {
+                if (!normalizedStaff.equals(trimToEmpty(clef.getAttribute("number")))) {
+                    continue;
+                }
+                String abcClef = abcClefFromMusicXmlClef(clef);
+                if (abcClef.length() > 0) {
+                    return abcClef;
+                }
+            }
+        }
+        return abcClefFromMusicXmlPart(part);
+    }
+
+    public static List<AbcMusicXmlLaneDef> collectMusicXmlPartLaneDefs(Element part, String partId, String partName) {
+        String safePartId = trimToEmpty(partId).length() == 0 ? "P1" : trimToEmpty(partId);
+        String safePartName = trimToEmpty(partName).length() == 0 ? safePartId : trimToEmpty(partName);
+        Map<String, AbcMusicXmlLaneDef> lanesByKey = new LinkedHashMap<String, AbcMusicXmlLaneDef>();
+        if (part != null) {
+            for (Element measure : directChildren(part, "measure")) {
+                for (Element note : directChildren(measure, "note")) {
+                    String staffText = directChildText(note, "staff").trim();
+                    String voiceText = directChildText(note, "voice").trim();
+                    String staff = staffText.length() == 0 ? null : staffText;
+                    String voice = voiceText.length() == 0 ? "1" : voiceText;
+                    String key = (staff == null ? "" : staff) + "::" + (voice == null ? "" : voice);
+                    if (!lanesByKey.containsKey(key)) {
+                        lanesByKey.put(key, new AbcMusicXmlLaneDef(staff, voice, "", "", "", ""));
+                    }
+                }
+            }
+        }
+        List<AbcMusicXmlLaneDef> raw = new ArrayList<AbcMusicXmlLaneDef>(lanesByKey.values());
+        if (raw.isEmpty()) {
+            raw.add(new AbcMusicXmlLaneDef(null, null, "", "", "", ""));
+        }
+        raw.sort((a, b) -> {
+            int staffCompare = compareMusicXmlLaneToken(a.getStaff(), b.getStaff(), true);
+            if (staffCompare != 0) {
+                return staffCompare;
+            }
+            return compareMusicXmlLaneToken(a.getVoice(), b.getVoice(), true);
+        });
+        List<AbcMusicXmlLaneDef> resolved = new ArrayList<AbcMusicXmlLaneDef>();
+        for (int i = 0; i < raw.size(); i++) {
+            AbcMusicXmlLaneDef lane = raw.get(i);
+            String voiceId;
+            if (raw.size() == 1) {
+                voiceId = safePartId;
+            } else {
+                String staffSuffix = lane.getStaff() == null ? "" : "_s" + lane.getStaff();
+                String voiceSuffix = lane.getVoice() == null ? "" : "_v" + lane.getVoice();
+                voiceId = safePartId + staffSuffix + (voiceSuffix.length() > 0 ? voiceSuffix : "_l" + (i + 1));
+            }
+            String normalizedVoiceId = voiceId.replaceAll("[^A-Za-z0-9_.-]", "_");
+            String laneName;
+            if (raw.size() <= 1) {
+                laneName = safePartName;
+            } else if (lane.getStaff() != null && lane.getVoice() != null) {
+                laneName = safePartName + " (Staff " + lane.getStaff() + " Voice " + lane.getVoice() + ")";
+            } else if (lane.getStaff() != null) {
+                laneName = safePartName + " (Staff " + lane.getStaff() + ")";
+            } else if (lane.getVoice() != null) {
+                laneName = safePartName + " (Voice " + lane.getVoice() + ")";
+            } else {
+                laneName = safePartName + " (Lane)";
+            }
+            String clef = resolveMusicXmlPartLaneClef(part, lane.getStaff());
+            resolved.add(new AbcMusicXmlLaneDef(lane.getStaff(), lane.getVoice(), voiceId, normalizedVoiceId, laneName,
+                    clef));
+        }
+        return resolved;
+    }
+
+    public static List<String> buildMusicXmlPartTransposeMetaLines(Element part, String normalizedVoiceId) {
+        List<String> lines = new ArrayList<String>();
+        String safeVoiceId = trimToEmpty(normalizedVoiceId);
+        for (Element measure : directChildren(part, "measure")) {
+            Element attributes = directChild(measure, "attributes");
+            Element transpose = directChild(attributes, "transpose");
+            if (transpose == null) {
+                continue;
+            }
+            Double chromatic = parseOptionalNumber(directChildText(transpose, "chromatic"));
+            Double diatonic = parseOptionalNumber(directChildText(transpose, "diatonic"));
+            if (chromatic != null || diatonic != null) {
+                StringBuilder line = new StringBuilder("%@mks transpose voice=").append(safeVoiceId);
+                if (chromatic != null) {
+                    line.append(" chromatic=").append(Math.round(chromatic.doubleValue()));
+                }
+                if (diatonic != null) {
+                    line.append(" diatonic=").append(Math.round(diatonic.doubleValue()));
+                }
+                lines.add(line.toString());
+            }
+            break;
+        }
+        return lines;
+    }
+
+    public static List<String> buildMusicXmlMeasureMetaLines(String normalizedVoiceId, Element measure,
+            int safeMeasureNumber) {
+        List<String> lines = new ArrayList<String>();
+        String safeVoiceId = trimToEmpty(normalizedVoiceId);
+        String safeMeasureText = String.valueOf(safeMeasureNumber);
+        String rawMeasureNumber = trimToEmpty(measure == null ? "" : measure.getAttribute("number"));
+        if (rawMeasureNumber.length() == 0) {
+            rawMeasureNumber = safeMeasureText;
+        }
+        String implicitAttr = trimToEmpty(measure == null ? "" : measure.getAttribute("implicit")).toLowerCase();
+        boolean isImplicit = "yes".equals(implicitAttr) || "true".equals(implicitAttr) || "1".equals(implicitAttr);
+        Element rightBarline = directChildWithAttribute(measure, "barline", "location", "right");
+        Element rightRepeat = directChild(rightBarline, "repeat");
+        Element rightEnding = directChild(rightBarline, "ending");
+        String rightRepeatDir = trimToEmpty(rightRepeat == null ? "" : rightRepeat.getAttribute("direction"))
+                .toLowerCase();
+        boolean hasRightRepeat = "backward".equals(rightRepeatDir);
+        int repeatTimes = parseInt(trimToEmpty(rightRepeat == null ? "" : rightRepeat.getAttribute("times")),
+                Integer.MIN_VALUE);
+        String rightEndingNumber = trimToEmpty(rightEnding == null ? "" : rightEnding.getAttribute("number"));
+        String rightEndingType = trimToEmpty(rightEnding == null ? "" : rightEnding.getAttribute("type"))
+                .toLowerCase();
+        if (isImplicit || !rawMeasureNumber.equals(safeMeasureText) || (hasRightRepeat && repeatTimes > 2)
+                || (rightEndingNumber.length() > 0 && "discontinue".equals(rightEndingType))) {
+            StringBuilder line = new StringBuilder("%@mks measure voice=").append(safeVoiceId)
+                    .append(" measure=").append(safeMeasureNumber)
+                    .append(" number=").append(rawMeasureNumber)
+                    .append(" implicit=").append(isImplicit ? 1 : 0);
+            if (hasRightRepeat && repeatTimes > 2) {
+                line.append(" times=").append(Math.round(repeatTimes));
+            }
+            if (rightEndingNumber.length() > 0 && "discontinue".equals(rightEndingType)) {
+                line.append(" ending-stop=").append(rightEndingNumber);
+                line.append(" ending-type=").append(rightEndingType);
+            }
+            lines.add(line.toString());
+        }
+        return lines;
+    }
+
+    public static List<String> buildMusicXmlMeasureDiagMetaLines(String normalizedVoiceId, Element measure,
+            int safeMeasureNumber) {
+        List<String> lines = new ArrayList<String>();
+        String safeVoiceId = trimToEmpty(normalizedVoiceId);
+        Map<String, String> byName = new LinkedHashMap<String, String>();
+        Element attributes = directChild(measure, "attributes");
+        Element miscellaneous = directChild(attributes, "miscellaneous");
+        for (Element field : directChildren(miscellaneous, "miscellaneous-field")) {
+            String name = trimToEmpty(field.getAttribute("name"));
+            if (!name.startsWith("mks:diag:")) {
+                continue;
+            }
+            byName.put(name, elementText(field));
+        }
+        List<String> names = new ArrayList<String>(byName.keySet());
+        names.sort((a, b) -> {
+            boolean countA = "mks:diag:count".equals(a);
+            boolean countB = "mks:diag:count".equals(b);
+            if (countA && !countB) {
+                return -1;
+            }
+            if (!countA && countB) {
+                return 1;
+            }
+            return a.compareTo(b);
+        });
+        for (String name : names) {
+            lines.add("%@mks diag voice=" + safeVoiceId + " measure=" + safeMeasureNumber + " name=" + name
+                    + " enc=uri-v1 value=" + encodeUriComponent(byName.get(name)));
+        }
+        return lines;
+    }
+
+    public static AbcMusicXmlMeasureState updateMusicXmlMeasureState(Element measure, double currentDivisions,
+            int currentFifths, double currentBeats, double currentBeatType, Integer lastEmittedKeyFifths) {
+        double nextDivisions = currentDivisions;
+        int nextFifths = currentFifths;
+        double nextBeats = currentBeats;
+        double nextBeatType = currentBeatType;
+        Element attributes = directChild(measure, "attributes");
+        Double parsedDivisions = parseOptionalNumber(directChildText(attributes, "divisions"));
+        if (parsedDivisions != null && parsedDivisions.doubleValue() > 0) {
+            nextDivisions = parsedDivisions.doubleValue();
+        }
+        Element key = directChild(attributes, "key");
+        Double parsedFifths = parseOptionalNumber(directChildText(key, "fifths"));
+        if (parsedFifths != null) {
+            nextFifths = (int) Math.round(parsedFifths.doubleValue());
+        }
+        boolean needsInlineKeyChange = lastEmittedKeyFifths == null
+                || lastEmittedKeyFifths.intValue() != nextFifths;
+        Element time = directChild(attributes, "time");
+        Double parsedBeats = parseOptionalNumber(directChildText(time, "beats"));
+        if (parsedBeats != null && parsedBeats.doubleValue() > 0) {
+            nextBeats = parsedBeats.doubleValue();
+        }
+        Double parsedBeatType = parseOptionalNumber(directChildText(time, "beat-type"));
+        if (parsedBeatType != null && parsedBeatType.doubleValue() > 0) {
+            nextBeatType = parsedBeatType.doubleValue();
+        }
+        return new AbcMusicXmlMeasureState(nextDivisions, nextFifths, nextBeats, nextBeatType, needsInlineKeyChange,
+                keySignatureAlterByStep(nextFifths), new LinkedHashMap<String, Integer>());
+    }
+
+    public static AbcMusicXmlDirectionTokens collectMusicXmlDirectionTokens(Element direction, String activeWedgeType) {
+        List<String> words = new ArrayList<String>();
+        List<String> decorations = new ArrayList<String>();
+        String nextActiveWedgeType = trimToEmpty(activeWedgeType).toLowerCase();
+        for (Element directionType : directChildren(direction, "direction-type")) {
+            for (Element rehearsal : directChildren(directionType, "rehearsal")) {
+                String text = abcQuotedTextEscape(elementText(rehearsal));
+                if (text.length() > 0) {
+                    decorations.add("!rehearsal:" + text + "!");
+                }
+            }
+            for (Element wordsNode : directChildren(directionType, "words")) {
+                String text = abcQuotedTextEscape(elementText(wordsNode));
+                if (text.length() > 0) {
+                    words.add(text);
+                }
+            }
+            if (directChild(directionType, "segno") != null) {
+                decorations.add("!segno!");
+            }
+            if (directChild(directionType, "coda") != null) {
+                decorations.add("!coda!");
+            }
+            for (Element wedge : directChildren(directionType, "wedge")) {
+                String wedgeType = trimToEmpty(wedge.getAttribute("type")).toLowerCase();
+                if ("crescendo".equals(wedgeType)) {
+                    decorations.add("!crescendo(!");
+                    nextActiveWedgeType = "crescendo";
+                } else if ("diminuendo".equals(wedgeType)) {
+                    decorations.add("!diminuendo(!");
+                    nextActiveWedgeType = "diminuendo";
+                } else if ("stop".equals(wedgeType)) {
+                    decorations.add("diminuendo".equals(nextActiveWedgeType) ? "!diminuendo)!" : "!crescendo)!");
+                    nextActiveWedgeType = "";
+                }
+            }
+            for (Element dynamics : directChildren(directionType, "dynamics")) {
+                for (String dynamicName : ABC_MUSICXML_DIRECTION_DYNAMICS) {
+                    if (directChild(dynamics, dynamicName) != null) {
+                        decorations.add("!" + dynamicName + "!");
+                    }
+                }
+            }
+        }
+        boolean hasDaCapo = false;
+        boolean hasToCoda = false;
+        boolean hasDalSegno = false;
+        boolean hasFine = false;
+        for (Element sound : directChildren(direction, "sound")) {
+            hasFine = hasFine || "yes".equals(trimToEmpty(sound.getAttribute("fine")).toLowerCase());
+            hasDaCapo = hasDaCapo || "yes".equals(trimToEmpty(sound.getAttribute("dacapo")).toLowerCase());
+            hasToCoda = hasToCoda || trimToEmpty(sound.getAttribute("tocoda")).length() > 0;
+            hasDalSegno = hasDalSegno || trimToEmpty(sound.getAttribute("dalsegno")).length() > 0;
+        }
+        if (hasFine) {
+            decorations.add("!fine!");
+        }
+        if (hasDaCapo && hasToCoda) {
+            decorations.add("!dacoda!");
+        } else if (hasDaCapo) {
+            decorations.add("!dacapo!");
+        }
+        if (hasDalSegno) {
+            decorations.add("!dalsegno!");
+        }
+        if (hasToCoda && !hasDaCapo) {
+            decorations.add("!tocoda!");
+        }
+        return new AbcMusicXmlDirectionTokens(words, decorations, nextActiveWedgeType);
+    }
+
+    public static boolean isMusicXmlNoteInLane(Element note, AbcMusicXmlLaneDef lane) {
+        if (note == null) {
+            return false;
+        }
+        if (lane != null && lane.getStaff() != null) {
+            String noteStaff = directChildText(note, "staff").trim();
+            if (!noteStaff.equals(lane.getStaff())) {
+                return false;
+            }
+        }
+        if (lane != null && lane.getVoice() != null) {
+            String noteVoiceRaw = directChildText(note, "voice").trim();
+            String noteVoice = noteVoiceRaw.length() == 0 ? "1" : noteVoiceRaw;
+            if (!noteVoice.equals(lane.getVoice())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static AbcMusicXmlNoteTiming resolveMusicXmlNoteTiming(Element note, double currentDivisions) {
+        boolean chord = directChild(note, "chord") != null;
+        boolean grace = directChild(note, "grace") != null;
+        double duration = parseDouble(directChildText(note, "duration"), 0);
+        if (!grace && (!Double.isFinite(duration) || duration <= 0)) {
+            return new AbcMusicXmlNoteTiming(chord, false, 0, false);
+        }
+        int noteDuration = grace
+                ? (Double.isFinite(duration) && duration > 0 ? (int) Math.round(duration)
+                        : (int) Math.round(currentDivisions / 2.0))
+                : (int) Math.round(duration);
+        return new AbcMusicXmlNoteTiming(chord, grace, noteDuration, true);
+    }
+
+    public static AbcMusicXmlNoteOrnaments collectMusicXmlNoteOrnaments(Element note) {
+        Element notations = directChild(note, "notations");
+        Element ornaments = directChild(notations, "ornaments");
+        boolean hasTrillMark = directChild(ornaments, "trill-mark") != null;
+        boolean hasTurn = directChild(ornaments, "turn") != null;
+        boolean hasInvertedTurn = directChild(ornaments, "inverted-turn") != null;
+        boolean hasTurnSlash = hasMusicXmlTurnSlash(ornaments);
+        boolean hasDelayedTurn = directChild(ornaments, "delayed-turn") != null;
+        boolean hasMordent = directChild(ornaments, "mordent") != null;
+        boolean hasInvertedMordent = directChild(ornaments, "inverted-mordent") != null;
+        Element tremoloNode = directChild(ornaments, "tremolo");
+        boolean hasSchleifer = directChild(ornaments, "schleifer") != null;
+        boolean hasShake = directChild(ornaments, "shake") != null;
+        boolean hasGlissandoStart = directChildWithAttribute(notations, "glissando", "type", "start") != null;
+        boolean hasGlissandoStop = directChildWithAttribute(notations, "glissando", "type", "stop") != null;
+        boolean hasSlideStart = directChildWithAttribute(notations, "slide", "type", "start") != null;
+        boolean hasSlideStop = directChildWithAttribute(notations, "slide", "type", "stop") != null;
+        boolean hasArpeggiate = directChild(notations, "arpeggiate") != null;
+        boolean hasWavyLineStart = false;
+        boolean hasWavyLineStop = false;
+        for (Element wavyLine : directChildren(ornaments, "wavy-line")) {
+            String type = trimToEmpty(wavyLine.getAttribute("type")).toLowerCase();
+            if (type.length() == 0 || "start".equals(type)) {
+                hasWavyLineStart = true;
+            }
+            if ("stop".equals(type)) {
+                hasWavyLineStop = true;
+            }
+        }
+        boolean hasTrill = hasTrillMark || hasWavyLineStart;
+        String turnType = hasInvertedTurn ? "inverted-turn" : (hasTurn ? "turn" : "");
+        String mordentType = hasInvertedMordent ? "inverted-mordent" : (hasMordent ? "mordent" : "");
+        String tremoloTypeRaw = trimToEmpty(tremoloNode == null ? "" : tremoloNode.getAttribute("type")).toLowerCase();
+        String tremoloType = "single".equals(tremoloTypeRaw) || "start".equals(tremoloTypeRaw)
+                || "stop".equals(tremoloTypeRaw) ? tremoloTypeRaw : "";
+        int tremoloMarks = Math.max(1, Math.min(8, parseInt(elementText(tremoloNode), 0)));
+        String trillAccidentalText = directChildText(ornaments, "accidental-mark").trim();
+        return new AbcMusicXmlNoteOrnaments(hasTrill, hasWavyLineStop, trillAccidentalText, turnType, hasTurnSlash,
+                hasDelayedTurn, mordentType, tremoloType, Integer.valueOf(tremoloMarks), hasGlissandoStart,
+                hasGlissandoStop, hasSlideStart, hasSlideStop, hasSchleifer, hasShake, hasArpeggiate);
+    }
+
+    public static Integer accidentalTextToAlter(String text) {
+        String normalized = trimToEmpty(text).toLowerCase();
+        if (normalized.length() == 0) {
+            return null;
+        }
+        if ("sharp".equals(normalized)) {
+            return Integer.valueOf(1);
+        }
+        if ("flat".equals(normalized)) {
+            return Integer.valueOf(-1);
+        }
+        if ("natural".equals(normalized)) {
+            return Integer.valueOf(0);
+        }
+        if ("double-sharp".equals(normalized)) {
+            return Integer.valueOf(2);
+        }
+        if ("flat-flat".equals(normalized)) {
+            return Integer.valueOf(-2);
+        }
+        return null;
+    }
+
+    public static Double parseOptionalNumber(String text) {
+        String raw = trimToEmpty(text);
+        if (raw.length() == 0) {
+            return null;
+        }
+        double parsed = parseDouble(raw, Double.NaN);
+        return Double.isNaN(parsed) ? null : Double.valueOf(parsed);
     }
 
     public static String buildAbcNoteControlDirectionXml(AbcMeasureNote note) {
@@ -892,7 +1518,19 @@ public final class AbcIo {
     }
 
     public static String buildAbcNoteNotationsXml(AbcMeasureNote note) {
-        if (note == null || !(note.isTieStart() || note.isTieStop())) {
+        if (note == null || !(note.isTieStart() || note.isTieStop() || note.isSlurStart() || note.isSlurStop()
+                || note.isTupletStart() || note.isTupletStop() || note.isTrill() || note.isTrillLineStop()
+                || trimToEmpty(note.getTurnType()).length() > 0 || note.isDelayedTurn()
+                || trimToEmpty(note.getMordentType()).length() > 0 || trimToEmpty(note.getTremoloType()).length() > 0
+                || note.isGlissandoStart() || note.isGlissandoStop() || note.isSlideStart() || note.isSlideStop()
+                || note.isSchleifer() || note.isShake() || note.isArpeggiate() || note.isStaccato()
+                || note.isStaccatissimo() || note.isAccent() || note.isTenuto() || note.isStress()
+                || note.isUnstress() || trimToEmpty(note.getFermataType()).length() > 0 || note.isStrongAccent()
+                || note.isBreathMark() || note.isCaesura() || trimToEmpty(note.getPhraseMark()).length() > 0
+                || note.isUpBow() || note.isDownBow() || note.isDoubleTongue() || note.isTripleTongue()
+                || note.isHeel() || note.isToe() || !note.getFingerings().isEmpty() || !note.getStrings().isEmpty()
+                || !note.getPlucks().isEmpty() || note.isOpenString() || note.isSnapPizzicato() || note.isHarmonic()
+                || note.isStopped() || note.isThumbPosition())) {
             return "";
         }
         StringBuilder chunks = new StringBuilder("<notations>");
@@ -902,8 +1540,188 @@ public final class AbcIo {
         if (note.isTieStop()) {
             chunks.append("<tied type=\"stop\"/>");
         }
+        if (note.isSlurStart()) {
+            chunks.append("<slur type=\"start\"/>");
+        }
+        if (note.isSlurStop()) {
+            chunks.append("<slur type=\"stop\"/>");
+        }
+        if (note.isTupletStart()) {
+            chunks.append("<tuplet type=\"start\"/>");
+        }
+        if (note.isTupletStop()) {
+            chunks.append("<tuplet type=\"stop\"/>");
+        }
+        chunks.append(buildAbcNoteOrnamentsXml(note));
+        chunks.append(buildAbcNoteArticulationsXml(note));
+        chunks.append(buildAbcNoteTechnicalXml(note));
+        if (trimToEmpty(note.getFermataType()).length() > 0) {
+            chunks.append("<fermata>").append("inverted".equals(note.getFermataType()) ? "inverted" : "normal")
+                    .append("</fermata>");
+        }
         chunks.append("</notations>");
         return chunks.toString();
+    }
+
+    public static String buildAbcNoteOrnamentsXml(AbcMeasureNote note) {
+        if (note == null) {
+            return "";
+        }
+        StringBuilder chunks = new StringBuilder();
+        if (note.isTrill() || note.isTrillLineStop()) {
+            StringBuilder trillParts = new StringBuilder();
+            if (note.isTrill()) {
+                trillParts.append("<trill-mark/>");
+            }
+            if (note.isTrillLineStop()) {
+                trillParts.append("<wavy-line type=\"stop\"/>");
+            } else if (note.isTrillLineStart()) {
+                trillParts.append("<wavy-line type=\"start\"/>");
+            }
+            if (trimToEmpty(note.getTrillAccidentalText()).length() > 0) {
+                trillParts.append("<accidental-mark>").append(xmlEscape(note.getTrillAccidentalText()))
+                        .append("</accidental-mark>");
+            }
+            chunks.append("<ornaments>").append(trillParts).append("</ornaments>");
+        }
+        if (trimToEmpty(note.getTurnType()).length() > 0) {
+            String tag = "inverted-turn".equals(note.getTurnType()) ? "inverted-turn" : "turn";
+            chunks.append("<ornaments><").append(tag);
+            if (note.isTurnSlash()) {
+                chunks.append(" slash=\"yes\"");
+            }
+            chunks.append("/>");
+            if (note.isDelayedTurn()) {
+                chunks.append("<delayed-turn/>");
+            }
+            chunks.append("</ornaments>");
+        }
+        if (trimToEmpty(note.getMordentType()).length() > 0) {
+            String tag = "inverted-mordent".equals(note.getMordentType()) ? "inverted-mordent" : "mordent";
+            chunks.append("<ornaments><").append(tag).append("/></ornaments>");
+        }
+        if (trimToEmpty(note.getTremoloType()).length() > 0) {
+            int marks = Math.max(1, Math.min(8, note.getTremoloMarks() == null ? 1 : note.getTremoloMarks().intValue()));
+            chunks.append("<ornaments><tremolo type=\"").append(xmlEscape(note.getTremoloType())).append("\">")
+                    .append(marks).append("</tremolo></ornaments>");
+        }
+        if (note.isGlissandoStart()) {
+            chunks.append("<glissando type=\"start\" number=\"1\">wavy</glissando>");
+        }
+        if (note.isGlissandoStop()) {
+            chunks.append("<glissando type=\"stop\" number=\"1\">wavy</glissando>");
+        }
+        if (note.isSlideStart()) {
+            chunks.append("<slide type=\"start\" number=\"1\"/>");
+        }
+        if (note.isSlideStop()) {
+            chunks.append("<slide type=\"stop\" number=\"1\"/>");
+        }
+        if (note.isSchleifer()) {
+            chunks.append("<ornaments><schleifer/></ornaments>");
+        }
+        if (note.isShake()) {
+            chunks.append("<ornaments><shake/></ornaments>");
+        }
+        if (note.isArpeggiate()) {
+            chunks.append("<arpeggiate/>");
+        }
+        return chunks.toString();
+    }
+
+    public static String buildAbcNoteArticulationsXml(AbcMeasureNote note) {
+        if (note == null) {
+            return "";
+        }
+        StringBuilder articulationParts = new StringBuilder();
+        if (note.isStaccato()) {
+            articulationParts.append("<staccato/>");
+        }
+        if (note.isStaccatissimo()) {
+            articulationParts.append("<staccatissimo/>");
+        }
+        if (note.isAccent()) {
+            articulationParts.append("<accent/>");
+        }
+        if (note.isTenuto()) {
+            articulationParts.append("<tenuto/>");
+        }
+        if (note.isStress()) {
+            articulationParts.append("<stress/>");
+        }
+        if (note.isUnstress()) {
+            articulationParts.append("<unstress/>");
+        }
+        if (note.isStrongAccent()) {
+            articulationParts.append("<strong-accent/>");
+        }
+        if (note.isBreathMark()) {
+            articulationParts.append("<breath-mark/>");
+        }
+        if (note.isCaesura()) {
+            articulationParts.append("<caesura/>");
+        }
+        if (trimToEmpty(note.getPhraseMark()).length() > 0) {
+            articulationParts.append("<other-articulation>").append(xmlEscape(note.getPhraseMark()))
+                    .append("</other-articulation>");
+        }
+        return articulationParts.length() == 0 ? "" : "<articulations>" + articulationParts + "</articulations>";
+    }
+
+    public static String buildAbcNoteTechnicalXml(AbcMeasureNote note) {
+        if (note == null) {
+            return "";
+        }
+        StringBuilder technicalParts = new StringBuilder();
+        if (note.isUpBow()) {
+            technicalParts.append("<up-bow/>");
+        }
+        if (note.isDownBow()) {
+            technicalParts.append("<down-bow/>");
+        }
+        if (note.isDoubleTongue()) {
+            technicalParts.append("<double-tongue/>");
+        }
+        if (note.isTripleTongue()) {
+            technicalParts.append("<triple-tongue/>");
+        }
+        if (note.isHeel()) {
+            technicalParts.append("<heel/>");
+        }
+        if (note.isToe()) {
+            technicalParts.append("<toe/>");
+        }
+        for (String fingering : note.getFingerings()) {
+            if (trimToEmpty(fingering).length() > 0) {
+                technicalParts.append("<fingering>").append(xmlEscape(fingering)).append("</fingering>");
+            }
+        }
+        for (String stringText : note.getStrings()) {
+            if (trimToEmpty(stringText).length() > 0) {
+                technicalParts.append("<string>").append(xmlEscape(stringText)).append("</string>");
+            }
+        }
+        for (String pluckText : note.getPlucks()) {
+            if (trimToEmpty(pluckText).length() > 0) {
+                technicalParts.append("<pluck>").append(xmlEscape(pluckText)).append("</pluck>");
+            }
+        }
+        if (note.isOpenString()) {
+            technicalParts.append("<open-string/>");
+        }
+        if (note.isSnapPizzicato()) {
+            technicalParts.append("<snap-pizzicato/>");
+        }
+        if (note.isHarmonic()) {
+            technicalParts.append("<harmonic/>");
+        }
+        if (note.isStopped()) {
+            technicalParts.append("<stopped/>");
+        }
+        if (note.isThumbPosition()) {
+            technicalParts.append("<thumb-position/>");
+        }
+        return technicalParts.length() == 0 ? "" : "<technical>" + technicalParts + "</technical>";
     }
 
     public static String buildAbcNoteXml(AbcMeasureNote note, int noteIndex, Integer staffOverride,
@@ -925,6 +1743,459 @@ public final class AbcIo {
             builder.append(buildAbcNoteXml(notes.get(index), index, staffOverride, beamXmlByNoteIndex));
         }
         return builder.toString();
+    }
+
+    public static AbcVoiceStores createAbcVoiceStores() {
+        return new AbcVoiceStores();
+    }
+
+    public static List<List<AbcMeasureNote>> ensureAbcVoiceMeasures(AbcVoiceStores stores, String voiceId) {
+        AbcVoiceStores safeStores = stores == null ? new AbcVoiceStores() : stores;
+        String key = trimToEmpty(voiceId);
+        if (!safeStores.getMeasuresByVoice().containsKey(key)) {
+            List<List<AbcMeasureNote>> measures = new ArrayList<List<AbcMeasureNote>>();
+            measures.add(new ArrayList<AbcMeasureNote>());
+            safeStores.getMeasuresByVoice().put(key, measures);
+        }
+        return safeStores.getMeasuresByVoice().get(key);
+    }
+
+    public static AbcMeasureMeta ensureAbcNotationMeasureMeta(AbcVoiceStores stores, String voiceId, int measureNo) {
+        AbcVoiceStores safeStores = stores == null ? new AbcVoiceStores() : stores;
+        String key = trimToEmpty(voiceId);
+        if (!safeStores.getNotationMeasureMetaByVoice().containsKey(key)) {
+            safeStores.getNotationMeasureMetaByVoice().put(key, new LinkedHashMap<Integer, AbcMeasureMeta>());
+        }
+        Map<Integer, AbcMeasureMeta> byMeasure = safeStores.getNotationMeasureMetaByVoice().get(key);
+        Integer measureKey = Integer.valueOf(measureNo);
+        if (!byMeasure.containsKey(measureKey)) {
+            byMeasure.put(measureKey,
+                    new AbcMeasureMeta(String.valueOf(measureNo), false, false, false, null, "", "", ""));
+        }
+        return byMeasure.get(measureKey);
+    }
+
+    public static Map<Integer, AbcMeter> ensureAbcMeterByMeasure(AbcVoiceStores stores, String voiceId) {
+        AbcVoiceStores safeStores = stores == null ? new AbcVoiceStores() : stores;
+        String key = trimToEmpty(voiceId);
+        if (!safeStores.getMeterByMeasureByVoice().containsKey(key)) {
+            safeStores.getMeterByMeasureByVoice().put(key, new LinkedHashMap<Integer, AbcMeter>());
+        }
+        return safeStores.getMeterByMeasureByVoice().get(key);
+    }
+
+    public static Map<Integer, Integer> ensureAbcTempoByMeasure(AbcVoiceStores stores, String voiceId) {
+        AbcVoiceStores safeStores = stores == null ? new AbcVoiceStores() : stores;
+        String key = trimToEmpty(voiceId);
+        if (!safeStores.getTempoByMeasureByVoice().containsKey(key)) {
+            safeStores.getTempoByMeasureByVoice().put(key, new LinkedHashMap<Integer, Integer>());
+        }
+        return safeStores.getTempoByMeasureByVoice().get(key);
+    }
+
+    public static void finalizeAbcActiveEndings(AbcVoiceStores stores) {
+        if (stores == null) {
+            return;
+        }
+        for (String voiceId : new ArrayList<String>(stores.getMeasuresByVoice().keySet())) {
+            List<List<AbcMeasureNote>> measures = stores.getMeasuresByVoice().get(voiceId);
+            if (measures == null) {
+                continue;
+            }
+            while (measures.size() > 1 && measures.get(measures.size() - 1).isEmpty()) {
+                measures.remove(measures.size() - 1);
+            }
+            String activeEndingMarker = trimToEmpty(stores.getActiveEndingByVoice().get(voiceId));
+            if (activeEndingMarker.length() == 0) {
+                continue;
+            }
+            int lastMeasureNo = measures.size();
+            if (lastMeasureNo >= 1) {
+                AbcMeasureMeta measureMeta = ensureAbcNotationMeasureMeta(stores, voiceId, lastMeasureNo);
+                if (trimToEmpty(measureMeta.getEndingStop()).length() == 0) {
+                    measureMeta.setEndingStop(activeEndingMarker);
+                    measureMeta.setEndingStopType("stop");
+                }
+            }
+        }
+    }
+
+    public static List<AbcLyricToken> tokenizeAbcLyricLine(String text) {
+        String raw = trimToEmpty(text);
+        List<AbcLyricToken> tokens = new ArrayList<AbcLyricToken>();
+        if (raw.length() == 0) {
+            return tokens;
+        }
+        String[] chunks = raw.replace('|', ' ').split("\\s+");
+        boolean pendingHyphenWord = false;
+        for (String chunk : chunks) {
+            String value = trimToEmpty(chunk);
+            if (value.length() == 0) {
+                continue;
+            }
+            if ("*".equals(value)) {
+                tokens.add(new AbcLyricToken("skip", "", ""));
+                continue;
+            }
+            if ("_".equals(value)) {
+                tokens.add(new AbcLyricToken("extend", "", ""));
+                continue;
+            }
+            String normalized = value.replace('~', ' ');
+            if (normalized.endsWith("-") && normalized.length() > 1) {
+                tokens.add(new AbcLyricToken("text", normalized.substring(0, normalized.length() - 1),
+                        pendingHyphenWord ? "middle" : "begin"));
+                pendingHyphenWord = true;
+                continue;
+            }
+            String[] rawParts = normalized.split("-");
+            List<String> parts = new ArrayList<String>();
+            for (String part : rawParts) {
+                if (part.length() > 0) {
+                    parts.add(part);
+                }
+            }
+            if (parts.size() <= 1) {
+                tokens.add(new AbcLyricToken("text", normalized, pendingHyphenWord ? "end" : "single"));
+                pendingHyphenWord = false;
+                continue;
+            }
+            for (int index = 0; index < parts.size(); index++) {
+                String syllabic = index == 0 ? "begin" : (index == parts.size() - 1 ? "end" : "middle");
+                tokens.add(new AbcLyricToken("text", parts.get(index), syllabic));
+            }
+            pendingHyphenWord = false;
+        }
+        return tokens;
+    }
+
+    public static void applyAbcLyricsToMeasures(Map<String, List<AbcLyricEntry>> lyricEntriesByVoice,
+            Map<String, List<List<AbcMeasureNote>>> measuresByVoice) {
+        if (lyricEntriesByVoice == null || measuresByVoice == null) {
+            return;
+        }
+        for (String voiceId : lyricEntriesByVoice.keySet()) {
+            List<List<AbcMeasureNote>> measures = measuresByVoice.get(voiceId);
+            if (measures == null || measures.isEmpty()) {
+                continue;
+            }
+            List<AbcMeasureNote> lyricTargets = new ArrayList<AbcMeasureNote>();
+            for (List<AbcMeasureNote> measure : measures) {
+                if (measure == null) {
+                    continue;
+                }
+                for (AbcMeasureNote note : measure) {
+                    if (note != null && !note.isRest() && !note.isGrace() && !note.isChord()) {
+                        lyricTargets.add(note);
+                    }
+                }
+            }
+            if (lyricTargets.isEmpty()) {
+                continue;
+            }
+            int cursor = 0;
+            List<AbcLyricEntry> lyricEntries = lyricEntriesByVoice.get(voiceId);
+            if (lyricEntries == null) {
+                continue;
+            }
+            for (AbcLyricEntry lyricEntry : lyricEntries) {
+                List<AbcLyricToken> tokens = tokenizeAbcLyricLine(lyricEntry == null ? "" : lyricEntry.getText());
+                for (AbcLyricToken token : tokens) {
+                    if (cursor >= lyricTargets.size()) {
+                        break;
+                    }
+                    if ("skip".equals(token.getType())) {
+                        cursor += 1;
+                        continue;
+                    }
+                    if ("extend".equals(token.getType())) {
+                        AbcMeasureNote target = lyricTargets.get(Math.max(0, cursor - 1));
+                        if (target != null) {
+                            target.setLyricExtend(true);
+                        }
+                        continue;
+                    }
+                    AbcMeasureNote target = lyricTargets.get(cursor);
+                    if (target != null) {
+                        target.setLyricText(token.getText());
+                        target.setLyricSyllabic(token.getSyllabic());
+                    }
+                    cursor += 1;
+                }
+            }
+        }
+    }
+
+    public static Map<String, Integer> keySignatureAlterByStep(int fifths) {
+        Map<String, Integer> map = new LinkedHashMap<String, Integer>();
+        String[] steps = { "C", "D", "E", "F", "G", "A", "B" };
+        for (String step : steps) {
+            map.put(step, Integer.valueOf(0));
+        }
+        String[] sharpOrder = { "F", "C", "G", "D", "A", "E", "B" };
+        String[] flatOrder = { "B", "E", "A", "D", "G", "C", "F" };
+        int safeFifths = Math.max(-7, Math.min(7, fifths));
+        if (safeFifths > 0) {
+            for (int i = 0; i < safeFifths; i++) {
+                map.put(sharpOrder[i], Integer.valueOf(1));
+            }
+        } else if (safeFifths < 0) {
+            for (int i = 0; i < Math.abs(safeFifths); i++) {
+                map.put(flatOrder[i], Integer.valueOf(-1));
+            }
+        }
+        return map;
+    }
+
+    public static AbcBodyFieldResult applyAbcBodyField(String fieldName, String fieldValue,
+            AbcBodyFieldContext context) {
+        AbcBodyFieldContext safeContext = context == null ? new AbcBodyFieldContext() : context;
+        String normalizedFieldName = trimToEmpty(fieldName);
+        int activeKeyFifths = safeContext.getActiveKeyFifths();
+        Map<String, Integer> activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
+        Fraction activeUnitLength = safeContext.getActiveUnitLength() == null ? DEFAULT_UNIT
+                : safeContext.getActiveUnitLength();
+        AbcMeter activeMeter = safeContext.getActiveMeter() == null ? new AbcMeter(4, 4)
+                : safeContext.getActiveMeter();
+        Integer activeTempoBpm = safeContext.getActiveTempoBpm();
+        Map<String, Integer> measureAccidentals = safeContext.getMeasureAccidentals() == null
+                ? new LinkedHashMap<String, Integer>()
+                : safeContext.getMeasureAccidentals();
+        List<String> warnings = safeContext.getWarnings() == null ? new ArrayList<String>() : safeContext.getWarnings();
+        AbcVoiceStores voiceStores = safeContext.getVoiceStores() == null ? createAbcVoiceStores()
+                : safeContext.getVoiceStores();
+        String entryVoiceId = trimToEmpty(safeContext.getEntryVoiceId()).length() == 0 ? "1"
+                : trimToEmpty(safeContext.getEntryVoiceId());
+        int currentMeasureNo = Math.max(1, safeContext.getCurrentMeasureNo());
+
+        if ("K".equals(normalizedFieldName)) {
+            AbcKeyInfo inlineKeyInfo = parseKey(trimToEmpty(fieldValue).length() == 0 ? "C" : fieldValue, warnings);
+            activeKeyFifths = inlineKeyInfo.getFifths();
+            activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
+            voiceStores.getCurrentKeyFifthsByVoice().put(entryVoiceId, Integer.valueOf(activeKeyFifths));
+            if (safeContext.getKeyHintFifthsByKey() != null) {
+                safeContext.getKeyHintFifthsByKey().put(entryVoiceId + "#" + currentMeasureNo,
+                        Integer.valueOf(activeKeyFifths));
+            }
+            measureAccidentals = new LinkedHashMap<String, Integer>();
+            return new AbcBodyFieldResult(true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength,
+                    activeMeter, activeTempoBpm, measureAccidentals);
+        }
+        if ("L".equals(normalizedFieldName)) {
+            activeUnitLength = parseFraction(trimToEmpty(fieldValue).length() == 0 ? "1/8" : fieldValue, "L",
+                    warnings);
+            return new AbcBodyFieldResult(true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength,
+                    activeMeter, activeTempoBpm, measureAccidentals);
+        }
+        if ("M".equals(normalizedFieldName)) {
+            activeMeter = parseMeter(trimToEmpty(fieldValue).length() == 0 ? "4/4" : fieldValue, warnings);
+            ensureAbcMeterByMeasure(voiceStores, entryVoiceId).put(Integer.valueOf(currentMeasureNo),
+                    new AbcMeter(activeMeter.getBeats(), activeMeter.getBeatType()));
+            return new AbcBodyFieldResult(true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength,
+                    activeMeter, activeTempoBpm, measureAccidentals);
+        }
+        if ("Q".equals(normalizedFieldName)) {
+            activeTempoBpm = parseTempoFromQ(trimToEmpty(fieldValue), warnings);
+            if (activeTempoBpm != null) {
+                ensureAbcTempoByMeasure(voiceStores, entryVoiceId).put(Integer.valueOf(currentMeasureNo),
+                        Integer.valueOf(clampRoundedTempo(activeTempoBpm.intValue())));
+            }
+            return new AbcBodyFieldResult(true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength,
+                    activeMeter, activeTempoBpm, measureAccidentals);
+        }
+        return new AbcBodyFieldResult(false, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength,
+                activeMeter, activeTempoBpm, measureAccidentals);
+    }
+
+    public static boolean processAbcBarlineEntry(AbcParser.AbcParsedBarlineToken barlineToken,
+            AbcBarlineEntryContext context) {
+        if (barlineToken == null || context == null) {
+            return false;
+        }
+        AbcParser.AbcParsedRepeatEndingMarker bareRepeatEndingMarker = barlineToken.isEndsMeasure()
+                ? AbcParser.parseAbcBareRepeatEndingMarkerAt(context.getText(), barlineToken.getNextIdx())
+                : null;
+        if (barlineToken.isRepeatEnd()) {
+            context.markRepeatEnd();
+        }
+        if (barlineToken.isRepeatStart()) {
+            context.markRepeatStart();
+        }
+        if ((barlineToken.isEndingStop() || bareRepeatEndingMarker != null)
+                && trimToEmpty(context.getActiveEndingMarker()).length() > 0) {
+            context.stopActiveEndingAtMeasure(context.getCurrentMeasureNo());
+        }
+        if (barlineToken.isEndsMeasure()
+                && (context.getCurrentMeasureLength() > 0 || context.getMeasuresLength() == 0)) {
+            context.advanceToNextMeasure();
+        }
+        if (barlineToken.isEndsMeasure()) {
+            context.clearMeasureAccidentals();
+            context.clearLastNote();
+        }
+        if (bareRepeatEndingMarker != null) {
+            return context.startEndingAtCurrentMeasure(bareRepeatEndingMarker.getMarker(),
+                    bareRepeatEndingMarker.getNextIdx());
+        }
+        context.setIdx(barlineToken.getNextIdx());
+        context.resetBeamContext();
+        return true;
+    }
+
+    public static boolean processAbcNonPlayableBodyEntry(AbcParser.AbcParsedBodyEntry bodyEntry,
+            AbcNonPlayableBodyEntryContext context) {
+        if (bodyEntry == null || context == null) {
+            return false;
+        }
+        if ("barline".equals(bodyEntry.getKind())) {
+            return context.handleBarlineToken(bodyEntry.getBarlineToken());
+        }
+        if ("standalone-body-field".equals(bodyEntry.getKind())) {
+            AbcParser.AbcParsedStandaloneBodyField standaloneBodyField = bodyEntry.getStandaloneBodyField();
+            if (!context.applyBodyField(standaloneBodyField.getFieldName(), standaloneBodyField.getFieldValue())) {
+                context.warnBody("Skipped unsupported standalone body field token: " + standaloneBodyField.getToken());
+            }
+            context.setIdx(standaloneBodyField.getNextIdx());
+            return true;
+        }
+        if ("unsupported-body-token".equals(bodyEntry.getKind())) {
+            AbcParser.AbcParsedUnsupportedBodyToken unsupportedBodyToken = bodyEntry.getUnsupportedBodyToken();
+            context.warnBody("Skipped unsupported body token: " + unsupportedBodyToken.getToken());
+            context.setIdx(unsupportedBodyToken.getNextIdx());
+            return true;
+        }
+        if ("unsupported-body-number".equals(bodyEntry.getKind())) {
+            AbcParser.AbcParsedUnsupportedBodyToken unsupportedBodyNumber = bodyEntry.getUnsupportedBodyNumber();
+            context.warnBody("Skipped unsupported body number token: " + unsupportedBodyNumber.getToken());
+            context.setIdx(unsupportedBodyNumber.getNextIdx());
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean processAbcSimpleBodyToken(AbcParser.AbcParsedBodyToken bodyToken,
+            AbcSimpleBodyTokenHandlerContext context) {
+        if (bodyToken == null || context == null) {
+            return false;
+        }
+        String kind = bodyToken.getKind();
+        if ("broken-rhythm".equals(kind)) {
+            return context.handleBrokenRhythmBodyToken(bodyToken);
+        }
+        if ("decoration".equals(kind)) {
+            return context.handleDecorationBodyToken(bodyToken, context.getChar());
+        }
+        if ("paren".equals(kind)) {
+            return context.handleParenBodyToken(bodyToken);
+        }
+        if ("quoted-string".equals(kind)) {
+            return context.handleQuotedStringBodyToken(bodyToken);
+        }
+        if ("single-char-shorthand".equals(kind)) {
+            return context.handleSingleCharShorthandBodyToken(bodyToken, context.getChar());
+        }
+        if ("slur-stop".equals(kind)) {
+            return context.handleSlurStopBodyToken(bodyToken);
+        }
+        if ("tie".equals(kind)) {
+            return context.handleTieBodyToken(bodyToken);
+        }
+        return false;
+    }
+
+    public static boolean processAbcBracketBodyToken(AbcParser.AbcParsedBodyToken bodyToken,
+            AbcBracketBodyTokenContext context) {
+        if (bodyToken == null || context == null || !"bracket".equals(bodyToken.getKind())) {
+            return false;
+        }
+        AbcParser.AbcParsedBracketToken bracketToken = bodyToken.getBracketToken();
+        if ("inline-field".equals(bracketToken.getKind())) {
+            return context.handleInlineFieldBracketToken(bracketToken);
+        }
+        if ("repeat-ending".equals(bracketToken.getKind())) {
+            return context.handleRepeatEndingBracketToken(bracketToken);
+        }
+        AbcParser.AbcParsedPlayableEvent playableEvent = AbcParser.parseAbcPlayableEventAt(context.getText(),
+                context.getIdx());
+        return context.handlePlayableEvent(playableEvent, true);
+    }
+
+    public static AbcGraceGroupProcessResult processAbcGraceGroup(AbcGraceGroupContext context) {
+        if (context == null || !"{".equals(context.getChar())) {
+            return new AbcGraceGroupProcessResult(false, context == null ? 0 : context.getIdx());
+        }
+        AbcParser.AbcParsedGraceGroup graceResult = AbcParser.parseAbcGraceGroupAt(context.getText(),
+                context.getIdx(), context.getLineNo(), context.getWarnings());
+        if (graceResult == null) {
+            context.warnBody("Failed to parse grace group; skipped.");
+            return new AbcGraceGroupProcessResult(true, context.getIdx() + 1);
+        }
+        context.appendGraceNotes(graceResult.getNotes());
+        return new AbcGraceGroupProcessResult(true, graceResult.getNextIdx());
+    }
+
+    public static boolean processAbcBodyFallback(AbcBodyFallbackContext context) {
+        if (context == null) {
+            return false;
+        }
+        if (context.handleClosingNotation(context.getChar())) {
+            return true;
+        }
+        if (context.handleUnsupportedPunctuation(context.getChar())) {
+            return true;
+        }
+        if (context.getBodyEntry() == null) {
+            context.throwBodyParseError();
+        }
+        return false;
+    }
+
+    public static void applyAbcPendingStateToPlayableNote(AbcPendingPlayableNoteContext context) {
+        if (context == null || context.getNote() == null) {
+            return;
+        }
+        AbcPendingPlayableNoteOptions options = context.getOptions() == null ? new AbcPendingPlayableNoteOptions()
+                : context.getOptions();
+        boolean applySlurStart = options.getApplySlurStart() == null ? true
+                : options.getApplySlurStart().booleanValue();
+        boolean applyTieStop = options.getApplyTieStop() == null ? true : options.getApplyTieStop().booleanValue();
+        String trillHint = trimToEmpty(options.getTrillHint());
+
+        context.applyPendingOrnamentState(context.getNote(), applySlurStart, trillHint);
+        context.applyPendingArticulationState(context.getNote());
+        context.applyPendingDirectionState(context.getNote());
+        context.applyPendingTechnicalState(context.getNote());
+
+        if (applyTieStop && context.hasPendingTieToNext() && !context.getNote().isRest()) {
+            context.getNote().setTieStop(true);
+            context.clearPendingTieToNext();
+        } else if (applyTieStop && context.getNote().isRest() && context.hasPendingTieToNext()) {
+            context.warnBody("tie(-) was followed by a rest; tie removed.");
+            context.clearPendingTieToNext();
+        }
+    }
+
+    public static void applyAbcPendingNoteValue(AbcPendingNoteValueContext context) {
+        if (context != null && context.getNote() != null && !context.getNote().isRest() && context.isPending()) {
+            context.apply();
+            context.clear();
+        }
+    }
+
+    public static void applyAbcPendingNoteOptionalValue(AbcPendingNoteOptionalValueContext context) {
+        if (context != null && context.getNote() != null && !context.getNote().isRest()
+                && !context.isEmpty(context.getValue())) {
+            context.apply(context.getValue());
+            context.clear();
+        }
+    }
+
+    public static void applyAbcPendingNoteArray(AbcPendingNoteArrayContext context) {
+        if (context != null && context.getNote() != null && !context.getNote().isRest()
+                && !context.getValues().isEmpty()) {
+            context.apply(context.getValues());
+            context.clear();
+        }
     }
 
     public static List<AbcParsedPart> resolveAbcParsedPartsForExport(List<AbcParsedPart> parts) {
@@ -1885,9 +3156,141 @@ public final class AbcIo {
         return value == null ? "" : value.trim();
     }
 
+    private static AbcHarmonyPitch xmlHarmonyRootFromChordToken(String token) {
+        Matcher matcher = Pattern.compile("^([A-G])(#|b)?$").matcher(trimToEmpty(token));
+        if (!matcher.find()) {
+            return null;
+        }
+        String accidental = matcher.group(2) == null ? "" : matcher.group(2);
+        int alter = "#".equals(accidental) ? 1 : ("b".equals(accidental) ? -1 : 0);
+        return new AbcHarmonyPitch(matcher.group(1), alter);
+    }
+
+    private static Element directChild(Element parent, String tagName) {
+        if (parent == null) {
+            return null;
+        }
+        Node child = parent.getFirstChild();
+        while (child != null) {
+            if (child instanceof Element && tagName.equals(((Element) child).getTagName())) {
+                return (Element) child;
+            }
+            child = child.getNextSibling();
+        }
+        return null;
+    }
+
+    private static List<Element> directChildren(Element parent, String tagName) {
+        List<Element> children = new ArrayList<Element>();
+        if (parent == null) {
+            return children;
+        }
+        Node child = parent.getFirstChild();
+        while (child != null) {
+            if (child instanceof Element && tagName.equals(((Element) child).getTagName())) {
+                children.add((Element) child);
+            }
+            child = child.getNextSibling();
+        }
+        return children;
+    }
+
+    private static Element directChildWithAttribute(Element parent, String tagName, String attrName, String attrValue) {
+        for (Element child : directChildren(parent, tagName)) {
+            if (trimToEmpty(child.getAttribute(attrName)).equals(attrValue)) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasMusicXmlTurnSlash(Element ornaments) {
+        for (Element turn : directChildren(ornaments, "turn")) {
+            if ("yes".equals(trimToEmpty(turn.getAttribute("slash")).toLowerCase())) {
+                return true;
+            }
+        }
+        for (Element turn : directChildren(ornaments, "inverted-turn")) {
+            if ("yes".equals(trimToEmpty(turn.getAttribute("slash")).toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String directChildText(Element parent, String tagName) {
+        return elementText(directChild(parent, tagName));
+    }
+
+    private static String elementText(Element element) {
+        return element == null ? "" : trimToEmpty(element.getTextContent());
+    }
+
+    private static Element firstDescendantByPath(Element root, String[] path) {
+        if (root == null || path == null || path.length == 0) {
+            return root;
+        }
+        return firstDescendantByPath(root, path, 0);
+    }
+
+    private static Element firstDescendantByPath(Element current, String[] path, int index) {
+        if (current == null) {
+            return null;
+        }
+        if (index >= path.length) {
+            return current;
+        }
+        Node child = current.getFirstChild();
+        while (child != null) {
+            if (child instanceof Element && path[index].equals(((Element) child).getTagName())) {
+                Element found = firstDescendantByPath((Element) child, path, index + 1);
+                if (found != null) {
+                    return found;
+                }
+            }
+            child = child.getNextSibling();
+        }
+        return null;
+    }
+
     private static boolean isTruthy(String value) {
         String normalized = trimToEmpty(value).toLowerCase();
         return "1".equals(normalized) || "true".equals(normalized) || "yes".equals(normalized);
+    }
+
+    private static String encodeUriComponent(String value) {
+        try {
+            return URLEncoder.encode(value == null ? "" : value, "UTF-8")
+                    .replace("+", "%20")
+                    .replace("%21", "!")
+                    .replace("%27", "'")
+                    .replace("%28", "(")
+                    .replace("%29", ")")
+                    .replace("%7E", "~");
+        } catch (UnsupportedEncodingException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
+    private static int compareMusicXmlLaneToken(String a, String b, boolean nullLast) {
+        if (a == null && b == null) {
+            return 0;
+        }
+        if (a == null) {
+            return nullLast ? 1 : -1;
+        }
+        if (b == null) {
+            return nullLast ? -1 : 1;
+        }
+        Double aNumber = parseOptionalNumber(a);
+        Double bNumber = parseOptionalNumber(b);
+        if (aNumber != null && bNumber != null) {
+            int numeric = Double.compare(aNumber.doubleValue(), bNumber.doubleValue());
+            if (numeric != 0) {
+                return numeric;
+            }
+        }
+        return a.compareTo(b);
     }
 
     private static Map<Integer, AbcBeamAssignment> computeAbcBeamAssignments(List<AbcBeamNoteEvent> events,
@@ -2989,6 +4392,24 @@ public final class AbcIo {
         }
     }
 
+    private static final class AbcHarmonyPitch {
+        private final String step;
+        private final int alter;
+
+        private AbcHarmonyPitch(String step, int alter) {
+            this.step = trimToEmpty(step);
+            this.alter = alter;
+        }
+
+        private String getStep() {
+            return step;
+        }
+
+        private int getAlter() {
+            return alter;
+        }
+    }
+
     public static final class AbcMeasureNote {
         private final String voice;
         private final int duration;
@@ -3004,12 +4425,12 @@ public final class AbcIo {
         private final boolean accidentalEditorial;
         private final boolean accidentalCautionary;
         private final boolean tieStart;
-        private final boolean tieStop;
+        private boolean tieStop;
         private final boolean graceSlash;
         private final String beamMode;
-        private final String lyricText;
-        private final String lyricSyllabic;
-        private final boolean lyricExtend;
+        private String lyricText;
+        private String lyricSyllabic;
+        private boolean lyricExtend;
         private final Integer timeModificationActual;
         private final Integer timeModificationNormal;
         private final List<String> annotations;
@@ -3026,6 +4447,53 @@ public final class AbcIo {
         private final boolean diminuendoStop;
         private final String dynamicMark;
         private final boolean sfz;
+        private final boolean slurStart;
+        private final boolean slurStop;
+        private final boolean tupletStart;
+        private final boolean tupletStop;
+        private final boolean trill;
+        private final boolean trillLineStart;
+        private final boolean trillLineStop;
+        private final String trillAccidentalText;
+        private final String turnType;
+        private final boolean turnSlash;
+        private final boolean delayedTurn;
+        private final String mordentType;
+        private final String tremoloType;
+        private final Integer tremoloMarks;
+        private final boolean glissandoStart;
+        private final boolean glissandoStop;
+        private final boolean slideStart;
+        private final boolean slideStop;
+        private final boolean schleifer;
+        private final boolean shake;
+        private final boolean arpeggiate;
+        private final boolean staccato;
+        private final boolean staccatissimo;
+        private final boolean accent;
+        private final boolean tenuto;
+        private final boolean stress;
+        private final boolean unstress;
+        private final String fermataType;
+        private final boolean strongAccent;
+        private final boolean breathMark;
+        private final boolean caesura;
+        private final String phraseMark;
+        private final boolean upBow;
+        private final boolean downBow;
+        private final boolean doubleTongue;
+        private final boolean tripleTongue;
+        private final boolean heel;
+        private final boolean toe;
+        private final List<String> fingerings;
+        private final List<String> strings;
+        private final List<String> plucks;
+        private final List<String> chordSymbols;
+        private final boolean openString;
+        private final boolean snapPizzicato;
+        private final boolean harmonic;
+        private final boolean stopped;
+        private final boolean thumbPosition;
 
         public AbcMeasureNote(String voice, int duration, boolean chord, boolean grace) {
             this(voice, duration, chord, grace, false, "C", Integer.valueOf(4), Integer.valueOf(0), "quarter");
@@ -3074,6 +4542,35 @@ public final class AbcIo {
                 boolean segno, boolean coda, String rehearsalMark, boolean fine, boolean daCapo, boolean dalSegno,
                 boolean toCoda, boolean crescendoStart, boolean crescendoStop, boolean diminuendoStart,
                 boolean diminuendoStop, String dynamicMark, boolean sfz) {
+            this(voice, duration, chord, grace, rest, step, octave, alter, type, staff, accidentalText,
+                    accidentalEditorial, accidentalCautionary, tieStart, tieStop, graceSlash, beamMode, lyricText,
+                    lyricSyllabic, lyricExtend, timeModificationActual, timeModificationNormal, annotations, segno,
+                    coda, rehearsalMark, fine, daCapo, dalSegno, toCoda, crescendoStart, crescendoStop,
+                    diminuendoStart, diminuendoStop, dynamicMark, sfz, false, false, false, false, false, false,
+                    false, "", "", false, false, "", "", null, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, "", false, false, false, "", false, false, false,
+                    false, false, false, new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(),
+                    false, false, false, false, false);
+        }
+
+        public AbcMeasureNote(String voice, int duration, boolean chord, boolean grace, boolean rest, String step,
+                Integer octave, Integer alter, String type, Integer staff, String accidentalText,
+                boolean accidentalEditorial, boolean accidentalCautionary, boolean tieStart, boolean tieStop,
+                boolean graceSlash, String beamMode, String lyricText, String lyricSyllabic, boolean lyricExtend,
+                Integer timeModificationActual, Integer timeModificationNormal, List<String> annotations,
+                boolean segno, boolean coda, String rehearsalMark, boolean fine, boolean daCapo, boolean dalSegno,
+                boolean toCoda, boolean crescendoStart, boolean crescendoStop, boolean diminuendoStart,
+                boolean diminuendoStop, String dynamicMark, boolean sfz, boolean slurStart, boolean slurStop,
+                boolean tupletStart, boolean tupletStop, boolean trill, boolean trillLineStart,
+                boolean trillLineStop, String trillAccidentalText, String turnType, boolean turnSlash,
+                boolean delayedTurn, String mordentType, String tremoloType, Integer tremoloMarks,
+                boolean glissandoStart, boolean glissandoStop, boolean slideStart, boolean slideStop,
+                boolean schleifer, boolean shake, boolean arpeggiate, boolean staccato, boolean staccatissimo,
+                boolean accent, boolean tenuto, boolean stress, boolean unstress, String fermataType,
+                boolean strongAccent, boolean breathMark, boolean caesura, String phraseMark, boolean upBow,
+                boolean downBow, boolean doubleTongue, boolean tripleTongue, boolean heel, boolean toe,
+                List<String> fingerings, List<String> strings, List<String> plucks, boolean openString,
+                boolean snapPizzicato, boolean harmonic, boolean stopped, boolean thumbPosition) {
             this.voice = voice;
             this.duration = duration;
             this.chord = chord;
@@ -3110,6 +4607,53 @@ public final class AbcIo {
             this.diminuendoStop = diminuendoStop;
             this.dynamicMark = trimToEmpty(dynamicMark);
             this.sfz = sfz;
+            this.slurStart = slurStart;
+            this.slurStop = slurStop;
+            this.tupletStart = tupletStart;
+            this.tupletStop = tupletStop;
+            this.trill = trill;
+            this.trillLineStart = trillLineStart;
+            this.trillLineStop = trillLineStop;
+            this.trillAccidentalText = trimToEmpty(trillAccidentalText);
+            this.turnType = trimToEmpty(turnType);
+            this.turnSlash = turnSlash;
+            this.delayedTurn = delayedTurn;
+            this.mordentType = trimToEmpty(mordentType);
+            this.tremoloType = trimToEmpty(tremoloType);
+            this.tremoloMarks = tremoloMarks;
+            this.glissandoStart = glissandoStart;
+            this.glissandoStop = glissandoStop;
+            this.slideStart = slideStart;
+            this.slideStop = slideStop;
+            this.schleifer = schleifer;
+            this.shake = shake;
+            this.arpeggiate = arpeggiate;
+            this.staccato = staccato;
+            this.staccatissimo = staccatissimo;
+            this.accent = accent;
+            this.tenuto = tenuto;
+            this.stress = stress;
+            this.unstress = unstress;
+            this.fermataType = trimToEmpty(fermataType);
+            this.strongAccent = strongAccent;
+            this.breathMark = breathMark;
+            this.caesura = caesura;
+            this.phraseMark = trimToEmpty(phraseMark);
+            this.upBow = upBow;
+            this.downBow = downBow;
+            this.doubleTongue = doubleTongue;
+            this.tripleTongue = tripleTongue;
+            this.heel = heel;
+            this.toe = toe;
+            this.fingerings = fingerings == null ? new ArrayList<String>() : fingerings;
+            this.strings = strings == null ? new ArrayList<String>() : strings;
+            this.plucks = plucks == null ? new ArrayList<String>() : plucks;
+            this.chordSymbols = new ArrayList<String>();
+            this.openString = openString;
+            this.snapPizzicato = snapPizzicato;
+            this.harmonic = harmonic;
+            this.stopped = stopped;
+            this.thumbPosition = thumbPosition;
         }
 
         public String getVoice() {
@@ -3172,6 +4716,10 @@ public final class AbcIo {
             return tieStop;
         }
 
+        public void setTieStop(boolean tieStop) {
+            this.tieStop = tieStop;
+        }
+
         public boolean isGraceSlash() {
             return graceSlash;
         }
@@ -3190,6 +4738,18 @@ public final class AbcIo {
 
         public boolean isLyricExtend() {
             return lyricExtend;
+        }
+
+        public void setLyricText(String lyricText) {
+            this.lyricText = trimToEmpty(lyricText);
+        }
+
+        public void setLyricSyllabic(String lyricSyllabic) {
+            this.lyricSyllabic = trimToEmpty(lyricSyllabic);
+        }
+
+        public void setLyricExtend(boolean lyricExtend) {
+            this.lyricExtend = lyricExtend;
         }
 
         public Integer getTimeModificationActual() {
@@ -3255,6 +4815,194 @@ public final class AbcIo {
         public boolean isSfz() {
             return sfz;
         }
+
+        public boolean isSlurStart() {
+            return slurStart;
+        }
+
+        public boolean isSlurStop() {
+            return slurStop;
+        }
+
+        public boolean isTupletStart() {
+            return tupletStart;
+        }
+
+        public boolean isTupletStop() {
+            return tupletStop;
+        }
+
+        public boolean isTrill() {
+            return trill;
+        }
+
+        public boolean isTrillLineStart() {
+            return trillLineStart;
+        }
+
+        public boolean isTrillLineStop() {
+            return trillLineStop;
+        }
+
+        public String getTrillAccidentalText() {
+            return trillAccidentalText;
+        }
+
+        public String getTurnType() {
+            return turnType;
+        }
+
+        public boolean isTurnSlash() {
+            return turnSlash;
+        }
+
+        public boolean isDelayedTurn() {
+            return delayedTurn;
+        }
+
+        public String getMordentType() {
+            return mordentType;
+        }
+
+        public String getTremoloType() {
+            return tremoloType;
+        }
+
+        public Integer getTremoloMarks() {
+            return tremoloMarks;
+        }
+
+        public boolean isGlissandoStart() {
+            return glissandoStart;
+        }
+
+        public boolean isGlissandoStop() {
+            return glissandoStop;
+        }
+
+        public boolean isSlideStart() {
+            return slideStart;
+        }
+
+        public boolean isSlideStop() {
+            return slideStop;
+        }
+
+        public boolean isSchleifer() {
+            return schleifer;
+        }
+
+        public boolean isShake() {
+            return shake;
+        }
+
+        public boolean isArpeggiate() {
+            return arpeggiate;
+        }
+
+        public boolean isStaccato() {
+            return staccato;
+        }
+
+        public boolean isStaccatissimo() {
+            return staccatissimo;
+        }
+
+        public boolean isAccent() {
+            return accent;
+        }
+
+        public boolean isTenuto() {
+            return tenuto;
+        }
+
+        public boolean isStress() {
+            return stress;
+        }
+
+        public boolean isUnstress() {
+            return unstress;
+        }
+
+        public String getFermataType() {
+            return fermataType;
+        }
+
+        public boolean isStrongAccent() {
+            return strongAccent;
+        }
+
+        public boolean isBreathMark() {
+            return breathMark;
+        }
+
+        public boolean isCaesura() {
+            return caesura;
+        }
+
+        public String getPhraseMark() {
+            return phraseMark;
+        }
+
+        public boolean isUpBow() {
+            return upBow;
+        }
+
+        public boolean isDownBow() {
+            return downBow;
+        }
+
+        public boolean isDoubleTongue() {
+            return doubleTongue;
+        }
+
+        public boolean isTripleTongue() {
+            return tripleTongue;
+        }
+
+        public boolean isHeel() {
+            return heel;
+        }
+
+        public boolean isToe() {
+            return toe;
+        }
+
+        public List<String> getFingerings() {
+            return fingerings;
+        }
+
+        public List<String> getStrings() {
+            return strings;
+        }
+
+        public List<String> getPlucks() {
+            return plucks;
+        }
+
+        public List<String> getChordSymbols() {
+            return chordSymbols;
+        }
+
+        public boolean isOpenString() {
+            return openString;
+        }
+
+        public boolean isSnapPizzicato() {
+            return snapPizzicato;
+        }
+
+        public boolean isHarmonic() {
+            return harmonic;
+        }
+
+        public boolean isStopped() {
+            return stopped;
+        }
+
+        public boolean isThumbPosition() {
+            return thumbPosition;
+        }
     }
 
     public static final class AbcMeasureMeta {
@@ -3264,8 +5012,8 @@ public final class AbcIo {
         private final boolean repeatEnd;
         private final Integer repeatTimes;
         private final String endingStart;
-        private final String endingStop;
-        private final String endingStopType;
+        private String endingStop;
+        private String endingStopType;
 
         public AbcMeasureMeta(String number, boolean implicit, boolean repeatStart, boolean repeatEnd,
                 Integer repeatTimes, String endingStart, String endingStop, String endingStopType) {
@@ -3309,6 +5057,893 @@ public final class AbcIo {
 
         public String getEndingStopType() {
             return endingStopType;
+        }
+
+        public void setEndingStop(String endingStop) {
+            this.endingStop = trimToEmpty(endingStop);
+        }
+
+        public void setEndingStopType(String endingStopType) {
+            this.endingStopType = trimToEmpty(endingStopType);
+        }
+    }
+
+    public static final class AbcVoiceStores {
+        private final Map<String, List<List<AbcMeasureNote>>> measuresByVoice;
+        private final Map<String, Map<Integer, AbcMeasureMeta>> notationMeasureMetaByVoice;
+        private final Map<String, String> activeEndingByVoice;
+        private final Map<String, Integer> currentKeyFifthsByVoice;
+        private final Map<String, Map<Integer, AbcMeter>> meterByMeasureByVoice;
+        private final Map<String, Map<Integer, Integer>> tempoByMeasureByVoice;
+
+        public AbcVoiceStores() {
+            this.measuresByVoice = new LinkedHashMap<String, List<List<AbcMeasureNote>>>();
+            this.notationMeasureMetaByVoice = new LinkedHashMap<String, Map<Integer, AbcMeasureMeta>>();
+            this.activeEndingByVoice = new LinkedHashMap<String, String>();
+            this.currentKeyFifthsByVoice = new LinkedHashMap<String, Integer>();
+            this.meterByMeasureByVoice = new LinkedHashMap<String, Map<Integer, AbcMeter>>();
+            this.tempoByMeasureByVoice = new LinkedHashMap<String, Map<Integer, Integer>>();
+        }
+
+        public Map<String, List<List<AbcMeasureNote>>> getMeasuresByVoice() {
+            return measuresByVoice;
+        }
+
+        public Map<String, Map<Integer, AbcMeasureMeta>> getNotationMeasureMetaByVoice() {
+            return notationMeasureMetaByVoice;
+        }
+
+        public Map<String, String> getActiveEndingByVoice() {
+            return activeEndingByVoice;
+        }
+
+        public Map<String, Integer> getCurrentKeyFifthsByVoice() {
+            return currentKeyFifthsByVoice;
+        }
+
+        public Map<String, Map<Integer, AbcMeter>> getMeterByMeasureByVoice() {
+            return meterByMeasureByVoice;
+        }
+
+        public Map<String, Map<Integer, Integer>> getTempoByMeasureByVoice() {
+            return tempoByMeasureByVoice;
+        }
+    }
+
+    public static final class AbcLyricToken {
+        private final String type;
+        private final String text;
+        private final String syllabic;
+
+        public AbcLyricToken(String type, String text, String syllabic) {
+            this.type = trimToEmpty(type);
+            this.text = trimToEmpty(text);
+            this.syllabic = trimToEmpty(syllabic);
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public String getSyllabic() {
+            return syllabic;
+        }
+    }
+
+    public static final class AbcBodyFieldContext {
+        private final int activeKeyFifths;
+        private final Fraction activeUnitLength;
+        private final AbcMeter activeMeter;
+        private final Integer activeTempoBpm;
+        private final Map<String, Integer> measureAccidentals;
+        private final AbcVoiceStores voiceStores;
+        private final String entryVoiceId;
+        private final int currentMeasureNo;
+        private final Map<String, Integer> keyHintFifthsByKey;
+        private final List<String> warnings;
+
+        public AbcBodyFieldContext() {
+            this(0, DEFAULT_UNIT, new AbcMeter(4, 4), null, new LinkedHashMap<String, Integer>(),
+                    createAbcVoiceStores(), "1", 1, new LinkedHashMap<String, Integer>(), new ArrayList<String>());
+        }
+
+        public AbcBodyFieldContext(int activeKeyFifths, Fraction activeUnitLength, AbcMeter activeMeter,
+                Integer activeTempoBpm, Map<String, Integer> measureAccidentals, AbcVoiceStores voiceStores,
+                String entryVoiceId, int currentMeasureNo, Map<String, Integer> keyHintFifthsByKey,
+                List<String> warnings) {
+            this.activeKeyFifths = activeKeyFifths;
+            this.activeUnitLength = activeUnitLength;
+            this.activeMeter = activeMeter;
+            this.activeTempoBpm = activeTempoBpm;
+            this.measureAccidentals = measureAccidentals;
+            this.voiceStores = voiceStores;
+            this.entryVoiceId = trimToEmpty(entryVoiceId).length() == 0 ? "1" : trimToEmpty(entryVoiceId);
+            this.currentMeasureNo = currentMeasureNo;
+            this.keyHintFifthsByKey = keyHintFifthsByKey;
+            this.warnings = warnings;
+        }
+
+        public int getActiveKeyFifths() {
+            return activeKeyFifths;
+        }
+
+        public Fraction getActiveUnitLength() {
+            return activeUnitLength;
+        }
+
+        public AbcMeter getActiveMeter() {
+            return activeMeter;
+        }
+
+        public Integer getActiveTempoBpm() {
+            return activeTempoBpm;
+        }
+
+        public Map<String, Integer> getMeasureAccidentals() {
+            return measureAccidentals;
+        }
+
+        public AbcVoiceStores getVoiceStores() {
+            return voiceStores;
+        }
+
+        public String getEntryVoiceId() {
+            return entryVoiceId;
+        }
+
+        public int getCurrentMeasureNo() {
+            return currentMeasureNo;
+        }
+
+        public Map<String, Integer> getKeyHintFifthsByKey() {
+            return keyHintFifthsByKey;
+        }
+
+        public List<String> getWarnings() {
+            return warnings;
+        }
+    }
+
+    public static final class AbcBodyFieldResult {
+        private final boolean handled;
+        private final int activeKeyFifths;
+        private final Map<String, Integer> activeKeySignatureAccidentals;
+        private final Fraction activeUnitLength;
+        private final AbcMeter activeMeter;
+        private final Integer activeTempoBpm;
+        private final Map<String, Integer> measureAccidentals;
+
+        public AbcBodyFieldResult(boolean handled, int activeKeyFifths,
+                Map<String, Integer> activeKeySignatureAccidentals, Fraction activeUnitLength, AbcMeter activeMeter,
+                Integer activeTempoBpm, Map<String, Integer> measureAccidentals) {
+            this.handled = handled;
+            this.activeKeyFifths = activeKeyFifths;
+            this.activeKeySignatureAccidentals = activeKeySignatureAccidentals == null
+                    ? new LinkedHashMap<String, Integer>()
+                    : activeKeySignatureAccidentals;
+            this.activeUnitLength = activeUnitLength;
+            this.activeMeter = activeMeter;
+            this.activeTempoBpm = activeTempoBpm;
+            this.measureAccidentals = measureAccidentals == null ? new LinkedHashMap<String, Integer>()
+                    : measureAccidentals;
+        }
+
+        public boolean isHandled() {
+            return handled;
+        }
+
+        public int getActiveKeyFifths() {
+            return activeKeyFifths;
+        }
+
+        public Map<String, Integer> getActiveKeySignatureAccidentals() {
+            return activeKeySignatureAccidentals;
+        }
+
+        public Fraction getActiveUnitLength() {
+            return activeUnitLength;
+        }
+
+        public AbcMeter getActiveMeter() {
+            return activeMeter;
+        }
+
+        public Integer getActiveTempoBpm() {
+            return activeTempoBpm;
+        }
+
+        public Map<String, Integer> getMeasureAccidentals() {
+            return measureAccidentals;
+        }
+    }
+
+    public static final class AbcBarlineEntryContext {
+        private final String text;
+        private int idx;
+        private String activeEndingMarker;
+        private int currentMeasureNo;
+        private int currentMeasureLength;
+        private int measuresLength;
+        private final Map<String, Integer> measureAccidentals;
+        private boolean repeatEndMarked;
+        private boolean repeatStartMarked;
+        private boolean activeEndingStopped;
+        private int stoppedEndingMeasureNo;
+        private boolean advancedToNextMeasure;
+        private boolean measureAccidentalsCleared;
+        private boolean lastNoteCleared;
+        private boolean beamContextReset;
+        private String startedEndingMarker;
+        private int startedEndingNextIdx;
+
+        public AbcBarlineEntryContext(String text, int idx, String activeEndingMarker, int currentMeasureNo,
+                int currentMeasureLength, int measuresLength, Map<String, Integer> measureAccidentals) {
+            this.text = text == null ? "" : text;
+            this.idx = idx;
+            this.activeEndingMarker = trimToEmpty(activeEndingMarker);
+            this.currentMeasureNo = Math.max(1, currentMeasureNo);
+            this.currentMeasureLength = currentMeasureLength;
+            this.measuresLength = measuresLength;
+            this.measureAccidentals = measureAccidentals == null ? new LinkedHashMap<String, Integer>()
+                    : measureAccidentals;
+            this.startedEndingMarker = "";
+            this.startedEndingNextIdx = -1;
+        }
+
+        public void markRepeatEnd() {
+            this.repeatEndMarked = true;
+        }
+
+        public void markRepeatStart() {
+            this.repeatStartMarked = true;
+        }
+
+        public void stopActiveEndingAtMeasure(int measureNo) {
+            this.activeEndingStopped = true;
+            this.stoppedEndingMeasureNo = measureNo;
+            this.activeEndingMarker = "";
+        }
+
+        public void advanceToNextMeasure() {
+            this.advancedToNextMeasure = true;
+            this.currentMeasureNo += 1;
+            this.measuresLength += 1;
+            this.currentMeasureLength = 0;
+        }
+
+        public void clearMeasureAccidentals() {
+            this.measureAccidentals.clear();
+            this.measureAccidentalsCleared = true;
+        }
+
+        public void clearLastNote() {
+            this.lastNoteCleared = true;
+        }
+
+        public boolean startEndingAtCurrentMeasure(String marker, int nextIdx) {
+            this.startedEndingMarker = trimToEmpty(marker);
+            this.startedEndingNextIdx = nextIdx;
+            this.activeEndingMarker = this.startedEndingMarker;
+            this.idx = nextIdx;
+            resetBeamContext();
+            return true;
+        }
+
+        public void resetBeamContext() {
+            this.beamContextReset = true;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public int getIdx() {
+            return idx;
+        }
+
+        public void setIdx(int idx) {
+            this.idx = idx;
+        }
+
+        public String getActiveEndingMarker() {
+            return activeEndingMarker;
+        }
+
+        public int getCurrentMeasureNo() {
+            return currentMeasureNo;
+        }
+
+        public int getCurrentMeasureLength() {
+            return currentMeasureLength;
+        }
+
+        public int getMeasuresLength() {
+            return measuresLength;
+        }
+
+        public Map<String, Integer> getMeasureAccidentals() {
+            return measureAccidentals;
+        }
+
+        public boolean isRepeatEndMarked() {
+            return repeatEndMarked;
+        }
+
+        public boolean isRepeatStartMarked() {
+            return repeatStartMarked;
+        }
+
+        public boolean isActiveEndingStopped() {
+            return activeEndingStopped;
+        }
+
+        public int getStoppedEndingMeasureNo() {
+            return stoppedEndingMeasureNo;
+        }
+
+        public boolean isAdvancedToNextMeasure() {
+            return advancedToNextMeasure;
+        }
+
+        public boolean isMeasureAccidentalsCleared() {
+            return measureAccidentalsCleared;
+        }
+
+        public boolean isLastNoteCleared() {
+            return lastNoteCleared;
+        }
+
+        public boolean isBeamContextReset() {
+            return beamContextReset;
+        }
+
+        public String getStartedEndingMarker() {
+            return startedEndingMarker;
+        }
+
+        public int getStartedEndingNextIdx() {
+            return startedEndingNextIdx;
+        }
+    }
+
+    public interface AbcBarlineTokenHandler {
+        boolean handle(AbcParser.AbcParsedBarlineToken barlineToken);
+    }
+
+    public interface AbcBodyFieldApplier {
+        boolean apply(String fieldName, String fieldValue);
+    }
+
+    public static final class AbcNonPlayableBodyEntryContext {
+        private int idx;
+        private final List<String> warnings;
+        private final AbcBarlineTokenHandler barlineTokenHandler;
+        private final AbcBodyFieldApplier bodyFieldApplier;
+
+        public AbcNonPlayableBodyEntryContext(int idx, List<String> warnings,
+                AbcBarlineTokenHandler barlineTokenHandler, AbcBodyFieldApplier bodyFieldApplier) {
+            this.idx = idx;
+            this.warnings = warnings == null ? new ArrayList<String>() : warnings;
+            this.barlineTokenHandler = barlineTokenHandler;
+            this.bodyFieldApplier = bodyFieldApplier;
+        }
+
+        public boolean handleBarlineToken(AbcParser.AbcParsedBarlineToken barlineToken) {
+            return barlineTokenHandler != null && barlineTokenHandler.handle(barlineToken);
+        }
+
+        public boolean applyBodyField(String fieldName, String fieldValue) {
+            return bodyFieldApplier != null && bodyFieldApplier.apply(fieldName, fieldValue);
+        }
+
+        public void warnBody(String warning) {
+            warnings.add(warning);
+        }
+
+        public int getIdx() {
+            return idx;
+        }
+
+        public void setIdx(int idx) {
+            this.idx = idx;
+        }
+
+        public List<String> getWarnings() {
+            return warnings;
+        }
+    }
+
+    public interface AbcSimpleBodyTokenHandler {
+        boolean handle(AbcParser.AbcParsedBodyToken bodyToken);
+    }
+
+    public interface AbcSimpleBodyTokenCharHandler {
+        boolean handle(AbcParser.AbcParsedBodyToken bodyToken, String ch);
+    }
+
+    public static final class AbcSimpleBodyTokenHandlerContext {
+        private final String ch;
+        private final AbcSimpleBodyTokenHandler brokenRhythmBodyTokenHandler;
+        private final AbcSimpleBodyTokenCharHandler decorationBodyTokenHandler;
+        private final AbcSimpleBodyTokenHandler parenBodyTokenHandler;
+        private final AbcSimpleBodyTokenHandler quotedStringBodyTokenHandler;
+        private final AbcSimpleBodyTokenCharHandler singleCharShorthandBodyTokenHandler;
+        private final AbcSimpleBodyTokenHandler slurStopBodyTokenHandler;
+        private final AbcSimpleBodyTokenHandler tieBodyTokenHandler;
+
+        public AbcSimpleBodyTokenHandlerContext(String ch, AbcSimpleBodyTokenHandler brokenRhythmBodyTokenHandler,
+                AbcSimpleBodyTokenCharHandler decorationBodyTokenHandler,
+                AbcSimpleBodyTokenHandler parenBodyTokenHandler,
+                AbcSimpleBodyTokenHandler quotedStringBodyTokenHandler,
+                AbcSimpleBodyTokenCharHandler singleCharShorthandBodyTokenHandler,
+                AbcSimpleBodyTokenHandler slurStopBodyTokenHandler,
+                AbcSimpleBodyTokenHandler tieBodyTokenHandler) {
+            this.ch = trimToEmpty(ch);
+            this.brokenRhythmBodyTokenHandler = brokenRhythmBodyTokenHandler;
+            this.decorationBodyTokenHandler = decorationBodyTokenHandler;
+            this.parenBodyTokenHandler = parenBodyTokenHandler;
+            this.quotedStringBodyTokenHandler = quotedStringBodyTokenHandler;
+            this.singleCharShorthandBodyTokenHandler = singleCharShorthandBodyTokenHandler;
+            this.slurStopBodyTokenHandler = slurStopBodyTokenHandler;
+            this.tieBodyTokenHandler = tieBodyTokenHandler;
+        }
+
+        public String getChar() {
+            return ch;
+        }
+
+        public boolean handleBrokenRhythmBodyToken(AbcParser.AbcParsedBodyToken bodyToken) {
+            return brokenRhythmBodyTokenHandler != null && brokenRhythmBodyTokenHandler.handle(bodyToken);
+        }
+
+        public boolean handleDecorationBodyToken(AbcParser.AbcParsedBodyToken bodyToken, String ch) {
+            return decorationBodyTokenHandler != null && decorationBodyTokenHandler.handle(bodyToken, ch);
+        }
+
+        public boolean handleParenBodyToken(AbcParser.AbcParsedBodyToken bodyToken) {
+            return parenBodyTokenHandler != null && parenBodyTokenHandler.handle(bodyToken);
+        }
+
+        public boolean handleQuotedStringBodyToken(AbcParser.AbcParsedBodyToken bodyToken) {
+            return quotedStringBodyTokenHandler != null && quotedStringBodyTokenHandler.handle(bodyToken);
+        }
+
+        public boolean handleSingleCharShorthandBodyToken(AbcParser.AbcParsedBodyToken bodyToken, String ch) {
+            return singleCharShorthandBodyTokenHandler != null
+                    && singleCharShorthandBodyTokenHandler.handle(bodyToken, ch);
+        }
+
+        public boolean handleSlurStopBodyToken(AbcParser.AbcParsedBodyToken bodyToken) {
+            return slurStopBodyTokenHandler != null && slurStopBodyTokenHandler.handle(bodyToken);
+        }
+
+        public boolean handleTieBodyToken(AbcParser.AbcParsedBodyToken bodyToken) {
+            return tieBodyTokenHandler != null && tieBodyTokenHandler.handle(bodyToken);
+        }
+    }
+
+    public interface AbcBracketTokenHandler {
+        boolean handle(AbcParser.AbcParsedBracketToken bracketToken);
+    }
+
+    public interface AbcPlayableEventFallbackHandler {
+        boolean handle(AbcParser.AbcParsedPlayableEvent playableEvent, boolean fallbackToNextChar);
+    }
+
+    public static final class AbcBracketBodyTokenContext {
+        private final String text;
+        private final int idx;
+        private final AbcBracketTokenHandler inlineFieldBracketTokenHandler;
+        private final AbcBracketTokenHandler repeatEndingBracketTokenHandler;
+        private final AbcPlayableEventFallbackHandler playableEventHandler;
+
+        public AbcBracketBodyTokenContext(String text, int idx,
+                AbcBracketTokenHandler inlineFieldBracketTokenHandler,
+                AbcBracketTokenHandler repeatEndingBracketTokenHandler,
+                AbcPlayableEventFallbackHandler playableEventHandler) {
+            this.text = text == null ? "" : text;
+            this.idx = idx;
+            this.inlineFieldBracketTokenHandler = inlineFieldBracketTokenHandler;
+            this.repeatEndingBracketTokenHandler = repeatEndingBracketTokenHandler;
+            this.playableEventHandler = playableEventHandler;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public int getIdx() {
+            return idx;
+        }
+
+        public boolean handleInlineFieldBracketToken(AbcParser.AbcParsedBracketToken bracketToken) {
+            return inlineFieldBracketTokenHandler != null && inlineFieldBracketTokenHandler.handle(bracketToken);
+        }
+
+        public boolean handleRepeatEndingBracketToken(AbcParser.AbcParsedBracketToken bracketToken) {
+            return repeatEndingBracketTokenHandler != null && repeatEndingBracketTokenHandler.handle(bracketToken);
+        }
+
+        public boolean handlePlayableEvent(AbcParser.AbcParsedPlayableEvent playableEvent, boolean fallbackToNextChar) {
+            return playableEventHandler != null && playableEventHandler.handle(playableEvent, fallbackToNextChar);
+        }
+    }
+
+    public interface AbcGraceNotesAppender {
+        void append(List<AbcParser.AbcParsedGraceNote> notes);
+    }
+
+    public static final class AbcGraceGroupContext {
+        private final String text;
+        private final int idx;
+        private final String ch;
+        private final int lineNo;
+        private final List<String> warnings;
+        private final AbcGraceNotesAppender graceNotesAppender;
+
+        public AbcGraceGroupContext(String text, int idx, String ch, int lineNo, List<String> warnings,
+                AbcGraceNotesAppender graceNotesAppender) {
+            this.text = text == null ? "" : text;
+            this.idx = idx;
+            this.ch = trimToEmpty(ch);
+            this.lineNo = lineNo;
+            this.warnings = warnings == null ? new ArrayList<String>() : warnings;
+            this.graceNotesAppender = graceNotesAppender;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public int getIdx() {
+            return idx;
+        }
+
+        public String getChar() {
+            return ch;
+        }
+
+        public int getLineNo() {
+            return lineNo;
+        }
+
+        public List<String> getWarnings() {
+            return warnings;
+        }
+
+        public void warnBody(String warning) {
+            warnings.add(warning);
+        }
+
+        public void appendGraceNotes(List<AbcParser.AbcParsedGraceNote> notes) {
+            if (graceNotesAppender != null) {
+                graceNotesAppender.append(notes);
+            }
+        }
+    }
+
+    public static final class AbcGraceGroupProcessResult {
+        private final boolean handled;
+        private final int nextIdx;
+
+        public AbcGraceGroupProcessResult(boolean handled, int nextIdx) {
+            this.handled = handled;
+            this.nextIdx = nextIdx;
+        }
+
+        public boolean isHandled() {
+            return handled;
+        }
+
+        public int getNextIdx() {
+            return nextIdx;
+        }
+    }
+
+    public interface AbcCharHandler {
+        boolean handle(String ch);
+    }
+
+    public interface AbcBodyParseErrorThrower {
+        void throwError();
+    }
+
+    public static final class AbcBodyFallbackContext {
+        private final String ch;
+        private final AbcParser.AbcParsedBodyEntry bodyEntry;
+        private final AbcCharHandler closingNotationHandler;
+        private final AbcCharHandler unsupportedPunctuationHandler;
+        private final AbcBodyParseErrorThrower bodyParseErrorThrower;
+
+        public AbcBodyFallbackContext(String ch, AbcParser.AbcParsedBodyEntry bodyEntry,
+                AbcCharHandler closingNotationHandler, AbcCharHandler unsupportedPunctuationHandler,
+                AbcBodyParseErrorThrower bodyParseErrorThrower) {
+            this.ch = trimToEmpty(ch);
+            this.bodyEntry = bodyEntry;
+            this.closingNotationHandler = closingNotationHandler;
+            this.unsupportedPunctuationHandler = unsupportedPunctuationHandler;
+            this.bodyParseErrorThrower = bodyParseErrorThrower;
+        }
+
+        public String getChar() {
+            return ch;
+        }
+
+        public AbcParser.AbcParsedBodyEntry getBodyEntry() {
+            return bodyEntry;
+        }
+
+        public boolean handleClosingNotation(String ch) {
+            return closingNotationHandler != null && closingNotationHandler.handle(ch);
+        }
+
+        public boolean handleUnsupportedPunctuation(String ch) {
+            return unsupportedPunctuationHandler != null && unsupportedPunctuationHandler.handle(ch);
+        }
+
+        public void throwBodyParseError() {
+            if (bodyParseErrorThrower != null) {
+                bodyParseErrorThrower.throwError();
+                return;
+            }
+            throw new IllegalArgumentException("Failed to parse ABC body token.");
+        }
+    }
+
+    public static final class AbcPendingPlayableNoteOptions {
+        private final Boolean applySlurStart;
+        private final Boolean applyTieStop;
+        private final String trillHint;
+
+        public AbcPendingPlayableNoteOptions() {
+            this(null, null, "");
+        }
+
+        public AbcPendingPlayableNoteOptions(Boolean applySlurStart, Boolean applyTieStop, String trillHint) {
+            this.applySlurStart = applySlurStart;
+            this.applyTieStop = applyTieStop;
+            this.trillHint = trimToEmpty(trillHint);
+        }
+
+        public Boolean getApplySlurStart() {
+            return applySlurStart;
+        }
+
+        public Boolean getApplyTieStop() {
+            return applyTieStop;
+        }
+
+        public String getTrillHint() {
+            return trillHint;
+        }
+    }
+
+    public interface AbcPendingOrnamentStateApplier {
+        void apply(AbcMeasureNote note, boolean applySlurStart, String trillHint);
+    }
+
+    public interface AbcPendingNoteApplier {
+        void apply(AbcMeasureNote note);
+    }
+
+    public interface AbcPendingTieChecker {
+        boolean hasPending();
+    }
+
+    public interface AbcPendingClearer {
+        void clear();
+    }
+
+    public interface AbcBodyWarner {
+        void warn(String message);
+    }
+
+    public static final class AbcPendingPlayableNoteContext {
+        private final AbcMeasureNote note;
+        private final AbcPendingPlayableNoteOptions options;
+        private final AbcPendingOrnamentStateApplier pendingOrnamentStateApplier;
+        private final AbcPendingNoteApplier pendingArticulationStateApplier;
+        private final AbcPendingNoteApplier pendingDirectionStateApplier;
+        private final AbcPendingNoteApplier pendingTechnicalStateApplier;
+        private final AbcPendingTieChecker pendingTieChecker;
+        private final AbcPendingClearer pendingTieClearer;
+        private final AbcBodyWarner bodyWarner;
+
+        public AbcPendingPlayableNoteContext(AbcMeasureNote note, AbcPendingPlayableNoteOptions options,
+                AbcPendingOrnamentStateApplier pendingOrnamentStateApplier,
+                AbcPendingNoteApplier pendingArticulationStateApplier,
+                AbcPendingNoteApplier pendingDirectionStateApplier,
+                AbcPendingNoteApplier pendingTechnicalStateApplier, AbcPendingTieChecker pendingTieChecker,
+                AbcPendingClearer pendingTieClearer, AbcBodyWarner bodyWarner) {
+            this.note = note;
+            this.options = options;
+            this.pendingOrnamentStateApplier = pendingOrnamentStateApplier;
+            this.pendingArticulationStateApplier = pendingArticulationStateApplier;
+            this.pendingDirectionStateApplier = pendingDirectionStateApplier;
+            this.pendingTechnicalStateApplier = pendingTechnicalStateApplier;
+            this.pendingTieChecker = pendingTieChecker;
+            this.pendingTieClearer = pendingTieClearer;
+            this.bodyWarner = bodyWarner;
+        }
+
+        public AbcMeasureNote getNote() {
+            return note;
+        }
+
+        public AbcPendingPlayableNoteOptions getOptions() {
+            return options;
+        }
+
+        public void applyPendingOrnamentState(AbcMeasureNote note, boolean applySlurStart, String trillHint) {
+            if (pendingOrnamentStateApplier != null) {
+                pendingOrnamentStateApplier.apply(note, applySlurStart, trillHint);
+            }
+        }
+
+        public void applyPendingArticulationState(AbcMeasureNote note) {
+            if (pendingArticulationStateApplier != null) {
+                pendingArticulationStateApplier.apply(note);
+            }
+        }
+
+        public void applyPendingDirectionState(AbcMeasureNote note) {
+            if (pendingDirectionStateApplier != null) {
+                pendingDirectionStateApplier.apply(note);
+            }
+        }
+
+        public void applyPendingTechnicalState(AbcMeasureNote note) {
+            if (pendingTechnicalStateApplier != null) {
+                pendingTechnicalStateApplier.apply(note);
+            }
+        }
+
+        public boolean hasPendingTieToNext() {
+            return pendingTieChecker != null && pendingTieChecker.hasPending();
+        }
+
+        public void clearPendingTieToNext() {
+            if (pendingTieClearer != null) {
+                pendingTieClearer.clear();
+            }
+        }
+
+        public void warnBody(String message) {
+            if (bodyWarner != null) {
+                bodyWarner.warn(message);
+            }
+        }
+    }
+
+    public interface AbcPendingValueApplier {
+        void apply();
+    }
+
+    public static final class AbcPendingNoteValueContext {
+        private final AbcMeasureNote note;
+        private final boolean pending;
+        private final AbcPendingValueApplier applier;
+        private final AbcPendingClearer clearer;
+
+        public AbcPendingNoteValueContext(AbcMeasureNote note, boolean pending, AbcPendingValueApplier applier,
+                AbcPendingClearer clearer) {
+            this.note = note;
+            this.pending = pending;
+            this.applier = applier;
+            this.clearer = clearer;
+        }
+
+        public AbcMeasureNote getNote() {
+            return note;
+        }
+
+        public boolean isPending() {
+            return pending;
+        }
+
+        public void apply() {
+            if (applier != null) {
+                applier.apply();
+            }
+        }
+
+        public void clear() {
+            if (clearer != null) {
+                clearer.clear();
+            }
+        }
+    }
+
+    public interface AbcPendingValueEmptyChecker {
+        boolean isEmpty(Object value);
+    }
+
+    public interface AbcPendingOptionalValueApplier {
+        void apply(Object value);
+    }
+
+    public static final class AbcPendingNoteOptionalValueContext {
+        private final AbcMeasureNote note;
+        private final Object value;
+        private final AbcPendingValueEmptyChecker emptyChecker;
+        private final AbcPendingOptionalValueApplier applier;
+        private final AbcPendingClearer clearer;
+
+        public AbcPendingNoteOptionalValueContext(AbcMeasureNote note, Object value,
+                AbcPendingValueEmptyChecker emptyChecker, AbcPendingOptionalValueApplier applier,
+                AbcPendingClearer clearer) {
+            this.note = note;
+            this.value = value;
+            this.emptyChecker = emptyChecker;
+            this.applier = applier;
+            this.clearer = clearer;
+        }
+
+        public AbcMeasureNote getNote() {
+            return note;
+        }
+
+        public Object getValue() {
+            return value;
+        }
+
+        public boolean isEmpty(Object value) {
+            return emptyChecker != null ? emptyChecker.isEmpty(value) : value == null;
+        }
+
+        public void apply(Object value) {
+            if (applier != null) {
+                applier.apply(value);
+            }
+        }
+
+        public void clear() {
+            if (clearer != null) {
+                clearer.clear();
+            }
+        }
+    }
+
+    public interface AbcPendingArrayValueApplier {
+        void apply(List<?> values);
+    }
+
+    public static final class AbcPendingNoteArrayContext {
+        private final AbcMeasureNote note;
+        private final List<?> values;
+        private final AbcPendingArrayValueApplier applier;
+        private final AbcPendingClearer clearer;
+
+        public AbcPendingNoteArrayContext(AbcMeasureNote note, List<?> values, AbcPendingArrayValueApplier applier,
+                AbcPendingClearer clearer) {
+            this.note = note;
+            this.values = values == null ? new ArrayList<Object>() : values;
+            this.applier = applier;
+            this.clearer = clearer;
+        }
+
+        public AbcMeasureNote getNote() {
+            return note;
+        }
+
+        public List<?> getValues() {
+            return values;
+        }
+
+        public void apply(List<?> values) {
+            if (applier != null) {
+                applier.apply(values);
+            }
+        }
+
+        public void clear() {
+            if (clearer != null) {
+                clearer.clear();
+            }
         }
     }
 
@@ -3598,6 +6233,260 @@ public final class AbcIo {
 
         public String getDecoration() {
             return decoration;
+        }
+    }
+
+    public static final class AbcMusicXmlLaneDef {
+        private final String staff;
+        private final String voice;
+        private final String voiceId;
+        private final String normalizedVoiceId;
+        private final String laneName;
+        private final String clef;
+
+        public AbcMusicXmlLaneDef(String staff, String voice, String voiceId, String normalizedVoiceId, String laneName,
+                String clef) {
+            this.staff = staff == null ? null : trimToEmpty(staff);
+            this.voice = voice == null ? null : trimToEmpty(voice);
+            this.voiceId = trimToEmpty(voiceId);
+            this.normalizedVoiceId = trimToEmpty(normalizedVoiceId);
+            this.laneName = trimToEmpty(laneName);
+            this.clef = trimToEmpty(clef);
+        }
+
+        public String getStaff() {
+            return staff;
+        }
+
+        public String getVoice() {
+            return voice;
+        }
+
+        public String getVoiceId() {
+            return voiceId;
+        }
+
+        public String getNormalizedVoiceId() {
+            return normalizedVoiceId;
+        }
+
+        public String getLaneName() {
+            return laneName;
+        }
+
+        public String getClef() {
+            return clef;
+        }
+    }
+
+    public static final class AbcMusicXmlMeasureState {
+        private final double divisions;
+        private final int fifths;
+        private final double beats;
+        private final double beatType;
+        private final boolean needsInlineKeyChange;
+        private final Map<String, Integer> keyAlterByStep;
+        private final Map<String, Integer> measureAccidentalByStepOctave;
+
+        public AbcMusicXmlMeasureState(double divisions, int fifths, double beats, double beatType,
+                boolean needsInlineKeyChange, Map<String, Integer> keyAlterByStep,
+                Map<String, Integer> measureAccidentalByStepOctave) {
+            this.divisions = divisions;
+            this.fifths = fifths;
+            this.beats = beats;
+            this.beatType = beatType;
+            this.needsInlineKeyChange = needsInlineKeyChange;
+            this.keyAlterByStep = keyAlterByStep == null ? new LinkedHashMap<String, Integer>() : keyAlterByStep;
+            this.measureAccidentalByStepOctave = measureAccidentalByStepOctave == null
+                    ? new LinkedHashMap<String, Integer>()
+                    : measureAccidentalByStepOctave;
+        }
+
+        public double getDivisions() {
+            return divisions;
+        }
+
+        public int getFifths() {
+            return fifths;
+        }
+
+        public double getBeats() {
+            return beats;
+        }
+
+        public double getBeatType() {
+            return beatType;
+        }
+
+        public boolean isNeedsInlineKeyChange() {
+            return needsInlineKeyChange;
+        }
+
+        public Map<String, Integer> getKeyAlterByStep() {
+            return keyAlterByStep;
+        }
+
+        public Map<String, Integer> getMeasureAccidentalByStepOctave() {
+            return measureAccidentalByStepOctave;
+        }
+    }
+
+    public static final class AbcMusicXmlDirectionTokens {
+        private final List<String> words;
+        private final List<String> decorations;
+        private final String activeWedgeType;
+
+        public AbcMusicXmlDirectionTokens(List<String> words, List<String> decorations, String activeWedgeType) {
+            this.words = words == null ? new ArrayList<String>() : words;
+            this.decorations = decorations == null ? new ArrayList<String>() : decorations;
+            this.activeWedgeType = trimToEmpty(activeWedgeType);
+        }
+
+        public List<String> getWords() {
+            return words;
+        }
+
+        public List<String> getDecorations() {
+            return decorations;
+        }
+
+        public String getActiveWedgeType() {
+            return activeWedgeType;
+        }
+    }
+
+    public static final class AbcMusicXmlNoteTiming {
+        private final boolean chord;
+        private final boolean grace;
+        private final int duration;
+        private final boolean playable;
+
+        public AbcMusicXmlNoteTiming(boolean chord, boolean grace, int duration, boolean playable) {
+            this.chord = chord;
+            this.grace = grace;
+            this.duration = duration;
+            this.playable = playable;
+        }
+
+        public boolean isChord() {
+            return chord;
+        }
+
+        public boolean isGrace() {
+            return grace;
+        }
+
+        public int getDuration() {
+            return duration;
+        }
+
+        public boolean isPlayable() {
+            return playable;
+        }
+    }
+
+    public static final class AbcMusicXmlNoteOrnaments {
+        private final boolean trill;
+        private final boolean wavyLineStop;
+        private final String trillAccidentalText;
+        private final String turnType;
+        private final boolean turnSlash;
+        private final boolean delayedTurn;
+        private final String mordentType;
+        private final String tremoloType;
+        private final Integer tremoloMarks;
+        private final boolean glissandoStart;
+        private final boolean glissandoStop;
+        private final boolean slideStart;
+        private final boolean slideStop;
+        private final boolean schleifer;
+        private final boolean shake;
+        private final boolean arpeggiate;
+
+        public AbcMusicXmlNoteOrnaments(boolean trill, boolean wavyLineStop, String trillAccidentalText,
+                String turnType, boolean turnSlash, boolean delayedTurn, String mordentType, String tremoloType,
+                Integer tremoloMarks, boolean glissandoStart, boolean glissandoStop, boolean slideStart,
+                boolean slideStop, boolean schleifer, boolean shake, boolean arpeggiate) {
+            this.trill = trill;
+            this.wavyLineStop = wavyLineStop;
+            this.trillAccidentalText = trimToEmpty(trillAccidentalText);
+            this.turnType = trimToEmpty(turnType);
+            this.turnSlash = turnSlash;
+            this.delayedTurn = delayedTurn;
+            this.mordentType = trimToEmpty(mordentType);
+            this.tremoloType = trimToEmpty(tremoloType);
+            this.tremoloMarks = tremoloMarks;
+            this.glissandoStart = glissandoStart;
+            this.glissandoStop = glissandoStop;
+            this.slideStart = slideStart;
+            this.slideStop = slideStop;
+            this.schleifer = schleifer;
+            this.shake = shake;
+            this.arpeggiate = arpeggiate;
+        }
+
+        public boolean isTrill() {
+            return trill;
+        }
+
+        public boolean isWavyLineStop() {
+            return wavyLineStop;
+        }
+
+        public String getTrillAccidentalText() {
+            return trillAccidentalText;
+        }
+
+        public String getTurnType() {
+            return turnType;
+        }
+
+        public boolean isTurnSlash() {
+            return turnSlash;
+        }
+
+        public boolean isDelayedTurn() {
+            return delayedTurn;
+        }
+
+        public String getMordentType() {
+            return mordentType;
+        }
+
+        public String getTremoloType() {
+            return tremoloType;
+        }
+
+        public Integer getTremoloMarks() {
+            return tremoloMarks;
+        }
+
+        public boolean isGlissandoStart() {
+            return glissandoStart;
+        }
+
+        public boolean isGlissandoStop() {
+            return glissandoStop;
+        }
+
+        public boolean isSlideStart() {
+            return slideStart;
+        }
+
+        public boolean isSlideStop() {
+            return slideStop;
+        }
+
+        public boolean isSchleifer() {
+            return schleifer;
+        }
+
+        public boolean isShake() {
+            return shake;
+        }
+
+        public boolean isArpeggiate() {
+            return arpeggiate;
         }
     }
 
