@@ -1391,9 +1391,183 @@ public final class AbcIo {
                 || "stop".equals(tremoloTypeRaw) ? tremoloTypeRaw : "";
         int tremoloMarks = Math.max(1, Math.min(8, parseInt(elementText(tremoloNode), 0)));
         String trillAccidentalText = directChildText(ornaments, "accidental-mark").trim();
-        return new AbcMusicXmlNoteOrnaments(hasTrill, hasWavyLineStop, trillAccidentalText, turnType, hasTurnSlash,
-                hasDelayedTurn, mordentType, tremoloType, Integer.valueOf(tremoloMarks), hasGlissandoStart,
+        return new AbcMusicXmlNoteOrnaments(hasTrill, hasWavyLineStart, hasWavyLineStop, trillAccidentalText, turnType,
+                hasTurnSlash, hasDelayedTurn, mordentType, tremoloType, Integer.valueOf(tremoloMarks), hasGlissandoStart,
                 hasGlissandoStop, hasSlideStart, hasSlideStop, hasSchleifer, hasShake, hasArpeggiate);
+    }
+
+    public static AbcMusicXmlPitchToken resolveMusicXmlNotePitchToken(Element note, Map<String, Integer> keyAlterByStep,
+            Map<String, Integer> measureAccidentalByStepOctave) {
+        Map<String, Integer> safeMeasureAccidentals = measureAccidentalByStepOctave == null
+                ? new LinkedHashMap<String, Integer>()
+                : measureAccidentalByStepOctave;
+        if (directChild(note, "rest") != null) {
+            return new AbcMusicXmlPitchToken("z", safeMeasureAccidentals, false, false, "", 0);
+        }
+        Element pitch = directChild(note, "pitch");
+        String step = directChildText(pitch, "step").trim();
+        String upperStep = step.toUpperCase().matches("^[A-G]$") ? step.toUpperCase() : "C";
+        double octaveRaw = parseDouble(directChildText(pitch, "octave"), 4);
+        int safeOctave = Double.isFinite(octaveRaw) ? Math.max(0, Math.min(9, (int) Math.round(octaveRaw))) : 4;
+        String stepOctaveKey = upperStep + safeOctave;
+        String alterRaw = directChildText(pitch, "alter").trim();
+        Integer explicitAlter = alterRaw.length() > 0 && Double.isFinite(parseDouble(alterRaw, Double.NaN))
+                ? Integer.valueOf((int) Math.round(parseDouble(alterRaw, 0)))
+                : null;
+        Element accidentalNode = directChild(note, "accidental");
+        String accidentalText = elementText(accidentalNode);
+        Integer accidentalAlter = accidentalTextToAlter(accidentalText);
+        boolean accidentalEditorial = "yes".equals(trimToEmpty(accidentalNode == null ? ""
+                : accidentalNode.getAttribute("editorial")).toLowerCase());
+        boolean accidentalCautionary = "yes".equals(trimToEmpty(accidentalNode == null ? ""
+                : accidentalNode.getAttribute("cautionary")).toLowerCase());
+        Integer keyAlterValue = keyAlterByStep == null ? null : keyAlterByStep.get(upperStep);
+        int keyAlter = keyAlterValue == null ? 0 : keyAlterValue.intValue();
+        Integer currentAlterValue = safeMeasureAccidentals.containsKey(stepOctaveKey)
+                ? safeMeasureAccidentals.get(stepOctaveKey)
+                : Integer.valueOf(keyAlter);
+        int currentAlter = currentAlterValue == null ? 0 : currentAlterValue.intValue();
+        int targetAlter = explicitAlter == null ? 0 : explicitAlter.intValue();
+        if (accidentalAlter != null) {
+            targetAlter = accidentalAlter.intValue();
+        }
+        boolean shouldEmitAccidental = targetAlter != currentAlter
+                || (accidentalAlter != null && accidentalAlter.intValue() != 0);
+        String accidental = shouldEmitAccidental ? (targetAlter == 0 ? "=" : accidentalFromAlter(targetAlter)) : "";
+        safeMeasureAccidentals.put(stepOctaveKey, Integer.valueOf(targetAlter));
+        String token = accidental + abcPitchFromStepOctave(upperStep, safeOctave);
+        if (accidentalEditorial && accidental.length() > 0) {
+            token = "!editorial!" + token;
+        }
+        if (accidentalCautionary && accidental.length() > 0) {
+            token = "!courtesy!" + token;
+        }
+        return new AbcMusicXmlPitchToken(token, safeMeasureAccidentals, accidentalEditorial, accidentalCautionary,
+                stepOctaveKey, targetAlter);
+    }
+
+    public static String buildMusicXmlNoteOrnamentPrefix(AbcMusicXmlNoteOrnaments ornaments) {
+        if (ornaments == null) {
+            return "";
+        }
+        String trillPrefix = ornaments.isWavyLineStop() ? "!trill)!"
+                : (ornaments.isTrill() && ornaments.isWavyLineStart()
+                        ? "!trill(!"
+                        : (ornaments.isTrill() ? "!trill!" : ""));
+        String turnPrefix;
+        if ("inverted-turn".equals(ornaments.getTurnType())) {
+            turnPrefix = ornaments.isDelayedTurn() ? "!delayedinvertedturn!"
+                    : (ornaments.isTurnSlash() ? "!invertedturnx!" : "!invertedturn!");
+        } else if ("turn".equals(ornaments.getTurnType())) {
+            turnPrefix = ornaments.isDelayedTurn() ? "!delayedturn!"
+                    : (ornaments.isTurnSlash() ? "!turnx!" : "!turn!");
+        } else {
+            turnPrefix = "";
+        }
+        String mordentPrefix = "inverted-mordent".equals(ornaments.getMordentType()) ? "!pralltriller!"
+                : ("mordent".equals(ornaments.getMordentType()) ? "!mordent!" : "");
+        String tremoloPrefix = trimToEmpty(ornaments.getTremoloType()).length() > 0
+                ? "!tremolo-" + ornaments.getTremoloType() + "-" + Math.max(1,
+                        Math.min(8, ornaments.getTremoloMarks() == null ? 1 : ornaments.getTremoloMarks().intValue()))
+                        + "!"
+                : "";
+        String glissandoPrefix = ornaments.isGlissandoStart() ? "!gliss-start!"
+                : (ornaments.isGlissandoStop() ? "!gliss-stop!" : "");
+        String slidePrefix = ornaments.isSlideStart() ? "!slide!" : (ornaments.isSlideStop() ? "!slide-stop!" : "");
+        return trillPrefix + turnPrefix + mordentPrefix + tremoloPrefix + glissandoPrefix + slidePrefix
+                + (ornaments.isSchleifer() ? "!schleifer!" : "")
+                + (ornaments.isShake() ? "!shake!" : "")
+                + (ornaments.isArpeggiate() ? "!arpeggio!" : "");
+    }
+
+    public static AbcMusicXmlNoteArticulations collectMusicXmlNoteArticulations(Element note) {
+        Element notations = directChild(note, "notations");
+        Element articulations = directChild(notations, "articulations");
+        String phraseMarkText = "";
+        for (Element other : directChildren(articulations, "other-articulation")) {
+            String text = elementText(other).toLowerCase();
+            if ("shortphrase".equals(text) || "mediumphrase".equals(text) || "longphrase".equals(text)) {
+                phraseMarkText = text;
+                break;
+            }
+        }
+        return new AbcMusicXmlNoteArticulations(
+                directChild(articulations, "staccato") != null,
+                directChild(articulations, "staccatissimo") != null,
+                directChild(articulations, "accent") != null,
+                directChild(articulations, "tenuto") != null,
+                directChild(articulations, "stress") != null,
+                directChild(articulations, "unstress") != null,
+                directChild(articulations, "strong-accent") != null,
+                directChild(articulations, "breath-mark") != null,
+                directChild(articulations, "caesura") != null,
+                phraseMarkText);
+    }
+
+    public static String buildMusicXmlNoteArticulationPrefix(AbcMusicXmlNoteArticulations articulations) {
+        if (articulations == null) {
+            return "";
+        }
+        String phraseMark = articulations.getPhraseMarkText();
+        String phraseMarkPrefix = "shortphrase".equals(phraseMark) || "mediumphrase".equals(phraseMark)
+                || "longphrase".equals(phraseMark) ? "!" + phraseMark + "!" : "";
+        return (articulations.isStaccatissimo() ? "!wedge!" : (articulations.isStaccato() ? "!staccato!" : ""))
+                + (articulations.isAccent() ? "!accent!" : "")
+                + (articulations.isTenuto() ? "!tenuto!" : "")
+                + (articulations.isStress() ? "!stress!" : "")
+                + (articulations.isUnstress() ? "!unstress!" : "")
+                + (articulations.isStrongAccent() ? "!marcato!" : "")
+                + (articulations.isBreathMark() ? "!breath!" : "")
+                + (articulations.isCaesura() ? "!caesura!" : "")
+                + phraseMarkPrefix;
+    }
+
+    public static AbcMusicXmlNoteTechnical collectMusicXmlNoteTechnical(Element note) {
+        Element technical = directChild(directChild(note, "notations"), "technical");
+        return new AbcMusicXmlNoteTechnical(
+                directChild(technical, "up-bow") != null,
+                directChild(technical, "down-bow") != null,
+                directChild(technical, "double-tongue") != null,
+                directChild(technical, "triple-tongue") != null,
+                directChild(technical, "heel") != null,
+                directChild(technical, "toe") != null,
+                directChildTexts(technical, "fingering"),
+                directChildTexts(technical, "string"),
+                directChildTexts(technical, "pluck"),
+                directChild(technical, "open-string") != null,
+                directChild(technical, "snap-pizzicato") != null,
+                directChild(technical, "harmonic") != null,
+                directChild(technical, "stopped") != null,
+                directChild(technical, "thumb-position") != null);
+    }
+
+    public static String buildMusicXmlNoteTechnicalPrefix(AbcMusicXmlNoteTechnical technical) {
+        if (technical == null) {
+            return "";
+        }
+        StringBuilder prefix = new StringBuilder();
+        prefix.append(technical.isUpBow() ? "!upbow!" : "");
+        prefix.append(technical.isDownBow() ? "!downbow!" : "");
+        prefix.append(technical.isDoubleTongue() ? "!doubletongue!" : "");
+        prefix.append(technical.isTripleTongue() ? "!tripletongue!" : "");
+        prefix.append(technical.isHeel() ? "!heel!" : "");
+        prefix.append(technical.isToe() ? "!toe!" : "");
+        for (String value : technical.getFingerings()) {
+            prefix.append(trimToEmpty(value).matches("^[0-5]$") ? "!" + trimToEmpty(value) + "!"
+                    : "!fingering:" + trimToEmpty(value) + "!");
+        }
+        for (String value : technical.getStrings()) {
+            prefix.append("!string:").append(trimToEmpty(value)).append("!");
+        }
+        for (String value : technical.getPlucks()) {
+            prefix.append("!pluck:").append(trimToEmpty(value)).append("!");
+        }
+        prefix.append(technical.isOpenString() ? "!open!" : "");
+        prefix.append(technical.isSnapPizzicato() ? "!snap!" : "");
+        prefix.append(technical.isHarmonic() ? "!harmonic!" : "");
+        prefix.append(technical.isStopped() ? "!stopped!" : "");
+        prefix.append(technical.isThumbPosition() ? "!thumb!" : "");
+        return prefix.toString();
     }
 
     public static Integer accidentalTextToAlter(String text) {
@@ -3220,6 +3394,17 @@ public final class AbcIo {
 
     private static String directChildText(Element parent, String tagName) {
         return elementText(directChild(parent, tagName));
+    }
+
+    private static List<String> directChildTexts(Element parent, String tagName) {
+        List<String> values = new ArrayList<String>();
+        for (Element child : directChildren(parent, tagName)) {
+            String text = elementText(child);
+            if (text.length() > 0) {
+                values.add(text);
+            }
+        }
+        return values;
     }
 
     private static String elementText(Element element) {
@@ -6387,6 +6572,7 @@ public final class AbcIo {
 
     public static final class AbcMusicXmlNoteOrnaments {
         private final boolean trill;
+        private final boolean wavyLineStart;
         private final boolean wavyLineStop;
         private final String trillAccidentalText;
         private final String turnType;
@@ -6403,11 +6589,12 @@ public final class AbcIo {
         private final boolean shake;
         private final boolean arpeggiate;
 
-        public AbcMusicXmlNoteOrnaments(boolean trill, boolean wavyLineStop, String trillAccidentalText,
-                String turnType, boolean turnSlash, boolean delayedTurn, String mordentType, String tremoloType,
-                Integer tremoloMarks, boolean glissandoStart, boolean glissandoStop, boolean slideStart,
+        public AbcMusicXmlNoteOrnaments(boolean trill, boolean wavyLineStart, boolean wavyLineStop,
+                String trillAccidentalText, String turnType, boolean turnSlash, boolean delayedTurn,
+                String mordentType, String tremoloType, Integer tremoloMarks, boolean glissandoStart, boolean glissandoStop, boolean slideStart,
                 boolean slideStop, boolean schleifer, boolean shake, boolean arpeggiate) {
             this.trill = trill;
+            this.wavyLineStart = wavyLineStart;
             this.wavyLineStop = wavyLineStop;
             this.trillAccidentalText = trimToEmpty(trillAccidentalText);
             this.turnType = trimToEmpty(turnType);
@@ -6427,6 +6614,10 @@ public final class AbcIo {
 
         public boolean isTrill() {
             return trill;
+        }
+
+        public boolean isWavyLineStart() {
+            return wavyLineStart;
         }
 
         public boolean isWavyLineStop() {
@@ -6487,6 +6678,211 @@ public final class AbcIo {
 
         public boolean isArpeggiate() {
             return arpeggiate;
+        }
+    }
+
+    public static final class AbcMusicXmlPitchToken {
+        private final String token;
+        private final Map<String, Integer> measureAccidentalByStepOctave;
+        private final boolean accidentalEditorial;
+        private final boolean accidentalCautionary;
+        private final String stepOctaveKey;
+        private final int targetAlter;
+
+        public AbcMusicXmlPitchToken(String token, Map<String, Integer> measureAccidentalByStepOctave,
+                boolean accidentalEditorial, boolean accidentalCautionary, String stepOctaveKey, int targetAlter) {
+            this.token = trimToEmpty(token);
+            this.measureAccidentalByStepOctave = measureAccidentalByStepOctave == null
+                    ? new LinkedHashMap<String, Integer>()
+                    : measureAccidentalByStepOctave;
+            this.accidentalEditorial = accidentalEditorial;
+            this.accidentalCautionary = accidentalCautionary;
+            this.stepOctaveKey = trimToEmpty(stepOctaveKey);
+            this.targetAlter = targetAlter;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public Map<String, Integer> getMeasureAccidentalByStepOctave() {
+            return measureAccidentalByStepOctave;
+        }
+
+        public boolean isAccidentalEditorial() {
+            return accidentalEditorial;
+        }
+
+        public boolean isAccidentalCautionary() {
+            return accidentalCautionary;
+        }
+
+        public String getStepOctaveKey() {
+            return stepOctaveKey;
+        }
+
+        public int getTargetAlter() {
+            return targetAlter;
+        }
+    }
+
+    public static final class AbcMusicXmlNoteArticulations {
+        private final boolean staccato;
+        private final boolean staccatissimo;
+        private final boolean accent;
+        private final boolean tenuto;
+        private final boolean stress;
+        private final boolean unstress;
+        private final boolean strongAccent;
+        private final boolean breathMark;
+        private final boolean caesura;
+        private final String phraseMarkText;
+
+        public AbcMusicXmlNoteArticulations(boolean staccato, boolean staccatissimo, boolean accent, boolean tenuto,
+                boolean stress, boolean unstress, boolean strongAccent, boolean breathMark, boolean caesura,
+                String phraseMarkText) {
+            this.staccato = staccato;
+            this.staccatissimo = staccatissimo;
+            this.accent = accent;
+            this.tenuto = tenuto;
+            this.stress = stress;
+            this.unstress = unstress;
+            this.strongAccent = strongAccent;
+            this.breathMark = breathMark;
+            this.caesura = caesura;
+            this.phraseMarkText = trimToEmpty(phraseMarkText);
+        }
+
+        public boolean isStaccato() {
+            return staccato;
+        }
+
+        public boolean isStaccatissimo() {
+            return staccatissimo;
+        }
+
+        public boolean isAccent() {
+            return accent;
+        }
+
+        public boolean isTenuto() {
+            return tenuto;
+        }
+
+        public boolean isStress() {
+            return stress;
+        }
+
+        public boolean isUnstress() {
+            return unstress;
+        }
+
+        public boolean isStrongAccent() {
+            return strongAccent;
+        }
+
+        public boolean isBreathMark() {
+            return breathMark;
+        }
+
+        public boolean isCaesura() {
+            return caesura;
+        }
+
+        public String getPhraseMarkText() {
+            return phraseMarkText;
+        }
+    }
+
+    public static final class AbcMusicXmlNoteTechnical {
+        private final boolean upBow;
+        private final boolean downBow;
+        private final boolean doubleTongue;
+        private final boolean tripleTongue;
+        private final boolean heel;
+        private final boolean toe;
+        private final List<String> fingerings;
+        private final List<String> strings;
+        private final List<String> plucks;
+        private final boolean openString;
+        private final boolean snapPizzicato;
+        private final boolean harmonic;
+        private final boolean stopped;
+        private final boolean thumbPosition;
+
+        public AbcMusicXmlNoteTechnical(boolean upBow, boolean downBow, boolean doubleTongue, boolean tripleTongue,
+                boolean heel, boolean toe, List<String> fingerings, List<String> strings, List<String> plucks,
+                boolean openString, boolean snapPizzicato, boolean harmonic, boolean stopped, boolean thumbPosition) {
+            this.upBow = upBow;
+            this.downBow = downBow;
+            this.doubleTongue = doubleTongue;
+            this.tripleTongue = tripleTongue;
+            this.heel = heel;
+            this.toe = toe;
+            this.fingerings = fingerings == null ? new ArrayList<String>() : fingerings;
+            this.strings = strings == null ? new ArrayList<String>() : strings;
+            this.plucks = plucks == null ? new ArrayList<String>() : plucks;
+            this.openString = openString;
+            this.snapPizzicato = snapPizzicato;
+            this.harmonic = harmonic;
+            this.stopped = stopped;
+            this.thumbPosition = thumbPosition;
+        }
+
+        public boolean isUpBow() {
+            return upBow;
+        }
+
+        public boolean isDownBow() {
+            return downBow;
+        }
+
+        public boolean isDoubleTongue() {
+            return doubleTongue;
+        }
+
+        public boolean isTripleTongue() {
+            return tripleTongue;
+        }
+
+        public boolean isHeel() {
+            return heel;
+        }
+
+        public boolean isToe() {
+            return toe;
+        }
+
+        public List<String> getFingerings() {
+            return fingerings;
+        }
+
+        public List<String> getStrings() {
+            return strings;
+        }
+
+        public List<String> getPlucks() {
+            return plucks;
+        }
+
+        public boolean isOpenString() {
+            return openString;
+        }
+
+        public boolean isSnapPizzicato() {
+            return snapPizzicato;
+        }
+
+        public boolean isHarmonic() {
+            return harmonic;
+        }
+
+        public boolean isStopped() {
+            return stopped;
+        }
+
+        public boolean isThumbPosition() {
+            return thumbPosition;
         }
     }
 
