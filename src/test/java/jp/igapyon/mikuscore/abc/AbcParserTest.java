@@ -101,6 +101,13 @@ public class AbcParserTest {
         assertEquals(false, barline.isRepeatStart());
         assertEquals(true, barline.isEndingStop());
 
+        AbcParser.AbcParsedBarlineToken endingStop = AbcParser.parseAbcBarlineTokenAt("]| next", 0);
+        assertEquals(2, endingStop.getNextIdx());
+        assertEquals(true, endingStop.isEndsMeasure());
+        assertEquals(false, endingStop.isRepeatEnd());
+        assertEquals(false, endingStop.isRepeatStart());
+        assertEquals(true, endingStop.isEndingStop());
+
         AbcParser.AbcParsedBarlineToken doubleRepeat = AbcParser.parseAbcBarlineTokenAt(":: next", 0);
         assertEquals(2, doubleRepeat.getNextIdx());
         assertEquals(true, doubleRepeat.isRepeatEnd());

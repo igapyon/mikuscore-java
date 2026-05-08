@@ -4,12 +4,12 @@ This document records upstream-following questions, parity gaps, and conversion 
 
 ## Open Items
 
-### `change_duration` timing parity
+### `change_duration` remaining timing parity
 
-- Status: open
+- Status: open, narrowed 2026-05-09
 - Area: `core/ScoreCore.ts`, `core/timeIndex.ts`, `core/xmlUtils.ts`
 - Upstream reference: `change_duration` dispatch path in `ScoreCore.ts`
-- Note: Java currently migrates payload/target validation, `<duration>` mutation, simple notation metadata sync, and overfull validation. Underfull handling and nearby rest consume/fill behavior still require later timing work.
+- Note: Java migrates payload/target validation, `<duration>` mutation, simple notation metadata sync, triplet duration rejection without tuplet context, overfull validation, following/preceding rest consumption for duration expansion, and trailing rest fill for shortened durations. Remaining parity work is deeper timing-warning behavior around complex voice lanes.
 
 ### `insert_note_after` timing parity
 
@@ -20,10 +20,10 @@ This document records upstream-following questions, parity gaps, and conversion 
 
 ### `split_note` timing parity
 
-- Status: open
+- Status: open, narrowed 2026-05-09
 - Area: `core/ScoreCore.ts`, `core/timeIndex.ts`
 - Upstream reference: `split_note` dispatch path in `ScoreCore.ts`
-- Note: Java currently migrates even-duration validation, clone-based adjacent split, and forward-boundary rejection. Upstream timing revalidation still requires later `timeIndex` work.
+- Note: Java currently migrates even-duration validation, clone-based adjacent split, forward-boundary rejection, and the overfull timing revalidation subset that rejects an already-overfull edited lane. Remaining parity work is the deeper post-split lane-timing invariant / restore behavior around complex backup-forward layouts.
 
 ### SVG render runtime
 
@@ -33,6 +33,13 @@ This document records upstream-following questions, parity gaps, and conversion 
 - Note: Upstream `renderMusicXmlDomToSvg` depends on `window.verovio`, `verovio.js` runtime initialization, and browser DOM serialization. Java direct conversion is therefore not part of the current initial slice. Keep Java `render svg` unsupported until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen.
 
 ## Closed Items
+
+### ABC trill accidental metadata roundtrip
+
+- Status: closed for current Java ABC conversion slice
+- Area: `src/ts/abc-io.ts`
+- Upstream reference: `MusicXML->ABC stores trill accidental-mark in mikuscore comment and restores it`
+- Note: Java now emits `%@mks trill ... upper=...` from MusicXML `ornaments/accidental-mark` and applies the meta hint back to the imported ABC playable event during MusicXML export.
 
 ### VSQX conversion bridge
 
