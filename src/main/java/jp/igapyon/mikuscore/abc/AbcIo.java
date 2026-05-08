@@ -2447,6 +2447,989 @@ public final class AbcIo {
         return buildMusicXmlFromAbcParsed(parsed, abcSource, options, null);
     }
 
+    public static AbcParsedResult parseForMusicXml(String source, AbcImportOptions options) {
+        final List<String> warnings = new ArrayList<String>();
+        final Map<String, String> trillWidthHintByKey = new LinkedHashMap<String, String>();
+        final Map<String, Integer> keyHintFifthsByKey = new LinkedHashMap<String, Integer>();
+        final Map<String, AbcMeasureMeta> measureMetaByKey = new LinkedHashMap<String, AbcMeasureMeta>();
+        final Map<String, AbcTransposeMeta> transposeHintByVoiceId = new LinkedHashMap<String, AbcTransposeMeta>();
+        final Map<String, String> headers = new LinkedHashMap<String, String>();
+        final List<AbcImportBodyEntry> bodyEntries = new ArrayList<AbcImportBodyEntry>();
+        final Map<String, List<AbcLyricEntry>> lyricEntriesByVoice =
+                new LinkedHashMap<String, List<AbcLyricEntry>>();
+        final AbcImportVoiceRegistry voiceRegistry = new AbcImportVoiceRegistry();
+        final Map<String, String> userDefinedDecorationBySymbol = new LinkedHashMap<String, String>();
+        final Set<String> supportedStandaloneBodyFieldNames = new java.util.LinkedHashSet<String>();
+        supportedStandaloneBodyFieldNames.add("K");
+        supportedStandaloneBodyFieldNames.add("L");
+        supportedStandaloneBodyFieldNames.add("M");
+        supportedStandaloneBodyFieldNames.add("Q");
+        final AbcImportLineState lineState = new AbcImportLineState();
+
+        BodyTextPusher pushBodyText = new BodyTextPusher() {
+            public void push(String rawBodyText, int lineNo, String voiceId) {
+                AbcAppendBodyTextResult result = appendAbcBodyTextEntries(rawBodyText, lineNo, voiceId,
+                        voiceRegistry, bodyEntries);
+                if (result.isAppended()) {
+                    lineState.setBodyStarted(true);
+                }
+                lineState.setCurrentVoiceId(result.getFinalVoiceId());
+            }
+        };
+
+        String[] lines = String.valueOf(source == null ? "" : source).split("\\n", -1);
+        AbcImportLineProcessorContext lineContext = new AbcImportLineProcessorContext(lineState, warnings, headers,
+                lyricEntriesByVoice, supportedStandaloneBodyFieldNames, voiceRegistry, userDefinedDecorationBySymbol,
+                trillWidthHintByKey, keyHintFifthsByKey, measureMetaByKey, transposeHintByVoiceId, pushBodyText,
+                new VoiceDirectiveTailParser() {
+                    public AbcParsedVoiceDirectiveTail parse(String raw) {
+                        return parseVoiceDirectiveTail(raw);
+                    }
+                },
+                new UserDefinedDecorationParser() {
+                    public AbcUserDefinedDecoration parse(String rawValue) {
+                        return parseUserDefinedDecoration(rawValue);
+                    }
+                },
+                new DecorationSymbolExpander() {
+                    public String expand(String text, Map<String, String> userDefinedDecorationBySymbol) {
+                        return expandUserDefinedDecorationSymbols(text, userDefinedDecorationBySymbol);
+                    }
+                });
+        for (int index = 0; index < lines.length; index++) {
+            processAbcImportLine(lines[index], index + 1, lineContext);
+        }
+        if (bodyEntries.isEmpty()) {
+            throw new IllegalArgumentException("Body not found. Please provide ABC note content. (line 1)");
+        }
+
+        AbcMeter meter = parseMeter(firstNonEmpty(headers.get("M"), "", "4/4"), warnings);
+        Fraction unitLength = parseFraction(firstNonEmpty(headers.get("L"), "", "1/8"), "L", warnings);
+        AbcKeyInfo keyInfo = parseKey(firstNonEmpty(headers.get("K"), "", "C"), warnings);
+        Integer tempoBpm = parseTempoFromQ(headers.get("Q") == null ? "" : headers.get("Q"), warnings);
+        AbcVoiceStores voiceStores = createAbcVoiceStores();
+        int noteCount = 0;
+
+        for (AbcImportBodyEntry entry : bodyEntries) {
+            noteCount += importAbcBodyEntryToVoiceStores(entry, voiceStores, unitLength, meter, keyInfo, tempoBpm,
+                    keyHintFifthsByKey, warnings);
+        }
+
+        finalizeAbcActiveEndings(voiceStores);
+        applyAbcLyricsToMeasures(lyricEntriesByVoice, voiceStores.getMeasuresByVoice());
+        if (noteCount == 0) {
+            throw new IllegalArgumentException("No notes or rests were found. (line 1)");
+        }
+
+        List<AbcParsedPart> parts = buildSimpleAbcParsedParts(voiceRegistry, voiceStores, keyHintFifthsByKey,
+                measureMetaByKey, transposeHintByVoiceId);
+        int measureCount = 0;
+        for (AbcParsedPart part : parts) {
+            measureCount = Math.max(measureCount, part.getMeasures().size());
+        }
+        List<AbcImportDiagnostic> diagnostics = new ArrayList<AbcImportDiagnostic>();
+        for (String warning : warnings) {
+            diagnostics.add(new AbcImportDiagnostic("warn", "ABC_IMPORT_WARNING", "abc", warning, "", null, "",
+                    null));
+        }
+        return new AbcParsedResult(new AbcParsedMeta(firstNonEmpty(headers.get("T"), "", "mikuscore"),
+                firstNonEmpty(headers.get("C"), "", "Unknown"), meter, keyInfo, tempoBpm), parts, warnings,
+                diagnostics);
+    }
+
+    public static String musicXmlFromAbc(String source, AbcImportOptions options) {
+        return buildMusicXmlFromAbcParsed(parseForMusicXml(source, options), source, options);
+    }
+
+    private static int importAbcBodyEntryToVoiceStores(AbcImportBodyEntry entry, AbcVoiceStores voiceStores,
+            Fraction unitLength, AbcMeter meter, AbcKeyInfo keyInfo, Integer tempoBpm,
+            Map<String, Integer> keyHintFifthsByKey, List<String> warnings) {
+        String voiceId = entry == null ? "1" : entry.getVoiceId();
+        List<List<AbcMeasureNote>> measures = ensureAbcVoiceMeasures(voiceStores, voiceId);
+        List<AbcMeasureNote> currentMeasure = measures.get(measures.size() - 1);
+        Map<String, Integer> measureAccidentals = new LinkedHashMap<String, Integer>();
+        Fraction activeUnitLength = unitLength == null ? DEFAULT_UNIT : unitLength;
+        AbcMeter activeMeter = meter == null ? new AbcMeter(4, 4) : meter;
+        Integer activeTempoBpm = tempoBpm;
+        int activeKeyFifths = keyInfo == null ? 0 : keyInfo.getFifths();
+        Map<String, Integer> activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
+        String text = entry == null ? "" : entry.getText();
+        int lineNo = entry == null ? 1 : entry.getLineNo();
+        int idx = 0;
+        int noteCount = 0;
+        Fraction tupletScale = null;
+        int tupletRemaining = 0;
+        int tupletActual = 0;
+        int tupletNormal = 0;
+        int tupletSpecRemaining = 0;
+        AbcPendingBodyDecorationState pendingDecoration = new AbcPendingBodyDecorationState();
+        String activeEndingMarker = trimToEmpty(voiceStores.getActiveEndingByVoice().get(voiceId));
+        boolean pendingTieToNext = false;
+        int pendingSlurStart = 0;
+        AbcParser.AbcRatio pendingRhythmScale = null;
+        List<Integer> lastEventNoteIndices = new ArrayList<Integer>();
+        while (idx < text.length()) {
+            char ch = text.charAt(idx);
+            if (ch == ' ' || ch == '\t' || ch == '\\' || ch == ',' || ch == '\'') {
+                idx++;
+                continue;
+            }
+            if (ch == '{') {
+                AbcParser.AbcParsedGraceGroup graceGroup = AbcParser.parseAbcGraceGroupAt(text, idx, lineNo,
+                        warnings);
+                if (graceGroup == null) {
+                    warnings.add("line " + lineNo + ": Failed to parse grace group; skipped.");
+                    idx++;
+                    continue;
+                }
+                List<AbcMeasureNote> graceNotes = buildAbcGraceNotes(graceGroup, voiceId, activeUnitLength, lineNo,
+                        activeKeySignatureAccidentals, measureAccidentals, warnings);
+                currentMeasure.addAll(graceNotes);
+                noteCount += graceNotes.size();
+                idx = graceGroup.getNextIdx();
+                continue;
+            }
+            AbcParser.AbcParsedBodyEntry bodyEntry = AbcParser.parseAbcBodyEntryAt(text, idx);
+            if (bodyEntry == null) {
+                throw new IllegalArgumentException("line " + lineNo + ": Failed to parse note/rest: "
+                        + text.substring(idx, Math.min(text.length(), idx + 12)));
+            }
+            if ("barline".equals(bodyEntry.getKind())) {
+                AbcParser.AbcParsedBarlineToken barlineToken = bodyEntry.getBarlineToken();
+                AbcParser.AbcParsedRepeatEndingMarker bareRepeatEndingMarker = barlineToken.isEndsMeasure()
+                        ? AbcParser.parseAbcBareRepeatEndingMarkerAt(text, barlineToken.getNextIdx())
+                        : null;
+                int currentMeasureNo = Math.max(1, measures.size());
+                if (barlineToken.isRepeatEnd()) {
+                    putAbcNotationMeasureMeta(voiceStores, voiceId, currentMeasureNo, false, true, "", "", "");
+                }
+                if (barlineToken.isRepeatStart()) {
+                    putAbcNotationMeasureMeta(voiceStores, voiceId, currentMeasureNo, true, false, "", "", "");
+                }
+                if ((barlineToken.isEndingStop() || bareRepeatEndingMarker != null)
+                        && trimToEmpty(activeEndingMarker).length() > 0) {
+                    putAbcNotationMeasureMeta(voiceStores, voiceId, currentMeasureNo, false, false, "",
+                            activeEndingMarker, "stop");
+                    activeEndingMarker = "";
+                }
+                if (barlineToken.isEndsMeasure() && (currentMeasure.size() > 0 || measures.size() == 0)) {
+                    currentMeasure = new ArrayList<AbcMeasureNote>();
+                    measures.add(currentMeasure);
+                    measureAccidentals.clear();
+                }
+                if (bareRepeatEndingMarker != null) {
+                    int nextMeasureNo = Math.max(1, measures.size());
+                    putAbcNotationMeasureMeta(voiceStores, voiceId, nextMeasureNo, false, false,
+                            bareRepeatEndingMarker.getMarker(), "", "");
+                    activeEndingMarker = bareRepeatEndingMarker.getMarker();
+                    idx = bareRepeatEndingMarker.getNextIdx();
+                    continue;
+                }
+                idx = barlineToken.getNextIdx();
+                continue;
+            }
+            if ("standalone-body-field".equals(bodyEntry.getKind())) {
+                AbcParser.AbcParsedStandaloneBodyField field = bodyEntry.getStandaloneBodyField();
+                AbcBodyFieldResult fieldResult = applyAbcBodyField(field.getFieldName(), field.getFieldValue(),
+                        new AbcBodyFieldContext(activeKeyFifths, activeUnitLength, activeMeter, activeTempoBpm,
+                                measureAccidentals, voiceStores, voiceId, measures.size(), keyHintFifthsByKey,
+                                warnings));
+                activeKeyFifths = fieldResult.getActiveKeyFifths();
+                activeKeySignatureAccidentals = fieldResult.getActiveKeySignatureAccidentals();
+                activeUnitLength = fieldResult.getActiveUnitLength();
+                activeMeter = fieldResult.getActiveMeter();
+                activeTempoBpm = fieldResult.getActiveTempoBpm();
+                measureAccidentals = fieldResult.getMeasureAccidentals();
+                if (!fieldResult.isHandled()) {
+                    warnings.add("line " + lineNo + ": Skipped unsupported standalone body field token: "
+                            + field.getToken());
+                }
+                idx = field.getNextIdx();
+                continue;
+            }
+            if ("unsupported-body-token".equals(bodyEntry.getKind())) {
+                warnings.add("line " + lineNo + ": Skipped unsupported body token: "
+                        + bodyEntry.getUnsupportedBodyToken().getToken());
+                idx = bodyEntry.getUnsupportedBodyToken().getNextIdx();
+                continue;
+            }
+            if ("unsupported-body-number".equals(bodyEntry.getKind())) {
+                warnings.add("line " + lineNo + ": Skipped unsupported body number token: "
+                        + bodyEntry.getUnsupportedBodyNumber().getToken());
+                idx = bodyEntry.getUnsupportedBodyNumber().getNextIdx();
+                continue;
+            }
+            if ("body-token".equals(bodyEntry.getKind())) {
+                AbcParser.AbcParsedBodyToken bodyToken = bodyEntry.getBodyToken();
+                if ("single-char-shorthand".equals(bodyToken.getKind())) {
+                    applyBasicAbcSingleCharShorthand(bodyToken.getShorthand().getKind(), pendingDecoration);
+                    idx = bodyToken.getShorthand().getNextIdx();
+                    continue;
+                }
+                if ("broken-rhythm".equals(bodyToken.getKind())) {
+                    AbcParser.AbcParsedBrokenRhythm brokenRhythm = bodyToken.getBrokenRhythm();
+                    if (lastEventNoteIndices.isEmpty()
+                            || !scaleAbcLastEventDuration(currentMeasure, lastEventNoteIndices,
+                                    brokenRhythm.getLeftScale())) {
+                        warnings.add("line " + lineNo + ": broken rhythm(" + brokenRhythm.getSymbol()
+                                + ")  has no preceding note; skipped.");
+                    } else {
+                        pendingRhythmScale = brokenRhythm.getRightScale();
+                    }
+                    idx = brokenRhythm.getNextIdx();
+                    continue;
+                }
+                if ("decoration".equals(bodyToken.getKind())) {
+                    AbcParser.AbcParsedDecoration decoration = bodyToken.getDecoration();
+                    if (!decoration.isTerminated()) {
+                        warnings.add("line " + lineNo + ": Unterminated decoration marker: "
+                                + decoration.getDelimiter());
+                    } else if (!applyBasicAbcBodyDecoration(decoration.getRawDecoration(),
+                            decoration.getDecoration(), pendingDecoration)) {
+                        warnings.add("line " + lineNo + ": Skipped decoration: " + decoration.getDelimiter()
+                                + decoration.getDecoration() + decoration.getDelimiter());
+                    }
+                    idx = decoration.getNextIdx();
+                    continue;
+                }
+                if ("tie".equals(bodyToken.getKind())) {
+                    boolean marked = markAbcTieStartOnLastEvent(currentMeasure, lastEventNoteIndices);
+                    if (!marked) {
+                        warnings.add("line " + lineNo + ": tie(-)  has no preceding note; skipped.");
+                    } else {
+                        pendingTieToNext = true;
+                    }
+                    idx = bodyToken.getTie().getNextIdx();
+                    continue;
+                }
+                if ("slur-stop".equals(bodyToken.getKind())) {
+                    if (!markAbcSlurStopOnLastNote(currentMeasure, lastEventNoteIndices)) {
+                        warnings.add("line " + lineNo + ": slur stop()) has no preceding note; skipped.");
+                    }
+                    idx = bodyToken.getSlurStop().getNextIdx();
+                    continue;
+                }
+                if ("paren".equals(bodyToken.getKind()) && "tuplet".equals(bodyToken.getParenToken().getKind())) {
+                    AbcParser.AbcParsedTuplet tuplet = bodyToken.getParenToken().getTuplet();
+                    if (tuplet.getActual() > 0 && tuplet.getNormal() > 0 && tuplet.getCount() > 0) {
+                        tupletScale = new Fraction(tuplet.getNormal(), tuplet.getActual());
+                        tupletRemaining = tuplet.getCount();
+                        tupletActual = tuplet.getActual();
+                        tupletNormal = tuplet.getNormal();
+                        tupletSpecRemaining = tuplet.getCount();
+                    } else {
+                        warnings.add("line " + lineNo + ": Failed to parse tuplet notation: " + tuplet.getRaw());
+                    }
+                    idx = bodyToken.getParenToken().getNextIdx();
+                    continue;
+                }
+                if ("paren".equals(bodyToken.getKind())) {
+                    pendingSlurStart++;
+                    idx = bodyToken.getParenToken().getNextIdx();
+                    continue;
+                }
+                if ("bracket".equals(bodyToken.getKind())
+                        && "inline-field".equals(bodyToken.getBracketToken().getKind())) {
+                    AbcParser.AbcParsedInlineField field = bodyToken.getBracketToken().getInlineField();
+                    AbcBodyFieldResult fieldResult = applyAbcBodyField(field.getFieldName(), field.getFieldValue(),
+                            new AbcBodyFieldContext(activeKeyFifths, activeUnitLength, activeMeter, activeTempoBpm,
+                                    measureAccidentals, voiceStores, voiceId, measures.size(), keyHintFifthsByKey,
+                                    warnings));
+                    activeKeyFifths = fieldResult.getActiveKeyFifths();
+                    activeKeySignatureAccidentals = fieldResult.getActiveKeySignatureAccidentals();
+                    activeUnitLength = fieldResult.getActiveUnitLength();
+                    activeMeter = fieldResult.getActiveMeter();
+                    activeTempoBpm = fieldResult.getActiveTempoBpm();
+                    measureAccidentals = fieldResult.getMeasureAccidentals();
+                    if (!fieldResult.isHandled()) {
+                        warnings.add("line " + lineNo + ": Skipped unsupported inline field: ["
+                                + field.getFieldName() + ":" + field.getFieldValue() + "]");
+                    }
+                    idx = field.getNextIdx();
+                    continue;
+                }
+                if ("bracket".equals(bodyToken.getKind())
+                        && "repeat-ending".equals(bodyToken.getBracketToken().getKind())) {
+                    AbcParser.AbcParsedRepeatEndingMarker marker = bodyToken.getBracketToken().getRepeatEndingMarker();
+                    putAbcNotationMeasureMeta(voiceStores, voiceId, Math.max(1, measures.size()), false, false,
+                            marker.getMarker(), "", "");
+                    activeEndingMarker = marker.getMarker();
+                    idx = marker.getNextIdx();
+                    continue;
+                }
+                if ("bracket".equals(bodyToken.getKind())) {
+                    AbcParser.AbcParsedPlayableEvent playableEvent = AbcParser.parseAbcPlayableEventAt(text, idx);
+                    if (playableEvent != null && "playable".equals(playableEvent.getKind())) {
+                        Fraction length = parseAbcLengthToken(playableEvent.getRawLengthToken(), lineNo);
+                        Fraction absoluteLength = multiplyFractions(activeUnitLength, length);
+                        if (pendingRhythmScale != null) {
+                            absoluteLength = multiplyFractions(absoluteLength,
+                                    new Fraction(pendingRhythmScale.getNum(), pendingRhythmScale.getDen()));
+                            pendingRhythmScale = null;
+                        }
+                        AbcTupletEvent tupletEvent = null;
+                        if (tupletRemaining > 0 && tupletScale != null) {
+                            tupletEvent = new AbcTupletEvent(tupletActual, tupletNormal, tupletSpecRemaining);
+                            absoluteLength = multiplyFractions(absoluteLength, tupletScale);
+                            tupletRemaining--;
+                            tupletSpecRemaining--;
+                            if (tupletRemaining <= 0) {
+                                tupletScale = null;
+                                tupletActual = 0;
+                                tupletNormal = 0;
+                                tupletSpecRemaining = 0;
+                            }
+                        }
+                        int duration = durationInDivisions(absoluteLength, 960);
+                        List<AbcMeasureNote> notes = buildAbcPlayableNotes(playableEvent, voiceId, absoluteLength,
+                                duration, lineNo, activeKeySignatureAccidentals, measureAccidentals, tupletEvent,
+                                pendingDecoration);
+                        if (pendingSlurStart > 0 && applyAbcSlurStartToEvent(notes)) {
+                            pendingSlurStart = 0;
+                        }
+                        if (pendingTieToNext) {
+                            if (!applyAbcTieStopToEvent(notes)) {
+                                warnings.add("line " + lineNo + ": tie(-) was followed by a rest; tie removed.");
+                            }
+                            pendingTieToNext = false;
+                        }
+                        int eventStartIndex = currentMeasure.size();
+                        currentMeasure.addAll(notes);
+                        lastEventNoteIndices = eventNoteIndices(eventStartIndex, notes.size());
+                        noteCount += notes.size();
+                        idx = playableEvent.getNextIdx();
+                        continue;
+                    }
+                }
+                idx++;
+                continue;
+            }
+            if ("playable-event".equals(bodyEntry.getKind())) {
+                AbcParser.AbcParsedPlayableEvent playableEvent = bodyEntry.getPlayableEvent();
+                if (!"playable".equals(playableEvent.getKind())) {
+                    warnings.add("line " + lineNo + ": Skipped malformed playable token.");
+                    idx = Math.max(idx + 1, playableEvent.getNextIdx());
+                    continue;
+                }
+                Fraction length = parseAbcLengthToken(playableEvent.getRawLengthToken(), lineNo);
+                Fraction absoluteLength = multiplyFractions(activeUnitLength, length);
+                if (pendingRhythmScale != null) {
+                    absoluteLength = multiplyFractions(absoluteLength,
+                            new Fraction(pendingRhythmScale.getNum(), pendingRhythmScale.getDen()));
+                    pendingRhythmScale = null;
+                }
+                AbcTupletEvent tupletEvent = null;
+                if (tupletRemaining > 0 && tupletScale != null) {
+                    tupletEvent = new AbcTupletEvent(tupletActual, tupletNormal, tupletSpecRemaining);
+                    absoluteLength = multiplyFractions(absoluteLength, tupletScale);
+                    tupletRemaining--;
+                    tupletSpecRemaining--;
+                    if (tupletRemaining <= 0) {
+                        tupletScale = null;
+                        tupletActual = 0;
+                        tupletNormal = 0;
+                        tupletSpecRemaining = 0;
+                    }
+                }
+                int duration = durationInDivisions(absoluteLength, 960);
+                if (duration <= 0) {
+                    warnings.add("line " + lineNo + ": Skipped note with invalid length.");
+                    idx = playableEvent.getNextIdx();
+                    continue;
+                }
+                List<AbcMeasureNote> notes = buildAbcPlayableNotes(playableEvent, voiceId, absoluteLength,
+                        duration, lineNo, activeKeySignatureAccidentals, measureAccidentals, tupletEvent,
+                        pendingDecoration);
+                if (pendingSlurStart > 0 && applyAbcSlurStartToEvent(notes)) {
+                    pendingSlurStart = 0;
+                }
+                if (pendingTieToNext) {
+                    if (!applyAbcTieStopToEvent(notes)) {
+                        warnings.add("line " + lineNo + ": tie(-) was followed by a rest; tie removed.");
+                    }
+                    pendingTieToNext = false;
+                }
+                int eventStartIndex = currentMeasure.size();
+                currentMeasure.addAll(notes);
+                lastEventNoteIndices = eventNoteIndices(eventStartIndex, notes.size());
+                noteCount += notes.size();
+                idx = playableEvent.getNextIdx();
+                continue;
+            }
+            idx++;
+        }
+        voiceStores.getActiveEndingByVoice().put(voiceId, activeEndingMarker);
+        voiceStores.getCurrentKeyFifthsByVoice().put(voiceId, Integer.valueOf(activeKeyFifths));
+        return noteCount;
+    }
+
+    private static void putAbcNotationMeasureMeta(AbcVoiceStores voiceStores, String voiceId, int measureNo,
+            boolean repeatStart, boolean repeatEnd, String endingStart, String endingStop, String endingStopType) {
+        Map<Integer, AbcMeasureMeta> byMeasure = voiceStores.getNotationMeasureMetaByVoice().get(voiceId);
+        if (byMeasure == null) {
+            byMeasure = new LinkedHashMap<Integer, AbcMeasureMeta>();
+            voiceStores.getNotationMeasureMetaByVoice().put(voiceId, byMeasure);
+        }
+        Integer key = Integer.valueOf(Math.max(1, measureNo));
+        AbcMeasureMeta existing = byMeasure.get(key);
+        String number = existing == null ? String.valueOf(key.intValue()) : existing.getNumber();
+        boolean implicit = existing != null && existing.isImplicit();
+        Integer repeatTimes = existing == null ? null : existing.getRepeatTimes();
+        String mergedEndingStart = firstNonEmpty(endingStart, existing == null ? "" : existing.getEndingStart(), "");
+        String mergedEndingStop = firstNonEmpty(endingStop, existing == null ? "" : existing.getEndingStop(), "");
+        String mergedEndingStopType = firstNonEmpty(endingStopType,
+                existing == null ? "" : existing.getEndingStopType(), "");
+        byMeasure.put(key, new AbcMeasureMeta(number, implicit, repeatStart || (existing != null
+                && existing.isRepeatStart()), repeatEnd || (existing != null && existing.isRepeatEnd()), repeatTimes,
+                mergedEndingStart, mergedEndingStop, mergedEndingStopType));
+    }
+
+    private static List<Integer> eventNoteIndices(int startIndex, int count) {
+        List<Integer> indices = new ArrayList<Integer>();
+        for (int index = 0; index < count; index++) {
+            indices.add(Integer.valueOf(startIndex + index));
+        }
+        return indices;
+    }
+
+    private static boolean applyAbcTieStopToEvent(List<AbcMeasureNote> notes) {
+        boolean applied = false;
+        if (notes == null) {
+            return false;
+        }
+        for (AbcMeasureNote note : notes) {
+            if (note != null && !note.isRest()) {
+                note.setTieStop(true);
+                applied = true;
+            }
+        }
+        return applied;
+    }
+
+    private static boolean applyAbcSlurStartToEvent(List<AbcMeasureNote> notes) {
+        if (notes == null || notes.isEmpty()) {
+            return false;
+        }
+        for (int index = 0; index < notes.size(); index++) {
+            AbcMeasureNote note = notes.get(index);
+            if (note != null && !note.isRest()) {
+                notes.set(index, copyAbcMeasureNote(note, note.getDuration(), note.isTieStart(), true,
+                        note.isSlurStop()));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean markAbcTieStartOnLastEvent(List<AbcMeasureNote> currentMeasure,
+            List<Integer> lastEventNoteIndices) {
+        if (currentMeasure == null || lastEventNoteIndices == null || lastEventNoteIndices.isEmpty()) {
+            return false;
+        }
+        boolean marked = false;
+        for (Integer noteIndex : lastEventNoteIndices) {
+            int index = noteIndex == null ? -1 : noteIndex.intValue();
+            if (index < 0 || index >= currentMeasure.size()) {
+                continue;
+            }
+            AbcMeasureNote note = currentMeasure.get(index);
+            if (note != null && !note.isRest()) {
+                currentMeasure.set(index, copyAbcMeasureNoteWithTieStart(note));
+                marked = true;
+            }
+        }
+        return marked;
+    }
+
+    private static boolean markAbcSlurStopOnLastNote(List<AbcMeasureNote> currentMeasure,
+            List<Integer> lastEventNoteIndices) {
+        if (currentMeasure == null || lastEventNoteIndices == null || lastEventNoteIndices.isEmpty()) {
+            return false;
+        }
+        for (int reverseIndex = lastEventNoteIndices.size() - 1; reverseIndex >= 0; reverseIndex--) {
+            Integer noteIndex = lastEventNoteIndices.get(reverseIndex);
+            int index = noteIndex == null ? -1 : noteIndex.intValue();
+            if (index < 0 || index >= currentMeasure.size()) {
+                continue;
+            }
+            AbcMeasureNote note = currentMeasure.get(index);
+            if (note != null && !note.isRest()) {
+                currentMeasure.set(index, copyAbcMeasureNote(note, note.getDuration(), note.isTieStart(),
+                        note.isSlurStart(), true));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean scaleAbcLastEventDuration(List<AbcMeasureNote> currentMeasure,
+            List<Integer> lastEventNoteIndices, AbcParser.AbcRatio scale) {
+        if (currentMeasure == null || lastEventNoteIndices == null || lastEventNoteIndices.isEmpty()
+                || scale == null) {
+            return false;
+        }
+        boolean scaled = false;
+        for (Integer noteIndex : lastEventNoteIndices) {
+            int index = noteIndex == null ? -1 : noteIndex.intValue();
+            if (index < 0 || index >= currentMeasure.size()) {
+                continue;
+            }
+            AbcMeasureNote note = currentMeasure.get(index);
+            if (note == null || note.isRest()) {
+                continue;
+            }
+            int duration = Math.max(1,
+                    (int) Math.round(note.getDuration() * (((double) scale.getNum()) / Math.max(1, scale.getDen()))));
+            currentMeasure.set(index, copyAbcMeasureNote(note, duration, note.isTieStart(), note.isSlurStart(),
+                    note.isSlurStop()));
+            scaled = true;
+        }
+        return scaled;
+    }
+
+    private static AbcMeasureNote copyAbcMeasureNoteWithTieStart(AbcMeasureNote note) {
+        return copyAbcMeasureNote(note, note.getDuration(), true, note.isSlurStart(), note.isSlurStop());
+    }
+
+    private static AbcMeasureNote copyAbcMeasureNote(AbcMeasureNote note, int duration, boolean tieStart,
+            boolean slurStart, boolean slurStop) {
+        String type = duration == note.getDuration() ? note.getType() : typeFromDuration(duration, 960);
+        return new AbcMeasureNote(note.getVoice(), duration, note.isChord(), note.isGrace(), note.isRest(),
+                note.getStep(), note.getOctave(), note.getAlter(), type, note.getStaff(),
+                note.getAccidentalText(), note.isAccidentalEditorial(), note.isAccidentalCautionary(), tieStart,
+                note.isTieStop(), note.isGraceSlash(), note.getBeamMode(), note.getLyricText(),
+                note.getLyricSyllabic(), note.isLyricExtend(), note.getTimeModificationActual(),
+                note.getTimeModificationNormal(), new ArrayList<String>(note.getAnnotations()), note.isSegno(),
+                note.isCoda(), note.getRehearsalMark(), note.isFine(), note.isDaCapo(), note.isDalSegno(),
+                note.isToCoda(), note.isCrescendoStart(), note.isCrescendoStop(), note.isDiminuendoStart(),
+                note.isDiminuendoStop(), note.getDynamicMark(), note.isSfz(), slurStart, slurStop,
+                note.isTupletStart(), note.isTupletStop(), note.isTrill(), note.isTrillLineStart(),
+                note.isTrillLineStop(), note.getTrillAccidentalText(), note.getTurnType(), note.isTurnSlash(),
+                note.isDelayedTurn(), note.getMordentType(), note.getTremoloType(), note.getTremoloMarks(),
+                note.isGlissandoStart(), note.isGlissandoStop(), note.isSlideStart(), note.isSlideStop(),
+                note.isSchleifer(), note.isShake(), note.isArpeggiate(), note.isStaccato(),
+                note.isStaccatissimo(), note.isAccent(), note.isTenuto(), note.isStress(), note.isUnstress(),
+                note.getFermataType(), note.isStrongAccent(), note.isBreathMark(), note.isCaesura(),
+                note.getPhraseMark(), note.isUpBow(), note.isDownBow(), note.isDoubleTongue(),
+                note.isTripleTongue(), note.isHeel(), note.isToe(), new ArrayList<String>(note.getFingerings()),
+                new ArrayList<String>(note.getStrings()), new ArrayList<String>(note.getPlucks()),
+                note.isOpenString(), note.isSnapPizzicato(), note.isHarmonic(), note.isStopped(),
+                note.isThumbPosition());
+    }
+
+    private static List<AbcMeasureNote> buildAbcGraceNotes(AbcParser.AbcParsedGraceGroup graceGroup, String voiceId,
+            Fraction unitLength, int lineNo, Map<String, Integer> keySignatureAccidentals,
+            Map<String, Integer> measureAccidentals, List<String> warnings) {
+        List<AbcMeasureNote> notes = new ArrayList<AbcMeasureNote>();
+        Map<String, Integer> graceAccidentals = new LinkedHashMap<String, Integer>(
+                measureAccidentals == null ? new LinkedHashMap<String, Integer>() : measureAccidentals);
+        for (AbcParser.AbcParsedGraceNote parsedNote : graceGroup.getNotes()) {
+            Fraction length = parseAbcLengthToken(parsedNote.getLengthToken(), lineNo);
+            Fraction absoluteLength = multiplyFractions(unitLength == null ? DEFAULT_UNIT : unitLength, length);
+            int duration = durationInDivisions(absoluteLength, 960);
+            if (duration <= 0) {
+                warnings.add("line " + lineNo + ": Skipped grace note with invalid length.");
+                continue;
+            }
+            try {
+                notes.add(buildAbcGraceNoteData(voiceId, parsedNote.getPitchChar(), parsedNote.getAccidentalText(),
+                        parsedNote.getOctaveShift(), absoluteLength, duration, lineNo, keySignatureAccidentals,
+                        graceAccidentals, parsedNote.isGraceSlash()));
+            } catch (IllegalArgumentException ex) {
+                if (ex.getMessage() != null && ex.getMessage().matches("(?i).*Octave out of range.*")) {
+                    warnings.add("line " + lineNo + ": Skipped grace note with unsupported octave range.");
+                    continue;
+                }
+                throw ex;
+            }
+        }
+        return notes;
+    }
+
+    private static List<AbcMeasureNote> buildAbcPlayableNotes(AbcParser.AbcParsedPlayableEvent playableEvent,
+            String voiceId, Fraction absoluteLength, int duration, int lineNo,
+            Map<String, Integer> keySignatureAccidentals, Map<String, Integer> measureAccidentals,
+            AbcTupletEvent tupletEvent, AbcPendingBodyDecorationState pendingDecoration) {
+        List<AbcMeasureNote> notes = new ArrayList<AbcMeasureNote>();
+        List<AbcParser.AbcParsedPitchSource> pitchSources = playableEvent.getPitchSources();
+        for (int index = 0; index < pitchSources.size(); index++) {
+            AbcParser.AbcParsedPitchSource pitchSource = pitchSources.get(index);
+            notes.add(buildAbcNoteData(voiceId, pitchSource.getPitchChar(), pitchSource.getAccidentalText(),
+                    pitchSource.getOctaveShift(), absoluteLength, duration, lineNo, keySignatureAccidentals,
+                    measureAccidentals, index > 0, index == 0 ? tupletEvent : null,
+                    index == 0 ? pendingDecoration : null));
+        }
+        return notes;
+    }
+
+    private static AbcMeasureNote buildAbcGraceNoteData(String voiceId, String pitchChar, String accidental,
+            String octaveShift, Fraction absoluteLength, int duration, int lineNo,
+            Map<String, Integer> keySignatureAccidentals, Map<String, Integer> measureAccidentals,
+            boolean graceSlash) {
+        AbcMeasureNote note = buildAbcNoteData(voiceId, pitchChar, accidental, octaveShift, absoluteLength, duration,
+                lineNo, keySignatureAccidentals, measureAccidentals, false, null, null);
+        return new AbcMeasureNote(note.getVoice(), note.getDuration(), false, true, note.isRest(), note.getStep(),
+                note.getOctave(), note.getAlter(), note.getType(), note.getStaff(), note.getAccidentalText(),
+                note.isAccidentalEditorial(), note.isAccidentalCautionary(), note.isTieStart(), note.isTieStop(),
+                graceSlash);
+    }
+
+    private static AbcMeasureNote buildAbcNoteData(String voiceId, String pitchChar, String accidental,
+            String octaveShift, Fraction absoluteLength, int duration, int lineNo,
+            Map<String, Integer> keySignatureAccidentals, Map<String, Integer> measureAccidentals, boolean chord,
+            AbcTupletEvent tupletEvent, AbcPendingBodyDecorationState pendingDecoration) {
+        String pitch = trimToEmpty(pitchChar);
+        boolean rest = pitch.matches("[zZxX]");
+        String type = typeFromFraction(absoluteLength);
+        AbcPendingBodyDecorationState appliedDecoration = rest || pendingDecoration == null
+                ? new AbcPendingBodyDecorationState()
+                : pendingDecoration.copyAndClear();
+        if (rest) {
+            if (tupletEvent != null) {
+                return new AbcMeasureNote(voiceId, duration, chord, false, true, "C", Integer.valueOf(4),
+                        Integer.valueOf(0), type, null, "", false, false, false, false, false, "", "", "single",
+                        false, Integer.valueOf(tupletEvent.getActual()), Integer.valueOf(tupletEvent.getNormal()),
+                        new ArrayList<String>(), false, false, "", false, false, false, false, false, false, false,
+                        false, "", false, false, false, tupletEvent.getRemaining() == tupletEvent.getActual(),
+                        tupletEvent.getRemaining() == 1, false, false, false, "", "", false, false, "", "", null,
+                        false, false, false, false, false, false, false, false, false, false, false, false, false,
+                        "", false, false, false, "", false, false, false, false, false, false,
+                        new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), false, false, false,
+                        false, false);
+            }
+            return new AbcMeasureNote(voiceId, duration, chord, false, true, "C", Integer.valueOf(4),
+                    Integer.valueOf(0), type);
+        }
+        String step = pitch.toUpperCase();
+        int octave = pitch.matches("[a-g]") ? 5 : 4;
+        String shifts = octaveShift == null ? "" : octaveShift;
+        for (int index = 0; index < shifts.length(); index++) {
+            char ch = shifts.charAt(index);
+            if (ch == '\'') {
+                octave++;
+            } else if (ch == ',') {
+                octave--;
+            }
+        }
+        if (octave < 0 || octave > 9) {
+            throw new IllegalArgumentException("line " + lineNo + ": Octave out of range");
+        }
+        Integer alter = null;
+        String accidentalText = "";
+        Integer explicitAlter = accidentalToAlter(accidental);
+        if (explicitAlter != null) {
+            alter = explicitAlter;
+            if (explicitAlter.intValue() == 0) {
+                accidentalText = "natural";
+            } else if (explicitAlter.intValue() > 0) {
+                accidentalText = explicitAlter.intValue() >= 2 ? "double-sharp" : "sharp";
+            } else {
+                accidentalText = explicitAlter.intValue() <= -2 ? "flat-flat" : "flat";
+            }
+            measureAccidentals.put(step, explicitAlter);
+        } else {
+            int resolvedAlter = 0;
+            if (measureAccidentals.containsKey(step)) {
+                resolvedAlter = measureAccidentals.get(step).intValue();
+            } else if (keySignatureAccidentals.containsKey(step)) {
+                resolvedAlter = keySignatureAccidentals.get(step).intValue();
+            }
+            alter = resolvedAlter == 0 ? null : Integer.valueOf(resolvedAlter);
+        }
+        Integer timeModificationActual = tupletEvent == null ? null : Integer.valueOf(tupletEvent.getActual());
+        Integer timeModificationNormal = tupletEvent == null ? null : Integer.valueOf(tupletEvent.getNormal());
+        boolean tupletStart = tupletEvent != null && tupletEvent.getRemaining() == tupletEvent.getActual();
+        boolean tupletStop = tupletEvent != null && tupletEvent.getRemaining() == 1;
+        return new AbcMeasureNote(voiceId, duration, chord, false, false, step, Integer.valueOf(octave), alter,
+                type, null, accidentalText, false, false, false, false, false, "", "", "single", false,
+                timeModificationActual, timeModificationNormal, new ArrayList<String>(), appliedDecoration.isSegno(),
+                appliedDecoration.isCoda(), "", false,
+                false, false, false, false, false, false, false, "", false, false, false, tupletStart, tupletStop,
+                appliedDecoration.isTrill(), false, false, "", "", false, false,
+                appliedDecoration.getMordentType(), "", null, false, false, false, false, false, false,
+                appliedDecoration.isArpeggiate(), appliedDecoration.isStaccato(), false,
+                appliedDecoration.isAccent(), false, false, false, appliedDecoration.getFermataType(), false, false,
+                false, "", appliedDecoration.isUpBow(), appliedDecoration.isDownBow(), false, false, false, false,
+                new ArrayList<String>(), new ArrayList<String>(), new ArrayList<String>(), false, false, false, false,
+                false);
+    }
+
+    private static boolean applyBasicAbcBodyDecoration(String rawDecoration, String decoration,
+            AbcPendingBodyDecorationState state) {
+        String normalized = trimToEmpty(decoration).toLowerCase();
+        if ("trill".equals(normalized) || "tr".equals(normalized) || "triller".equals(normalized)) {
+            state.setTrill(true);
+            return true;
+        }
+        if ("staccato".equals(normalized) || "stacc".equals(normalized) || "stac".equals(normalized)) {
+            state.setStaccato(true);
+            return true;
+        }
+        if ("accent".equals(normalized) || ">".equals(normalized) || "emphasis".equals(normalized)) {
+            state.setAccent(true);
+            return true;
+        }
+        if ("fermata".equals(normalized)) {
+            state.setFermataType("normal");
+            return true;
+        }
+        if ("mordent".equals(normalized) || "lowermordent".equals(normalized)) {
+            state.setMordentType("mordent");
+            return true;
+        }
+        if ("inverted-mordent".equals(normalized) || "invertedmordent".equals(normalized)
+                || "uppermordent".equals(normalized)) {
+            state.setMordentType("inverted-mordent");
+            return true;
+        }
+        if ("roll".equals(normalized) || "arpeggio".equals(normalized) || "arpeggiate".equals(normalized)) {
+            state.setArpeggiate(true);
+            return true;
+        }
+        if ("segno".equals(normalized)) {
+            state.setSegno(true);
+            return true;
+        }
+        if ("coda".equals(normalized)) {
+            state.setCoda(true);
+            return true;
+        }
+        if ("upbow".equals(normalized) || "up-bow".equals(normalized) || "up bow".equals(normalized)) {
+            state.setUpBow(true);
+            return true;
+        }
+        if ("downbow".equals(normalized) || "down-bow".equals(normalized) || "down bow".equals(normalized)) {
+            state.setDownBow(true);
+            return true;
+        }
+        if ("invertedfermata".equals(normalized) || "inverted-fermata".equals(normalized)
+                || "inverted fermata".equals(normalized)) {
+            state.setFermataType("inverted");
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean applyBasicAbcSingleCharShorthand(String kind, AbcPendingBodyDecorationState state) {
+        String normalized = trimToEmpty(kind);
+        if ("trill".equals(normalized)) {
+            state.setTrill(true);
+            return true;
+        }
+        if ("staccato".equals(normalized)) {
+            state.setStaccato(true);
+            return true;
+        }
+        if ("accent".equals(normalized)) {
+            state.setAccent(true);
+            return true;
+        }
+        if ("fermata".equals(normalized)) {
+            state.setFermataType("normal");
+            return true;
+        }
+        if ("mordent".equals(normalized)) {
+            state.setMordentType("mordent");
+            return true;
+        }
+        if ("inverted-mordent".equals(normalized)) {
+            state.setMordentType("inverted-mordent");
+            return true;
+        }
+        if ("arpeggiate".equals(normalized)) {
+            state.setArpeggiate(true);
+            return true;
+        }
+        if ("segno".equals(normalized)) {
+            state.setSegno(true);
+            return true;
+        }
+        if ("coda".equals(normalized)) {
+            state.setCoda(true);
+            return true;
+        }
+        if ("upbow".equals(normalized)) {
+            state.setUpBow(true);
+            return true;
+        }
+        if ("downbow".equals(normalized)) {
+            state.setDownBow(true);
+            return true;
+        }
+        return false;
+    }
+
+    private static final class AbcTupletEvent {
+        private final int actual;
+        private final int normal;
+        private final int remaining;
+
+        AbcTupletEvent(int actual, int normal, int remaining) {
+            this.actual = actual;
+            this.normal = normal;
+            this.remaining = remaining;
+        }
+
+        int getActual() {
+            return actual;
+        }
+
+        int getNormal() {
+            return normal;
+        }
+
+        int getRemaining() {
+            return remaining;
+        }
+    }
+
+    private static final class AbcPendingBodyDecorationState {
+        private boolean trill;
+        private boolean staccato;
+        private boolean accent;
+        private String fermataType = "";
+        private String mordentType = "";
+        private boolean arpeggiate;
+        private boolean segno;
+        private boolean coda;
+        private boolean upBow;
+        private boolean downBow;
+
+        AbcPendingBodyDecorationState copyAndClear() {
+            AbcPendingBodyDecorationState copy = new AbcPendingBodyDecorationState();
+            copy.trill = trill;
+            copy.staccato = staccato;
+            copy.accent = accent;
+            copy.fermataType = fermataType;
+            copy.mordentType = mordentType;
+            copy.arpeggiate = arpeggiate;
+            copy.segno = segno;
+            copy.coda = coda;
+            copy.upBow = upBow;
+            copy.downBow = downBow;
+            trill = false;
+            staccato = false;
+            accent = false;
+            fermataType = "";
+            mordentType = "";
+            arpeggiate = false;
+            segno = false;
+            coda = false;
+            upBow = false;
+            downBow = false;
+            return copy;
+        }
+
+        boolean isTrill() {
+            return trill;
+        }
+
+        void setTrill(boolean trill) {
+            this.trill = trill;
+        }
+
+        boolean isStaccato() {
+            return staccato;
+        }
+
+        void setStaccato(boolean staccato) {
+            this.staccato = staccato;
+        }
+
+        boolean isAccent() {
+            return accent;
+        }
+
+        void setAccent(boolean accent) {
+            this.accent = accent;
+        }
+
+        String getFermataType() {
+            return fermataType;
+        }
+
+        void setFermataType(String fermataType) {
+            this.fermataType = trimToEmpty(fermataType);
+        }
+
+        String getMordentType() {
+            return mordentType;
+        }
+
+        void setMordentType(String mordentType) {
+            this.mordentType = trimToEmpty(mordentType);
+        }
+
+        boolean isArpeggiate() {
+            return arpeggiate;
+        }
+
+        void setArpeggiate(boolean arpeggiate) {
+            this.arpeggiate = arpeggiate;
+        }
+
+        boolean isSegno() {
+            return segno;
+        }
+
+        void setSegno(boolean segno) {
+            this.segno = segno;
+        }
+
+        boolean isCoda() {
+            return coda;
+        }
+
+        void setCoda(boolean coda) {
+            this.coda = coda;
+        }
+
+        boolean isUpBow() {
+            return upBow;
+        }
+
+        void setUpBow(boolean upBow) {
+            this.upBow = upBow;
+        }
+
+        boolean isDownBow() {
+            return downBow;
+        }
+
+        void setDownBow(boolean downBow) {
+            this.downBow = downBow;
+        }
+    }
+
+    private static List<AbcParsedPart> buildSimpleAbcParsedParts(AbcImportVoiceRegistry voiceRegistry,
+            AbcVoiceStores voiceStores, Map<String, Integer> keyHintFifthsByKey,
+            Map<String, AbcMeasureMeta> measureMetaByKey, Map<String, AbcTransposeMeta> transposeHintByVoiceId) {
+        List<String> voiceIds = new ArrayList<String>(voiceRegistry.getDeclaredVoiceIds());
+        for (String voiceId : voiceStores.getMeasuresByVoice().keySet()) {
+            if (!voiceIds.contains(voiceId)) {
+                voiceIds.add(voiceId);
+            }
+        }
+        List<AbcParsedPart> parts = new ArrayList<AbcParsedPart>();
+        for (int index = 0; index < voiceIds.size(); index++) {
+            String voiceId = voiceIds.get(index);
+            String partId = "P" + (index + 1);
+            String partName = firstNonEmpty(voiceRegistry.getVoiceNameById().get(voiceId), "", "Voice " + voiceId);
+            String clef = trimToEmpty(voiceRegistry.getVoiceClefById().get(voiceId));
+            AbcTransposeMeta transpose = voiceRegistry.getVoiceTransposeById().get(voiceId);
+            if (transpose == null) {
+                transpose = transposeHintByVoiceId.get(voiceId);
+            }
+            parts.add(new AbcParsedPart(partId, partName, voiceId, clef, transpose,
+                    new ArrayList<AbcParsedStaffVoice>(), voiceStores.getMeasuresByVoice().get(voiceId),
+                    mapKeyHintsForVoice(voiceId, keyHintFifthsByKey),
+                    getNestedMapOrEmpty(voiceStores.getMeterByMeasureByVoice(), voiceId),
+                    getNestedMapOrEmpty(voiceStores.getTempoByMeasureByVoice(), voiceId),
+                    mapMeasureMetaHintsForVoice(voiceId, measureMetaByKey, voiceStores)));
+        }
+        return parts;
+    }
+
     public static AbcPartRenderState createInitialAbcPartRenderState(int defaultFifths, int beats, int beatType,
             Integer tempoBpm) {
         return new AbcPartRenderState(Math.max(-7, Math.min(7, (int) Math.round(defaultFifths))),
@@ -3070,6 +4053,97 @@ public final class AbcIo {
             idx++;
         }
         return out.toString();
+    }
+
+    private static Map<Integer, Integer> mapKeyHintsForVoice(String voiceId, Map<String, Integer> keyHintFifthsByKey) {
+        Map<Integer, Integer> result = new LinkedHashMap<Integer, Integer>();
+        if (keyHintFifthsByKey == null) {
+            return result;
+        }
+        String prefix = trimToEmpty(voiceId) + "#";
+        for (String key : keyHintFifthsByKey.keySet()) {
+            if (!key.startsWith(prefix)) {
+                continue;
+            }
+            Integer measureNo = parseIntegerOrNull(key.substring(prefix.length()));
+            if (measureNo != null) {
+                result.put(measureNo, keyHintFifthsByKey.get(key));
+            }
+        }
+        return result;
+    }
+
+    private static Map<Integer, AbcMeasureMeta> mapMeasureMetaHintsForVoice(String voiceId,
+            Map<String, AbcMeasureMeta> measureMetaByKey, AbcVoiceStores voiceStores) {
+        Map<Integer, AbcMeasureMeta> result = new LinkedHashMap<Integer, AbcMeasureMeta>();
+        Map<Integer, AbcMeasureMeta> notationMeta = voiceStores == null ? null
+                : voiceStores.getNotationMeasureMetaByVoice().get(voiceId);
+        if (notationMeta != null) {
+            result.putAll(notationMeta);
+        }
+        if (measureMetaByKey == null) {
+            return result;
+        }
+        String prefix = trimToEmpty(voiceId) + "#";
+        for (String key : measureMetaByKey.keySet()) {
+            if (!key.startsWith(prefix)) {
+                continue;
+            }
+            Integer measureNo = parseIntegerOrNull(key.substring(prefix.length()));
+            if (measureNo != null) {
+                result.put(measureNo, measureMetaByKey.get(key));
+            }
+        }
+        return result;
+    }
+
+    private static <T> Map<Integer, T> getNestedMapOrEmpty(Map<String, Map<Integer, T>> source, String voiceId) {
+        Map<Integer, T> result = source == null ? null : source.get(voiceId);
+        return result == null ? new LinkedHashMap<Integer, T>() : result;
+    }
+
+    private static Integer accidentalToAlter(String accidental) {
+        String raw = trimToEmpty(accidental);
+        if (raw.length() == 0) {
+            return null;
+        }
+        if ("=".equals(raw)) {
+            return Integer.valueOf(0);
+        }
+        if (raw.matches("^\\^+$")) {
+            return Integer.valueOf(raw.length());
+        }
+        if (raw.matches("^_+$")) {
+            return Integer.valueOf(-raw.length());
+        }
+        return null;
+    }
+
+    private static String typeFromFraction(Fraction fraction) {
+        Fraction safe = fraction == null ? DEFAULT_RATIO : fraction;
+        double value = ((double) safe.getNum()) / Math.max(1, safe.getDen());
+        if (value >= 1.0) {
+            return "whole";
+        }
+        if (value >= 0.5) {
+            return "half";
+        }
+        if (value >= 0.25) {
+            return "quarter";
+        }
+        if (value >= 0.125) {
+            return "eighth";
+        }
+        if (value >= 0.0625) {
+            return "16th";
+        }
+        return "32nd";
+    }
+
+    private static int durationInDivisions(Fraction wholeFraction, int divisionsPerQuarter) {
+        Fraction safe = wholeFraction == null ? DEFAULT_RATIO : wholeFraction;
+        return (int) Math.round((((double) safe.getNum()) / Math.max(1, safe.getDen())) * 4.0
+                * Math.max(1, divisionsPerQuarter));
     }
 
     private static int parseInt(String value, int fallback) {

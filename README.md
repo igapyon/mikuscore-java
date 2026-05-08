@@ -77,6 +77,7 @@ Current foundation commands:
 - `--help`
 - `--version`
 - `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]`
 - `state summarize [--in <file>|-]`
 - `state inspect-measure --measure <number> [--in <file>|-]`
 - `state validate-command --command <json> [--in <file>|-]`
@@ -104,6 +105,7 @@ The first `convert` slice is intentionally narrow and follows the latest upstrea
 - `.musicxml` / `.xml` file input and output
 - `.mxl` file input decoded to MusicXML text
 - `.mxl` file output encoded from MusicXML text
+- first ABC text to MusicXML conversion slice for basic headers, notes, rests, chords, tuplets, grace groups, basic and standard-shorthand decorations, repeat / ending metadata, tie handoff, broken rhythm / slur handoff, and barline-separated measures
 - unsupported conversion pairs return usage error status `2`
 
 Planned upstream command families:

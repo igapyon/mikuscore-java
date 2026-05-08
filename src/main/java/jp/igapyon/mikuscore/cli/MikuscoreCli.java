@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Locale;
 
+import jp.igapyon.mikuscore.abc.AbcIo;
 import jp.igapyon.mikuscore.coreapi.CoreApi;
 import jp.igapyon.mikuscore.musicxml.MusicXmlState;
 import jp.igapyon.mikuscore.musicxml.MxlIo;
@@ -72,6 +73,19 @@ public final class MikuscoreCli {
                 return 0;
             } catch (Exception ex) {
                 err.println("MusicXML to MusicXML conversion failed: " + ex.getMessage());
+                return 1;
+            }
+        }
+        if ("abc".equals(from) && "musicxml".equals(to)) {
+            String inputPath = optionValue(args, "--in");
+            String outputPath = optionValue(args, "--out");
+            try {
+                String abcText = readInputText(inputPath, in);
+                String xmlText = AbcIo.musicXmlFromAbc(abcText, new AbcIo.AbcImportOptions());
+                writeMusicXmlOutput(outputPath, xmlText, out);
+                return 0;
+            } catch (Exception ex) {
+                err.println("ABC to MusicXML conversion failed: " + ex.getMessage());
                 return 1;
             }
         }
@@ -175,6 +189,7 @@ public final class MikuscoreCli {
         out.println();
         out.println("Usage:");
         out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/mikuscore.jar convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar state summarize [--in <file>|-]");
         out.println("  java -jar target/mikuscore.jar state inspect-measure --measure <number> [--in <file>|-]");
         out.println("  java -jar target/mikuscore.jar state validate-command --command <json> [--in <file>|-]");
@@ -201,6 +216,7 @@ public final class MikuscoreCli {
         out.println();
         out.println("Usage:");
         out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/mikuscore.jar convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar convert --help");
         out.println();
         out.println("Description:");
@@ -208,10 +224,11 @@ public final class MikuscoreCli {
         out.println();
         out.println("Supported pairs:");
         out.println("  --from musicxml --to musicxml");
+        out.println("  --from abc --to musicxml");
         out.println();
         out.println("Input:");
-        out.println("  --in <file>|-  Read MusicXML text or MXL bytes from file or stdin");
-        out.println("  file paths     musicxml accepts .musicxml / .xml / .mxl");
+        out.println("  --in <file>|-  Read MusicXML, MXL, or ABC text from file or stdin");
+        out.println("  file paths     musicxml accepts .musicxml / .xml / .mxl; abc accepts UTF-8 text");
         out.println();
         out.println("Output:");
         out.println("  --out <file>|-  Write MusicXML text or MXL bytes to file or stdout");

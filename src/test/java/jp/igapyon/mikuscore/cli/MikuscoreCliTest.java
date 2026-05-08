@@ -158,18 +158,21 @@ public class MikuscoreCliTest {
     }
 
     @Test
-    public void unsupportedConversionPairReturnsUsageError() throws Exception {
+    public void convertAbcToMusicXmlReadsStdinAndWritesStdout() throws Exception {
         ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                "X:1\nT:CLI ABC\nM:4/4\nL:1/4\nK:C\nC D E F|]\n".getBytes(StandardCharsets.UTF_8));
 
         int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "abc", "--to", "musicxml" },
-                new ByteArrayInputStream(new byte[0]),
+                inBytes,
                 new PrintStream(outBytes, true, "UTF-8"),
                 new PrintStream(errBytes, true, "UTF-8"));
 
-        assertEquals(2, exitCode);
-        assertEquals("", outBytes.toString("UTF-8"));
-        assertTrue(errBytes.toString("UTF-8").contains("Unsupported conversion pair: --from abc --to musicxml"));
+        assertEquals(0, exitCode);
+        assertTrue(outBytes.toString("UTF-8").contains("<work-title>CLI ABC</work-title>"));
+        assertTrue(outBytes.toString("UTF-8").contains("<step>C</step>"));
+        assertEquals("", errBytes.toString("UTF-8"));
     }
 
     @Test
