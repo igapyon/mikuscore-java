@@ -1516,6 +1516,163 @@ public class AbcIoTest {
                 explicitBeams.get(Integer.valueOf(1)));
     }
 
+    @Test
+    public void parsesBasicAbcBodyAndBuildsMusicXml() {
+        String abc = "X:1\nT:Basic ABC\nM:4/4\nL:1/4\nK:C\nC D E F|z2 [CE]2|]\n";
+
+        AbcIo.AbcParsedResult parsed = AbcIo.parseForMusicXml(abc, new AbcIo.AbcImportOptions());
+        assertEquals("Basic ABC", parsed.getMeta().getTitle());
+        assertEquals(1, parsed.getParts().size());
+        assertEquals(2, parsed.getParts().get(0).getMeasures().size());
+        assertEquals(4, parsed.getParts().get(0).getMeasures().get(0).size());
+        assertEquals(true, parsed.getParts().get(0).getMeasures().get(1).get(0).isRest());
+        assertEquals(true, parsed.getParts().get(0).getMeasures().get(1).get(2).isChord());
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<work-title>Basic ABC</work-title>"));
+        assertEquals(true, xml.contains("<part-name>Voice 1</part-name>"));
+        assertEquals(true, xml.contains("<step>C</step>"));
+        assertEquals(true, xml.contains("<rest/>"));
+        assertEquals(true, xml.contains("<chord/>"));
+    }
+
+    @Test
+    public void parsesAbcTupletBodyIntoMusicXmlTiming() {
+        String abc = "X:1\nT:Tuplet ABC\nM:4/4\nL:1/4\nK:C\n(3CDE F|]\n";
+
+        AbcIo.AbcParsedResult parsed = AbcIo.parseForMusicXml(abc, new AbcIo.AbcImportOptions());
+        List<AbcIo.AbcMeasureNote> notes = parsed.getParts().get(0).getMeasures().get(0);
+        assertEquals(4, notes.size());
+        assertEquals(640, notes.get(0).getDuration());
+        assertEquals(Integer.valueOf(3), notes.get(0).getTimeModificationActual());
+        assertEquals(Integer.valueOf(2), notes.get(0).getTimeModificationNormal());
+        assertEquals(true, notes.get(0).isTupletStart());
+        assertEquals(true, notes.get(2).isTupletStop());
+        assertEquals(960, notes.get(3).getDuration());
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<actual-notes>3</actual-notes>"));
+        assertEquals(true, xml.contains("<normal-notes>2</normal-notes>"));
+        assertEquals(true, xml.contains("<tuplet type=\"start\"/>"));
+        assertEquals(true, xml.contains("<tuplet type=\"stop\"/>"));
+    }
+
+    @Test
+    public void parsesAbcGraceGroupIntoMusicXmlGraceNotes() {
+        String abc = "X:1\nT:Grace ABC\nM:4/4\nL:1/4\nK:C\n{/c}D E F G|]\n";
+
+        AbcIo.AbcParsedResult parsed = AbcIo.parseForMusicXml(abc, new AbcIo.AbcImportOptions());
+        List<AbcIo.AbcMeasureNote> notes = parsed.getParts().get(0).getMeasures().get(0);
+        assertEquals(5, notes.size());
+        assertEquals(true, notes.get(0).isGrace());
+        assertEquals(true, notes.get(0).isGraceSlash());
+        assertEquals("C", notes.get(0).getStep());
+        assertEquals(false, notes.get(1).isGrace());
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<grace slash=\"yes\"/>"));
+        assertEquals(false, xml.contains("<grace slash=\"yes\"/><pitch><step>C</step><octave>5</octave></pitch><duration>"));
+    }
+
+    @Test
+    public void parsesBasicAbcDecorationsIntoMusicXmlNotations() {
+        String abc = "X:1\nT:Decorated ABC\nM:4/4\nL:1/4\nK:C\n!trill!C .D !accent!E !fermata!F|]\n";
+
+        AbcIo.AbcParsedResult parsed = AbcIo.parseForMusicXml(abc, new AbcIo.AbcImportOptions());
+        List<AbcIo.AbcMeasureNote> notes = parsed.getParts().get(0).getMeasures().get(0);
+        assertEquals(true, notes.get(0).isTrill());
+        assertEquals(true, notes.get(1).isStaccato());
+        assertEquals(true, notes.get(2).isAccent());
+        assertEquals("normal", notes.get(3).getFermataType());
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<trill-mark/>"));
+        assertEquals(true, xml.contains("<staccato/>"));
+        assertEquals(true, xml.contains("<accent/>"));
+        assertEquals(true, xml.contains("<fermata>normal</fermata>"));
+    }
+
+    @Test
+    public void parsesAbcStandardShorthandDecorationsIntoMusicXml() {
+        String abc = "X:1\nT:Standard Shorthand ABC\nM:4/4\nL:1/8\nK:C\n~C H D L E M F O G P A S B T c u d v e|]\n";
+
+        AbcIo.AbcParsedResult parsed = AbcIo.parseForMusicXml(abc, new AbcIo.AbcImportOptions());
+        List<AbcIo.AbcMeasureNote> notes = parsed.getParts().get(0).getMeasures().get(0);
+        assertEquals(true, notes.get(0).isArpeggiate());
+        assertEquals("normal", notes.get(1).getFermataType());
+        assertEquals(true, notes.get(2).isAccent());
+        assertEquals("mordent", notes.get(3).getMordentType());
+        assertEquals(true, notes.get(4).isCoda());
+        assertEquals("inverted-mordent", notes.get(5).getMordentType());
+        assertEquals(true, notes.get(6).isSegno());
+        assertEquals(true, notes.get(7).isTrill());
+        assertEquals(true, notes.get(8).isUpBow());
+        assertEquals(true, notes.get(9).isDownBow());
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<arpeggiate/>"));
+        assertEquals(true, xml.contains("<fermata>normal</fermata>"));
+        assertEquals(true, xml.contains("<accent/>"));
+        assertEquals(true, xml.contains("<mordent/>"));
+        assertEquals(true, xml.contains("<coda/>"));
+        assertEquals(true, xml.contains("<inverted-mordent/>"));
+        assertEquals(true, xml.contains("<segno/>"));
+        assertEquals(true, xml.contains("<trill-mark/>"));
+        assertEquals(true, xml.contains("<up-bow/>"));
+        assertEquals(true, xml.contains("<down-bow/>"));
+    }
+
+    @Test
+    public void parsesAbcRepeatAndEndingMetadataIntoMusicXmlBarlines() {
+        String abc = "X:1\nT:Repeat ABC\nM:4/4\nL:1/4\nK:C\n|: C D :|] [2 E F |]\n";
+
+        AbcIo.AbcParsedResult parsed = AbcIo.parseForMusicXml(abc, new AbcIo.AbcImportOptions());
+        Map<Integer, AbcIo.AbcMeasureMeta> metaByMeasure = parsed.getParts().get(0).getMeasureMetaByIndex();
+        assertEquals(true, metaByMeasure.get(Integer.valueOf(1)).isRepeatStart());
+        assertEquals(true, metaByMeasure.get(Integer.valueOf(1)).isRepeatEnd());
+        assertEquals("2", metaByMeasure.get(Integer.valueOf(2)).getEndingStart());
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<repeat direction=\"forward\" winged=\"none\"/>"));
+        assertEquals(true, xml.contains("<repeat direction=\"backward\" winged=\"none\"/>"));
+        assertEquals(true, xml.contains("<ending number=\"2\" type=\"start\"/>"));
+    }
+
+    @Test
+    public void parsesAbcTieBodyTokenIntoMusicXmlTieAndTied() {
+        String abc = "X:1\nT:Tie ABC\nM:4/4\nL:1/4\nK:C\nC-C D E|]\n";
+
+        AbcIo.AbcParsedResult parsed = AbcIo.parseForMusicXml(abc, new AbcIo.AbcImportOptions());
+        List<AbcIo.AbcMeasureNote> notes = parsed.getParts().get(0).getMeasures().get(0);
+        assertEquals(true, notes.get(0).isTieStart());
+        assertEquals(true, notes.get(1).isTieStop());
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<tie type=\"start\"/>"));
+        assertEquals(true, xml.contains("<tie type=\"stop\"/>"));
+        assertEquals(true, xml.contains("<tied type=\"start\"/>"));
+        assertEquals(true, xml.contains("<tied type=\"stop\"/>"));
+    }
+
+    @Test
+    public void parsesAbcBrokenRhythmAndSlurBodyIntoMusicXml() {
+        String abc = "X:1\nT:Broken Rhythm Slur ABC\nM:4/4\nL:1/4\nK:C\n(C>D) E F|]\n";
+
+        AbcIo.AbcParsedResult parsed = AbcIo.parseForMusicXml(abc, new AbcIo.AbcImportOptions());
+        List<AbcIo.AbcMeasureNote> notes = parsed.getParts().get(0).getMeasures().get(0);
+        assertEquals(4, notes.size());
+        assertEquals(1440, notes.get(0).getDuration());
+        assertEquals(480, notes.get(1).getDuration());
+        assertEquals(true, notes.get(0).isSlurStart());
+        assertEquals(true, notes.get(1).isSlurStop());
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<duration>1440</duration>"));
+        assertEquals(true, xml.contains("<duration>480</duration>"));
+        assertEquals(true, xml.contains("<slur type=\"start\"/>"));
+        assertEquals(true, xml.contains("<slur type=\"stop\"/>"));
+    }
+
     private static void assertFraction(int num, int den, AbcIo.Fraction actual) {
         assertEquals(num, actual.getNum());
         assertEquals(den, actual.getDen());

@@ -13,12 +13,12 @@ This file records the current `mikuscore-java` status and next migration items.
 - Primary verification command: `mvn test`
 - Runtime packaging: single executable jar configured through Maven shade plugin
 - Distribution zip: configured as an initial Maven assembly
-- CLI: foundation entrypoint plus first `convert --from musicxml --to musicxml` slice, `state summarize`, `state inspect-measure`, `state validate-command`, `state apply-command`, and `state diff`
+- CLI: foundation entrypoint plus first `convert --from musicxml --to musicxml` slice, first `convert --from abc --to musicxml` slice, `state summarize`, `state inspect-measure`, `state validate-command`, `state apply-command`, and `state diff`
 - Core conversion: partial basic command catalog and state inspection migration exists
 - Format I/O: MusicXML / MXL / ZIP helper subset migrated; broader ABC / MuseScore / MIDI / MEI / LilyPond conversion remains pending
 - ABC lexer: first low-level `abc-lexer.ts` helper slice migrated
 - ABC parser: playable-event, structural token, body dispatcher, and grace group helper slices migrated
-- ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, measure beam XML, note notations decoration XML, body import voice stores helper, body lyric application, body field state update, body barline processing, non-playable body entry dispatch, simple body token dispatch, bracket / grace / fallback body dispatch, pending note state helper, ABC chord harmony XML helper, MusicXML to ABC harmony / lyric helper, MusicXML to ABC DOM utility helper, MusicXML to ABC lane definition helper, MusicXML to ABC meta line helper, MusicXML to ABC measure meta helper, MusicXML to ABC measure state helper, MusicXML to ABC direction token helper, MusicXML to ABC note lane / timing helper, MusicXML to ABC note ornament helper, MusicXML to ABC pitch token helper, MusicXML to ABC note ornament prefix helper, MusicXML to ABC note articulation prefix helper, and MusicXML to ABC note technical prefix helper slices migrated
+- ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, measure beam XML, note notations decoration XML, body import voice stores helper, body lyric application, body field state update, body barline processing, non-playable body entry dispatch, simple body token dispatch, bracket / grace / fallback body dispatch, pending note state helper, ABC chord harmony XML helper, MusicXML to ABC harmony / lyric helper, MusicXML to ABC DOM utility helper, MusicXML to ABC lane definition helper, MusicXML to ABC meta line helper, MusicXML to ABC measure meta helper, MusicXML to ABC measure state helper, MusicXML to ABC direction token helper, MusicXML to ABC note lane / timing helper, MusicXML to ABC note ornament helper, MusicXML to ABC pitch token helper, MusicXML to ABC note ornament prefix helper, MusicXML to ABC note articulation prefix helper, MusicXML to ABC note technical prefix helper, first ABC body import to MusicXML integration, ABC body tuplet timing, ABC body grace group import, basic and standard-shorthand ABC body decoration pending state, ABC body repeat / ending metadata, ABC body tie handoff, and ABC body broken rhythm / slur handoff slices migrated
 - Render output: not migrated; `render svg` is constrained by upstream `verovio.js` browser runtime dependency
 
 ## Current Scope
@@ -216,7 +216,48 @@ Out of scope for the initial Java conversion:
   - accidental text to alter helper
   - optional number parser
   - nested direct-child DOM path helper subset
-- [ ] Continue ABC migration with `src/ts/abc-io.ts` body import and MusicXML export integration
+- [x] Add first ABC body import and MusicXML export integration slice from `src/ts/abc-io.ts`
+  - basic ABC headers, body line collection, notes, rests, chords, and barline-separated measures
+  - `parseForMusicXml` / `musicXmlFromAbc`
+  - first CLI bridge for `convert --from abc --to musicxml`
+  - focused JUnit tests
+- [x] Add ABC body tuplet timing slice from `src/ts/abc-io.ts`
+  - paren body token `(n` active tuplet state
+  - duration scale handoff to playable events
+  - MusicXML `time-modification` and tuplet start / stop notation on event-start notes
+  - focused JUnit tests
+- [x] Add ABC body grace group import slice from `src/ts/abc-io.ts`
+  - `{...}` grace group handoff in body import loop
+  - grace note pitch / accidental / octave / length conversion
+  - MusicXML grace slash emission
+  - focused JUnit tests
+- [x] Add basic ABC body decoration pending state slice from `src/ts/abc-io.ts`
+  - `!trill!` / `!staccato!` / `!accent!` / `!fermata!`
+  - single-char shorthand `.`, `T`, `L`, `H`
+  - pending decoration handoff to the first playable note
+  - focused JUnit tests
+- [x] Add standard shorthand ABC body decoration state slice from `src/ts/abc-io.ts`
+  - `~`, `M`, `O`, `P`, `S`, `u`, and `v`
+  - arpeggiate / mordent / inverted-mordent / coda / segno / up-bow / down-bow XML handoff
+  - focused JUnit tests
+- [x] Add ABC body repeat / ending metadata slice from `src/ts/abc-io.ts`
+  - repeat-start / repeat-end barline handoff
+  - bracket / bare repeat ending start handoff
+  - MusicXML repeat / ending barline XML integration
+  - focused JUnit tests
+- [x] Add ABC body tie handoff slice from `src/ts/abc-io.ts`
+  - tie body token `-`
+  - previous event tie-start and next event tie-stop handoff
+  - MusicXML `<tie>` / `<tied>` XML integration
+  - focused JUnit tests
+- [x] Add ABC body broken rhythm / slur handoff slice from `src/ts/abc-io.ts`
+  - broken rhythm body token `>` / `<`
+  - previous / next playable event duration scale handoff
+  - slur-start `(` and slur-stop `)` handoff
+  - MusicXML `<slur>` XML integration
+  - focused JUnit tests
+- [ ] Continue ABC migration with broader `src/ts/abc-io.ts` body import parity
+  - prefixed / richer decorations, overlays, overfull compatibility diagnostics, and golden fixtures
 - [x] Decide whether SVG render can be implemented directly in Java or must be recorded as constrained by upstream runtime dependencies
   - current decision: keep `render svg` unsupported in the Java initial slice until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen
 

@@ -312,6 +312,53 @@
   - [x] `AbcMusicXmlNoteTechnical`
   - [x] bow / tongue / fingering / string / pluck / open / harmonic prefix conversion
   - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の first ABC body import / MusicXML export integration slice を Java `AbcIo` と CLI に追加する
+  - [x] ABC headers / body line collection を `processAbcImportLine` 経由で統合する
+  - [x] basic note / rest / chord / barline-separated measure を `AbcParsedResult` に接続する
+  - [x] `parseForMusicXml`
+  - [x] `musicXmlFromAbc`
+  - [x] `convert --from abc --to musicxml` の first CLI bridge
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の ABC body tuplet timing slice を Java `AbcIo` の import path に追加する
+  - [x] paren body token `(n` を active tuplet state として保持する
+  - [x] playable event duration に tuplet scale を適用する
+  - [x] first event note に `timeModificationActual` / `timeModificationNormal` と tuplet start / stop を反映する
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の ABC body grace group import slice を Java `AbcIo` の import path に追加する
+  - [x] `{...}` grace group を body import loop に接続する
+  - [x] grace note length / pitch / accidental / octave を `AbcMeasureNote` に変換する
+  - [x] grace slash を MusicXML `<grace slash="yes"/>` に反映する
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の basic ABC body decoration pending state slice を Java `AbcIo` の import path に追加する
+  - [x] `!trill!` / `!staccato!` / `!accent!` / `!fermata!`
+  - [x] single-char shorthand `.`, `T`, `L`, `H`
+  - [x] first playable note への pending decoration handoff
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の standard shorthand decoration slice を Java `AbcIo` の import path に追加する
+  - [x] `~`, `M`, `O`, `P`, `S`, `u`, `v` を pending decoration state に追加する
+  - [x] arpeggiate / mordent / inverted-mordent / coda / segno / bowing XML への handoff
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の ABC body repeat / ending metadata slice を Java `AbcIo` の import path に追加する
+  - [x] repeat-start barline
+  - [x] repeat-end barline
+  - [x] bracket / bare repeat ending start
+  - [x] MusicXML barline repeat / ending XML への handoff
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の ABC body tie handoff slice を Java `AbcIo` の import path に追加する
+  - [x] tie body token `-`
+  - [x] previous playable event への tie-start handoff
+  - [x] next playable event への tie-stop handoff
+  - [x] MusicXML `<tie>` / `<tied>` XML への handoff
+  - [x] focused JUnit tests を追加する
+- [x] `src/ts/abc-io.ts` の ABC body broken rhythm / slur handoff slice を Java `AbcIo` の import path に追加する
+  - [x] broken rhythm body token `>` / `<`
+  - [x] previous playable event duration scale
+  - [x] next playable event duration scale handoff
+  - [x] slur-start `(` / slur-stop `)` handoff
+  - [x] MusicXML `<slur>` XML への handoff
+  - [x] focused JUnit tests を追加する
+- [ ] `src/ts/abc-io.ts` の broader ABC body import parity を継続する
+  - prefixed / richer decorations / overlays / overfull compatibility diagnostics / golden fixtures
 - [x] `mvn test` を primary verification として通す
 - [x] 実装後に `git status --short` と diff を確認する
 

@@ -9,6 +9,7 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | `--help` | implemented | Help now follows the current upstream `convert` / `state` command split for implemented Java slices |
 | `--version` | implemented | Returns Java package version fallback |
 | `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]` | implemented | First Java convert slice; supports text MusicXML and `.mxl` decode / encode by file extension |
+| `convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First ABC import/export bridge; supports basic ABC text headers, notes, rests, chords, tuplets, grace groups, basic decorations, repeat / ending metadata, tie handoff, and barline-separated measures |
 | `state summarize [--in <file>|-]` | implemented | Emits upstream-shaped JSON summary for MusicXML text input |
 | `state inspect-measure --measure <number> [--in <file>|-]` | implemented | Emits upstream-shaped note selectors for one MusicXML measure |
 | `state validate-command --command <json> [--in <file>|-]` | implemented | Partial: validates basic command catalog including `ui_noop` |
@@ -20,7 +21,7 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | Upstream command | Java command | Status | Notes |
 | --- | --- | --- | --- |
 | `convert --from musicxml --to musicxml` | `convert --from musicxml --to musicxml` | implemented | Java-side bridge command for text MusicXML and MXL file-path handling while broader conversion pairs are pending |
-| `convert --from abc --to musicxml` | pending | not started | |
+| `convert --from abc --to musicxml` | `convert --from abc --to musicxml` | partial | First Java slice covers basic ABC text, tuplet timing, grace groups, basic decorations, repeat / ending metadata, and tie handoff to MusicXML; broader decorations, overlays, diagnostics parity, and golden fixtures remain pending |
 | `convert --from musicxml --to abc` | pending | not started | |
 | `convert --from midi --to musicxml` | pending | not started | |
 | `convert --from musicxml --to midi` | pending | not started | |
