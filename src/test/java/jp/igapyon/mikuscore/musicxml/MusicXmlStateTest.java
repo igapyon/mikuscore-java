@@ -211,6 +211,19 @@ public class MusicXmlStateTest {
     }
 
     @Test
+    public void rejectsTripletChangeDurationWithoutTupletContext() {
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":2}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(
+                sampleTripletDurationWithoutContextMusicXml("Reject triplet duration"), command);
+
+        assertEquals(false, validation.isOk());
+        assertEquals("MVP_INVALID_COMMAND_PAYLOAD", validation.getDiagnostics().get(0).getCode());
+        assertEquals("Tuplet durations are not allowed because this measure/voice has no tuplet context.",
+                validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
     public void rejectsChangeDurationForRestTarget() {
         String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n3\",\"voice\":\"1\",\"duration\":2}";
 
@@ -319,6 +332,17 @@ public class MusicXmlStateTest {
     }
 
     @Test
+    public void rejectsSplitNoteWhenMeasureLaneIsOverfull() {
+        String command = "{\"type\":\"split_note\",\"targetNodeId\":\"n2\",\"voice\":\"1\"}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(
+                sampleOverfullSplitMusicXml("Reject overfull split"), command);
+
+        assertEquals(false, validation.isOk());
+        assertEquals("MEASURE_OVERFULL", validation.getDiagnostics().get(0).getCode());
+    }
+
+    @Test
     public void validatesInsertNoteAfterCommand() {
         String command = "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":\"1\",\"note\":{\"duration\":1,\"pitch\":{\"step\":\"A\",\"octave\":4}}}";
 
@@ -374,6 +398,39 @@ public class MusicXmlStateTest {
 
         assertEquals(false, validation.isOk());
         assertEquals("MEASURE_OVERFULL", validation.getDiagnostics().get(0).getCode());
+    }
+
+    @Test
+    public void extendingDurationConsumesFollowingRestInSameVoice() {
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n2\",\"voice\":\"1\",\"duration\":2}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(
+                sampleFollowingRestMusicXml("Consume following rest"), command);
+        String xml = MusicXmlState.applyMusicXmlCommand(sampleFollowingRestMusicXml("Consume following rest"), command);
+
+        assertTrue(validation.isOk());
+        assertEquals(3, countOccurrences(xml, "<note>"));
+        assertTrue(xml.contains("<step>C</step>"));
+        assertTrue(xml.contains("<step>D</step>"));
+        assertTrue(xml.contains("<duration>2</duration>"));
+        assertTrue(xml.contains("<step>E</step>"));
+        assertTrue(!xml.contains("<rest/>"));
+        assertTrue(!xml.contains("<rest></rest>"));
+    }
+
+    @Test
+    public void shorteningDurationAutoFillsTrailingRest() {
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":1}";
+
+        String xml = MusicXmlState.applyMusicXmlCommand(sampleFullWithHalfMusicXml("Fill underfull rest"), command);
+
+        assertEquals(4, countOccurrences(xml, "<note>"));
+        assertTrue(xml.contains("<rest/>") || xml.contains("<rest></rest>"));
+        assertTrue(xml.contains("<duration>1</duration>"));
+        assertTrue(xml.contains("<voice>1</voice>"));
+        assertTrue(xml.contains("<type>quarter</type>"));
+        assertTrue(xml.contains("<step>D</step>"));
+        assertTrue(xml.contains("<step>E</step>"));
     }
 
     @Test
@@ -498,6 +555,69 @@ public class MusicXmlStateTest {
                 + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
                 + "      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
                 + "      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>\n";
+    }
+
+    public static String sampleTripletDurationWithoutContextMusicXml(String title) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <work><work-title>" + title + "</work-title></work>\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes><divisions>3</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>\n"
+                + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "      <note><rest/><duration>9</duration><voice>1</voice><type>half</type><dot/></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>\n";
+    }
+
+    public static String sampleFollowingRestMusicXml(String title) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <work><work-title>" + title + "</work-title></work>\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>\n"
+                + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "      <note><rest/><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>\n";
+    }
+
+    public static String sampleFullWithHalfMusicXml(String title) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <work><work-title>" + title + "</work-title></work>\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>\n"
+                + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note>\n"
+                + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>\n";
+    }
+
+    public static String sampleOverfullSplitMusicXml(String title) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <work><work-title>" + title + "</work-title></work>\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>\n"
+                + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>whole</type></note>\n"
+                + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note>\n"
                 + "    </measure>\n"
                 + "  </part>\n"
                 + "</score-partwise>\n";

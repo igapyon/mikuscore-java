@@ -105,7 +105,7 @@ The first `convert` slice is intentionally narrow and follows the latest upstrea
 - `.musicxml` / `.xml` file input and output
 - `.mxl` file input decoded to MusicXML text
 - `.mxl` file output encoded from MusicXML text
-- first ABC text to MusicXML conversion slice for basic headers, notes, rests, chords, tuplets, grace groups, basic and standard-shorthand decorations, repeat / ending metadata, tie handoff, broken rhythm / slur handoff, and barline-separated measures
+- first ABC text to MusicXML conversion slice for basic headers, notes, rests, chords, tuplets, grace groups, overlay voices, basic / standard-shorthand / prefixed decorations, richer decoration aliases, accidental annotations, navigation / wedge / dynamics decorations, overfull compatibility reflow diagnostics, repeat / ending metadata, tie handoff, broken rhythm / slur handoff, barline-separated measures, and initial MusicXML -> ABC -> MusicXML fixture roundtrip coverage
 - unsupported conversion pairs return usage error status `2`
 
 Planned upstream command families:

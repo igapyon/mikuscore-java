@@ -26,6 +26,7 @@ public final class AbcParser {
             new AbcBarlineCandidate(":|", true, true, false, false),
             new AbcBarlineCandidate("::", true, true, true, false),
             new AbcBarlineCandidate("[|", true, false, false, false),
+            new AbcBarlineCandidate("]|", true, false, false, true),
             new AbcBarlineCandidate("|]", true, false, false, false),
             new AbcBarlineCandidate("||", true, false, false, false),
             new AbcBarlineCandidate("|", true, false, false, false),
