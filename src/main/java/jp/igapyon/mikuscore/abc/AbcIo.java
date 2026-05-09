@@ -21,6 +21,8 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
+import jp.igapyon.mikuscore.core.StaffClefPolicy;
+
 public final class AbcIo {
     private static final Fraction DEFAULT_UNIT = new Fraction(1, 8);
     private static final Fraction DEFAULT_RATIO = new Fraction(1, 1);
@@ -5628,7 +5630,7 @@ public final class AbcIo {
         if (keys.isEmpty()) {
             return "";
         }
-        return "F".equals(chooseSingleClefByKeys(keys)) ? "bass" : "treble";
+        return "F".equals(StaffClefPolicy.chooseSingleClefByKeys(keys)) ? "bass" : "treble";
     }
 
     private static Integer noteToMidiForAbcClefInference(AbcMeasureNote note) {
@@ -5661,20 +5663,6 @@ public final class AbcIo {
             return 11;
         }
         return 0;
-    }
-
-    private static String chooseSingleClefByKeys(List<Integer> keys) {
-        if (keys == null || keys.isEmpty()) {
-            return "G";
-        }
-        List<Integer> sorted = new ArrayList<Integer>(keys);
-        java.util.Collections.sort(sorted);
-        int minKey = sorted.get(0).intValue();
-        if (minKey >= 55) {
-            return "G";
-        }
-        int median = sorted.get(sorted.size() / 2).intValue();
-        return median < 60 ? "F" : "G";
     }
 
     private static String prettyPrintXml(String xml) {

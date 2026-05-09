@@ -24,6 +24,8 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import jp.igapyon.mikuscore.core.StaffClefPolicy;
+
 public final class MusicXmlState {
     private MusicXmlState() {
     }
@@ -182,6 +184,7 @@ public final class MusicXmlState {
 
         if ("change_to_pitch".equals(type)) {
             setPitch(note, MusicXmlCommandJson.castMap(command.get("pitch")));
+            autoAssignGrandStaffByPitch(note);
         } else if ("change_duration".equals(type)) {
             changeDuration(note, MusicXmlCommandJson.stringValue(command, "voice"),
                     MusicXmlCommandJson.intValue(command, "duration").intValue());
@@ -268,6 +271,8 @@ public final class MusicXmlState {
         if (timingFailure != null) {
             return timingFailure;
         }
+        List<MusicXmlCommandValidation.Warning> warnings = buildProjectedMeasureTimingWarnings(type, note, command,
+                commandVoice);
 
         List<String> changedNodeIds = new ArrayList<String>();
         changedNodeIds.add(nodeId);
@@ -279,7 +284,7 @@ public final class MusicXmlState {
         }
         List<String> affectedMeasureNumbers = new ArrayList<String>();
         affectedMeasureNumbers.add(target.selector.getMeasureNumber());
-        return new MusicXmlCommandValidation(true, true, changedNodeIds, affectedMeasureNumbers,
+        return new MusicXmlCommandValidation(true, true, changedNodeIds, affectedMeasureNumbers, warnings,
                 new ArrayList<MusicXmlCommandValidation.Diagnostic>());
     }
 
@@ -399,6 +404,29 @@ public final class MusicXmlState {
         return null;
     }
 
+    private static List<MusicXmlCommandValidation.Warning> buildProjectedMeasureTimingWarnings(String type, Element note,
+            Map<String, Object> command, String commandVoice) {
+        List<MusicXmlCommandValidation.Warning> warnings = new ArrayList<MusicXmlCommandValidation.Warning>();
+        if (!"insert_note_after".equals(type) || commandVoice == null) {
+            return warnings;
+        }
+        MeasureTiming timing = getMeasureTimingForVoice(note, commandVoice);
+        if (timing == null) {
+            return warnings;
+        }
+        Map<String, Object> notePayload = MusicXmlCommandJson.castMap(command.get("note"));
+        Integer insertedDuration = MusicXmlCommandJson.intValue(notePayload, "duration");
+        if (insertedDuration == null) {
+            return warnings;
+        }
+        int projected = timing.occupied + insertedDuration.intValue();
+        if (projected < timing.capacity) {
+            warnings.add(new MusicXmlCommandValidation.Warning("MEASURE_UNDERFULL",
+                    "Projected occupied time " + projected + " is below capacity " + timing.capacity + "."));
+        }
+        return warnings;
+    }
+
     private static boolean isTripletDuration(Element note, Integer duration) {
         if (duration == null) {
             return false;
@@ -458,6 +486,103 @@ public final class MusicXmlState {
     private static void setDurationValue(Element note, int duration) {
         upsertSimpleChild(note, "duration", Integer.toString(duration));
         syncSimpleTypeFromDuration(note, duration);
+    }
+
+    private static void autoAssignGrandStaffByPitch(Element note) {
+        if (!hasGrandStaffContext(note)) {
+            return;
+        }
+        Integer midi = notePitchToMidi(note);
+        if (midi == null) {
+            return;
+        }
+        Element staff = directChild(note, "staff");
+        String existingStaffText = directChildText(note, "staff");
+        Integer previousStaff = "1".equals(existingStaffText) ? Integer.valueOf(1)
+                : ("2".equals(existingStaffText) ? Integer.valueOf(2) : null);
+        int desiredStaff = StaffClefPolicy.pickStaffByPitchWithHysteresis(midi.intValue(), previousStaff);
+        if (staff == null) {
+            staff = note.getOwnerDocument().createElement("staff");
+            note.appendChild(staff);
+        }
+        staff.setTextContent(Integer.toString(desiredStaff));
+    }
+
+    private static boolean hasGrandStaffContext(Element note) {
+        Element measure = findAncestor(note, "measure");
+        Element part = findAncestor(measure, "part");
+        if (measure == null || part == null) {
+            return false;
+        }
+        List<Element> measures = directChildren(part, "measure");
+        int targetIndex = measures.indexOf(measure);
+        if (targetIndex < 0) {
+            return false;
+        }
+        int staves = 1;
+        String clef1 = "";
+        String clef2 = "";
+        for (int index = 0; index <= targetIndex; index++) {
+            Element attributes = directChild(measures.get(index), "attributes");
+            if (attributes == null) {
+                continue;
+            }
+            Integer parsedStaves = parseIntegerOrNull(directChildText(attributes, "staves"));
+            if (parsedStaves != null && parsedStaves.intValue() > 0) {
+                staves = parsedStaves.intValue();
+            }
+            for (Element clef : directChildren(attributes, "clef")) {
+                String number = trimToNull(clef.getAttribute("number"));
+                String sign = directChildText(clef, "sign");
+                if ("1".equals(number) && sign != null) {
+                    clef1 = sign;
+                }
+                if ("2".equals(number) && sign != null) {
+                    clef2 = sign;
+                }
+            }
+        }
+        return staves >= 2 && "G".equals(clef1) && "F".equals(clef2);
+    }
+
+    private static Integer notePitchToMidi(Element note) {
+        Element pitch = directChild(note, "pitch");
+        if (pitch == null) {
+            return null;
+        }
+        String step = directChildText(pitch, "step");
+        Integer octave = parseIntegerOrNull(directChildText(pitch, "octave"));
+        Integer alter = parseIntegerOrNull(directChildText(pitch, "alter"));
+        Integer base = semitoneByStep(step);
+        if (base == null || octave == null) {
+            return null;
+        }
+        return Integer.valueOf((octave.intValue() + 1) * 12 + base.intValue() + (alter == null ? 0 : alter.intValue()));
+    }
+
+    private static Integer semitoneByStep(String step) {
+        if ("C".equals(step)) {
+            return Integer.valueOf(0);
+        }
+        if ("D".equals(step)) {
+            return Integer.valueOf(2);
+        }
+        if ("E".equals(step)) {
+            return Integer.valueOf(4);
+        }
+        if ("F".equals(step)) {
+            return Integer.valueOf(5);
+        }
+        if ("G".equals(step)) {
+            return Integer.valueOf(7);
+        }
+        if ("A".equals(step)) {
+            return Integer.valueOf(9);
+        }
+        if ("B".equals(step)) {
+            return Integer.valueOf(11);
+        }
+        return null;
     }
 
     private static void changeDuration(Element note, String voice, int duration) {
@@ -897,19 +1022,8 @@ public final class MusicXmlState {
     }
 
     private static String accidentalFromAlter(int alter) {
-        if (alter == -2) {
-            return "flat-flat";
-        }
-        if (alter == -1) {
-            return "flat";
-        }
-        if (alter == 1) {
-            return "sharp";
-        }
-        if (alter == 2) {
-            return "double-sharp";
-        }
-        return "natural";
+        String accidental = AccidentalSpelling.accidentalTextFromAlter(alter);
+        return accidental == null ? "natural" : accidental;
     }
 
     private static void upsertSimpleChild(Element parent, String tagName, String text) {

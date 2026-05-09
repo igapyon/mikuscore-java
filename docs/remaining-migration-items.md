@@ -13,9 +13,9 @@ This file records the current `mikuscore-java` status and next migration items.
 - Primary verification command: `mvn test`
 - Runtime packaging: single executable jar configured through Maven shade plugin
 - Distribution zip: configured as an initial Maven assembly
-- CLI: foundation entrypoint plus first `convert --from musicxml --to musicxml` slice, first `convert --from abc --to musicxml` slice, `state summarize`, `state inspect-measure`, `state validate-command`, `state apply-command`, and `state diff`
+- CLI: foundation entrypoint plus first `convert --from musicxml --to musicxml` slice, first `convert --from abc --to musicxml` slice, first `convert --from musicxml --to abc` slice, constrained `render svg` unsupported recognition, `state summarize`, `state inspect-measure`, `state validate-command`, `state apply-command`, and `state diff`
 - Core conversion: partial basic command catalog and state inspection migration exists
-- Format I/O: MusicXML / MXL / ZIP helper subset migrated; broader ABC / MuseScore / MIDI / MEI / LilyPond conversion remains pending
+- Format I/O: MusicXML / MXL / ZIP helper subset migrated; MuseScore MSCZ/MSCX file I/O facade and MuseScore helper slices migrated; broader ABC / MuseScore conversion semantics / MIDI / MEI / LilyPond conversion remains pending
 - ABC lexer: first low-level `abc-lexer.ts` helper slice migrated
 - ABC parser: playable-event, structural token, body dispatcher, and grace group helper slices migrated
 - ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, measure beam XML, note notations decoration XML, body import voice stores helper, body lyric application, body field state update, body barline processing, non-playable body entry dispatch, simple body token dispatch, bracket / grace / fallback body dispatch, pending note state helper, ABC chord harmony XML helper, MusicXML to ABC harmony / lyric helper, MusicXML to ABC DOM utility helper, MusicXML to ABC lane definition helper, MusicXML to ABC meta line helper, MusicXML to ABC measure meta helper, MusicXML to ABC measure state helper, MusicXML to ABC direction token helper, MusicXML to ABC note lane / timing helper, MusicXML to ABC note ornament helper, MusicXML to ABC pitch token helper, MusicXML to ABC note ornament prefix helper, MusicXML to ABC note articulation prefix helper, MusicXML to ABC note technical prefix helper, first ABC body import to MusicXML integration, initial MusicXML to ABC public integration, initial ABC golden fixture roundtrip, ABC body tuplet timing, ABC body grace group import, ABC overlay import integration, basic / standard-shorthand / prefixed ABC body decoration pending state, ABC body navigation / wedge / dynamics decoration import, ABC richer decoration aliases, ABC overfull compatibility diagnostics, ABC body repeat / ending metadata, ABC body tie handoff, ABC chord tie handoff, missing voice measure rest fallback, grace-note occupancy exclusion, slur warning, and ABC body broken rhythm / slur handoff slices migrated
@@ -50,14 +50,156 @@ Out of scope for the initial Java conversion:
 - [x] Add first MusicXML state summary implementation
 - [x] Add first MusicXML measure inspection implementation for edit targeting
 - [x] Add first MusicXML state diff implementation
+- [x] Add first `src/ts/cli-api.ts` text-result facade slice in Java `CoreApi`
+  - MusicXML/MXL decode/encode, MuseScore MSCZ/MSCX decode/encode, ABC import/export, and MusicXML state summary/inspection/validation/apply/diff wrappers
+  - Java CLI delegates matching convert/state paths and MusicXML/MXL file I/O through `CoreApi`
+  - focused JUnit tests added for `CoreApi` result shape
+- [x] Add first `src/ts/musescore-io.ts` helper slice
+  - duration type to divisions, dotted duration, and division-to-type/dots helpers
+  - default MuseScore title/composer placeholder detection
+  - accidental subtype and TPC accidental text helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add second `src/ts/musescore-io.ts` helper slice
+  - truthy flags, repeat subtype flags, mid-measure repeat barlines, dynamics, visibility, articulation/ornament mapping, key mode inference, direction XML, key fifth normalization, transpose XML, clef parsing, and measure length formatting helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add third `src/ts/musescore-io.ts` helper slice
+  - direction staff/voice placement, tuplet time-modification/notation XML, tuplet rounding tolerance, beam level, and ottava direction/display helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fourth `src/ts/musescore-io.ts` helper slice
+  - import option resolution, tick-to-relative-div helper, tuplet descriptor parsing, inline tuplet start/end state transitions, and active tuplet-ref finalization helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifth `src/ts/musescore-io.ts` helper slice
+  - tuplet scale calculation, pending tuplet-start consumption, last timed-event tuplet-stop append, tuplet id numbering, pending trill consumption, and event routing helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixth `src/ts/musescore-io.ts` helper slice
+  - tie flag resolution, MuseScore string text extraction, trill spanner transition, chord notation summary, and chord note parsing helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add seventh `src/ts/musescore-io.ts` helper slice
+  - ignored import tag detection, measure overflow warning, parsed measure carrier, and fallback parsed measure helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add eighth `src/ts/musescore-io.ts` helper slice
+  - import part-list XML, identification XML, imported voice-event collection, measure attribute decision, primary/staff measure fallback resolution, and imported measure finalization helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add ninth `src/ts/musescore-io.ts` helper slice
+  - imported measure header XML and imported part voice-id resolver helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add tenth `src/ts/musescore-io.ts` helper slice
+  - source/warning miscellaneous XML, MuseScore import miscellaneous XML, URI component encoding, and chunking helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add eleventh `src/ts/musescore-io.ts` helper slice
+  - MuseScore import document XML wrapper and extended import metadata fields
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twelfth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export chord/rest XML helpers and division fraction helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirteenth `src/ts/musescore-io.ts` helper slice
+  - MuseScore voice event duration normalization and pending direction mark queue/consume helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fourteenth `src/ts/musescore-io.ts` helper slice
+  - MuseScore trailing direction mark application helper and voice-event carrier subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifteenth `src/ts/musescore-io.ts` helper slice
+  - MusicXML accidental subtype, octave-shift subtype, and mid-barline repeat mark helper subset for MuseScore export
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixteenth `src/ts/musescore-io.ts` helper slice
+  - MusicXML tie flags, slur/trill/tuplet numbered mark helpers, trill-mark-only detection, and merge helpers for MuseScore export
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add seventeenth `src/ts/musescore-io.ts` helper slice
+  - MusicXML articulation subtype, technical fingering/string, and clef inference/conversion helper subset for MuseScore export
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add eighteenth `src/ts/musescore-io.ts` helper slice
+  - MusicXML pitch-to-MIDI, note staff number, and staff pitch collection helper subset for MuseScore export
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add nineteenth `src/ts/musescore-io.ts` helper slice
+  - MusicXML direction dynamic subtype, sound dynamics velocity, beat-unit factor, and tempo qps helper subset for MuseScore export
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twentieth `src/ts/musescore-io.ts` helper slice
+  - MuseScore direction seed XML builder and direction seed carrier subset for MuseScore export
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-first `src/ts/musescore-io.ts` helper slice
+  - MuseScore export measure header XML and key signature helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-second `src/ts/musescore-io.ts` helper slice
+  - MuseScore export slur id state resolver helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-third `src/ts/musescore-io.ts` helper slice
+  - MuseScore export metadata XML builder and metadata carrier subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-fourth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export slur start/stop fraction resolver helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-fifth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export tuplet ref state resolver helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-sixth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export voice XML builder helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-seventh `src/ts/musescore-io.ts` helper slice
+  - MuseScore export measure voice XML builder helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-eighth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export staff state initialization/application helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-ninth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export staff XML builder helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirtieth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export part scaffold/instrument/result helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-first `src/ts/musescore-io.ts` helper slice
+  - MuseScore export document body/final XML and empty score helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-second `src/ts/musescore-io.ts` helper slice
+  - MuseScore export part identity/scaffold helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-third `src/ts/musescore-io.ts` helper slice
+  - MuseScore export measure context calculation helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-fourth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export source analysis / part-name map helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-fifth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export metadata value normalization helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-sixth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export final document fallback helper subset
+- [x] Add thirty-seventh `src/ts/musescore-io.ts` helper slice
+  - MuseScore export staff count source analysis helper subset
+- [x] Add thirty-eighth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export direction seed collection helper subset
+- [x] Add thirty-ninth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export MusicXML tuplet time-modification parser helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fortieth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export explicit clef scan helper subset
+- [x] Add forty-first `src/ts/musescore-io.ts` helper slice
+  - MuseScore export MusicXML direction mark payload helper subset
+- [x] Add forty-second `src/ts/musescore-io.ts` helper slice
+  - MuseScore export chord-follow MusicXML note merge helper subset
+- [x] Add forty-third `src/ts/musescore-io.ts` helper slice
+  - MuseScore export backup/forward cursor helper subset
+- [x] Add forty-fourth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export by-staff voice event push helper subset
+- [x] Add forty-fifth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export voice event direction/mid-barline routing helper subset
+- [x] Add forty-sixth `src/ts/musescore-io.ts` helper slice
+  - MuseScore export rest/chord voice event construction helper subset
+- [x] Add forty-seventh `src/ts/musescore-io.ts` helper slice
+  - MuseScore export note cursor advance helper subset
 - [x] Add first MusicXML command validation implementation for `change_to_pitch`
 - [x] Add first MusicXML command apply implementation for `change_to_pitch`
+- [x] Add `core/ScoreCore.ts` / `core/staffClefPolicy.ts` grand-staff staff assignment subset for `change_to_pitch`
+  - pitch edits in inherited two-staff G/F context update `<staff>` through upstream hysteresis thresholds
+  - focused JUnit tests added for low-pitch staff 2 and high-pitch staff 1 assignment
 - [x] Add simple `change_duration` validation/apply implementation
 - [x] Add simple `insert_note_after` validation/apply implementation
 - [x] Add simple `delete_note` validation/apply implementation
 - [x] Add simple `split_note` validation/apply implementation
 - [x] Add `ui_noop` validation/apply no-mutation behavior
 - [x] Add `core/timeIndex.ts` overfull validation subset for `change_duration` and `insert_note_after`
+- [x] Add `core/validators.ts` underfull warning subset for `insert_note_after`
+  - `validate-command` now reports `MEASURE_UNDERFULL` when projected occupied time remains below measure capacity
+  - successful `apply-command` still returns XML directly, so structured success warnings remain a follow-up if the Java API shape changes
 - [x] Add `core/ScoreCore.ts` / `core/timeIndex.ts` triplet context and rest consume/fill subset for `change_duration`
   - triplet durations are rejected when the edited measure/voice has no tuplet context
   - duration expansion consumes following rests in the same voice, then preceding rests when needed
@@ -164,6 +306,16 @@ Out of scope for the initial Java conversion:
   - meta-derived measure count, meter, key, tempo, and duration context
   - parsed result to score-partwise document assembly
   - single-clef inference subset from `core/staffClefPolicy.ts`
+- [x] Add `change_to_pitch` grand-staff pitch hysteresis subset from `core/staffClefPolicy.ts`
+  - Java `MusicXmlState` uses the upstream staff thresholds for two-staff G/F context
+- [x] Add `core/staffClefPolicy.ts` shared helper slice
+  - `shouldUseGrandStaffByRange`, `chooseSingleClefByKeys`, `pickStaffByPitchWithHysteresis`, and `pickStaffForClusterWithHysteresis`
+  - `AbcIo` single-clef inference and `MusicXmlState` grand-staff pitch assignment delegate to `StaffClefPolicy`
+  - focused JUnit tests added for upstream threshold behavior
+- [x] Add `core/accidentalSpelling.ts` helper slice
+  - `midiToPitch`, `keySignatureAlterForStep`, `accidentalTextFromAlter`, and `resolveAccidentalTextForPitch`
+  - `MusicXmlState` accidental text generation now delegates to `AccidentalSpelling.accidentalTextFromAlter`
+  - focused JUnit tests added from upstream `accidental-spelling.spec.ts` intent
 - [x] Add ABC I/O measure note XML core slice from `src/ts/abc-io.ts`
   - empty measure rest XML
   - pitch / rest / duration / voice / staff / type XML
@@ -316,6 +468,14 @@ Out of scope for the initial Java conversion:
   - MusicXML right repeat / ending to ABC right suffix
   - ABC parser ending-stop barline `]|`
   - focused JUnit tests
+- [x] Add first `convert --from musicxml --to abc` CLI bridge
+  - stdin / stdout MusicXML text to ABC text path
+  - `.mxl` input decode before `AbcIo.musicXmlToAbc`
+  - focused CLI tests for stdout and file output
+- [x] Add constrained `render svg` CLI recognition
+  - `render --help` follows the upstream command family
+  - `render svg` reports the Verovio/browser runtime constraint instead of falling through as an unknown command
+  - focused CLI tests added for help, unsupported SVG runtime, and unsupported render source
 - [x] Add ABC body repeat / ending metadata slice from `src/ts/abc-io.ts`
   - repeat-start / repeat-end barline handoff
   - bracket / bare repeat ending start handoff

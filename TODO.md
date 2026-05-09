@@ -29,6 +29,7 @@
 - [x] `render svg` は Java direct parity 可否を別途判断し、今回 slice では未実装なら明示的に pending / unsupported として扱う
   - upstream `src/ts/verovio-out.ts` は `window.verovio` / `verovio.js` runtime に依存するため、Java direct conversion は初期 slice では行わない
   - Java 側では renderer runtime 方針が決まるまで `render svg` を unsupported のまま扱う
+  - [x] Java CLI は `render svg` command family を認識し、Verovio/browser runtime 制約を明示して unsupported を返す
 - [ ] ABC / MuseScore / MIDI / MEI / LilyPond / VSQX は、最新 upstream の責務分離を見て Java 直移植対象と除外対象を再分類する
 - [x] `src/ts/abc-lexer.ts` を Java `AbcLexer` として first slice 移植する
   - [x] `lexAbcLengthToken`
@@ -318,6 +319,9 @@
   - [x] `parseForMusicXml`
   - [x] `musicXmlFromAbc`
   - [x] `convert --from abc --to musicxml` の first CLI bridge
+- [x] `convert --from musicxml --to abc` の first CLI bridge を追加する
+  - [x] stdin / stdout の MusicXML text -> ABC text path を通す
+  - [x] `.mxl` input decode から `AbcIo.musicXmlToAbc` へ接続する
   - [x] focused JUnit tests を追加する
 - [x] `src/ts/abc-io.ts` の ABC body tuplet timing slice を Java `AbcIo` の import path に追加する
   - [x] paren body token `(n` を active tuplet state として保持する
@@ -523,8 +527,10 @@
 
 - [ ] `core/ScoreCore.ts`
   - basic command catalog は Java `MusicXmlState` に partial 移植済み
+  - `change_to_pitch` の grand-staff pitch-based staff assignment は partial 移植済み
   - `change_duration` の triplet duration context guard は partial 移植済み
   - `change_duration` の following / preceding rest consume と underfull trailing rest fill は partial 移植済み
+  - `insert_note_after` の underfull warning は `validate-command` 用に partial 移植済み
   - `split_note` の timing overfull revalidation は partial 移植済み
   - timing parity は follow-up に残る
 - [ ] `core/commands.ts`
@@ -532,17 +538,23 @@
 - [ ] `core/interfaces.ts`
   - command validation result / diagnostics subset は partial 移植済み
 - [ ] `core/validators.ts`
-  - basic command payload / target validation、overfull、structural boundary subset は partial 移植済み
+  - basic command payload / target validation、overfull、insert underfull warning、structural boundary subset は partial 移植済み
 - [ ] `core/timeIndex.ts`
   - measure capacity / occupied-time subset は overfull validation 用に partial 移植済み
+  - `insert_note_after` の underfull warning 用 projected occupied-time subset は partial 移植済み
   - `change_duration` の tuplet context detection は partial 移植済み
   - `change_duration` の rest consume / underfull fill 用 timing subset は partial 移植済み
   - `split_note` の occupied-time projection は partial 移植済み
 - [ ] `src/ts/beam-common.ts`
   - implicit beam assignment subset は `MusicXmlIo.applyImplicitBeamsToMusicXmlText` 用に partial 移植済み
   - ABC measure beam XML 用の `computeBeamAssignments` subset は `AbcIo` に partial 移植済み
-- [ ] `core/accidentalSpelling.ts`
-- [ ] `core/staffClefPolicy.ts`
+- [x] `core/accidentalSpelling.ts`
+  - `midiToPitch` / `keySignatureAlterForStep` / `accidentalTextFromAlter` / `resolveAccidentalTextForPitch` は `AccidentalSpelling` に移植済み
+  - `MusicXmlState` の accidental text 生成を `AccidentalSpelling.accidentalTextFromAlter` に接続済み
+- [x] `core/staffClefPolicy.ts`
+  - `shouldUseGrandStaffByRange` / `chooseSingleClefByKeys` / `pickStaffByPitchWithHysteresis` / `pickStaffForClusterWithHysteresis` は `StaffClefPolicy` に移植済み
+  - ABC export 用 single-clef inference は `AbcIo` から `StaffClefPolicy` へ委譲済み
+  - `change_to_pitch` 用 grand-staff pitch hysteresis は `MusicXmlState` から `StaffClefPolicy` へ委譲済み
 - [ ] `core/xmlUtils.ts`
   - pitch / duration / rest creation / insert / delete / chord-head promotion / split helper subset は partial 移植済み
 - [ ] `src/ts/musicxml-io.ts`
@@ -582,13 +594,20 @@
 - [ ] `src/ts/zip-io.ts`
   - ZIP text extraction by extension / root entry listing / MXL zip encoding subset は `MxlIo` に partial 移植済み
 - [ ] `src/ts/musescore-io.ts`
+  - MuseScore 本体変換は未移植
+  - `.mscz` / `.mscx` file I/O facade は `src/ts/cli-api.ts` 経由の範囲として `CoreApi` / `MxlIo` に partial 移植済み
+  - duration type / dots、default title / composer 判定、repeat / dynamics / articulation / ornament / key mode / direction XML / clef / transpose / measure length、direction staff / voice placement、tuplet XML / import state / voice utilities、beam level、ottava、import option、tick relative div / event routing、tie / trill transition、chord notation summary、chord note parse、ignored import tag、measure overflow warning、parsed / fallback measure carrier、part-list / identification / misc / document XML、voice event collection / chord follow merge / backup-forward cursor / by-staff push / direction routing / rest-chord construction / note cursor advance、attribute判定、measure header / finalization、part voice id resolver、accidental subtype / TPC accidental helper、MusicXML pitch / accidental / octave-shift / direction mark payload / mid-barline repeat / notation number / tuplet time-modification / articulation / technical / clef / direction tempo export helper、direction seed XML / collection、explicit clef scan、export metadata value / document body / final fallback / empty score / measure context / measure header / key signature helper、export source analysis / staff count / part identity / scaffold / instrument helper、export slur id / fraction state helper、export tuplet ref state helper、export voice / measure voice / staff XML helper、export staff state helper、export chord / rest XML helper、pending / trailing direction mark helper は `MuseScoreIo` に partial 移植済み
 - [ ] `src/ts/midi-io.ts`
 - [ ] `src/ts/mei-io.ts`
 - [ ] `src/ts/lilypond-io.ts`
 - [x] `src/ts/vsqx-io.ts`
   - 初期 Java 移植対象外として固定する
 - [ ] `src/ts/cli-api.ts`
-  - `state` family core API subset は partial 移植済み
+  - `decodeCliMusicXmlInput` / `encodeCliMusicXmlOutput` の MusicXML/MXL file I/O facade は `CoreApi` に partial 移植済み
+  - `decodeCliMuseScoreInput` / `encodeCliMuseScoreOutput` の MuseScore MSCZ/MSCX file I/O facade は `CoreApi` に partial 移植済み
+  - `importAbcToMusicXml` / `exportMusicXmlToAbc` の text-result facade は `CoreApi` に partial 移植済み
+  - `summarizeMusicXmlState` / `inspectMusicXmlMeasure` / `validateMusicXmlCommand` / `applyMusicXmlCommand` / `diffMusicXmlState` の text-result facade は `CoreApi` に partial 移植済み
+  - Java CLI は該当 convert / state path を `CoreApi` 経由で呼び出す
 - [ ] `scripts/mikuscore-cli.mjs`
   - Java CLI の `state` family subset は partial 移植済み
 - [ ] Web UI-only files are out of Java conversion scope, but their core-facing behavior should be checked where they reveal product semantics
@@ -693,7 +712,11 @@
 - [ ] upstream CLI help / option / exit code / stdout / stderr を棚卸しする
 - [x] Java CLI の first cut 範囲を決める
 - [ ] `convert` command を実装する
-- [ ] `render svg` command を実装または制約付きで記録する
+  - [x] `convert --from musicxml --to musicxml`
+  - [x] `convert --from abc --to musicxml`
+  - [x] `convert --from musicxml --to abc`
+- [x] `render svg` command を実装または制約付きで記録する
+  - Java direct renderer runtime 方針が決まるまでは constrained unsupported として扱う
 - [ ] `state` family を実装する
   - [x] `state summarize`
   - [x] `state inspect-measure`

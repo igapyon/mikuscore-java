@@ -10,6 +10,8 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | `--version` | implemented | Returns Java package version fallback |
 | `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]` | implemented | First Java convert slice; supports text MusicXML and `.mxl` decode / encode by file extension |
 | `convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First ABC import/export bridge; supports basic ABC text headers, notes, rests, chords, tuplets, grace groups, basic decorations, repeat / ending metadata, tie handoff, and barline-separated measures |
+| `convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]` | partial | First ABC export CLI bridge; supports MusicXML text and `.mxl` input through the migrated `musicXmlToAbc` path |
+| `render svg [--from musicxml\|abc] [--in <file>\|-] [--out <file>\|-]` | unsupported | Command family is recognized, but SVG output remains blocked by the upstream Verovio/browser runtime dependency |
 | `state summarize [--in <file>|-]` | implemented | Emits upstream-shaped JSON summary for MusicXML text input |
 | `state inspect-measure --measure <number> [--in <file>|-]` | implemented | Emits upstream-shaped note selectors for one MusicXML measure |
 | `state validate-command --command <json> [--in <file>|-]` | implemented | Partial: validates basic command catalog including `ui_noop` |
@@ -22,7 +24,7 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | --- | --- | --- | --- |
 | `convert --from musicxml --to musicxml` | `convert --from musicxml --to musicxml` | implemented | Java-side bridge command for text MusicXML and MXL file-path handling while broader conversion pairs are pending |
 | `convert --from abc --to musicxml` | `convert --from abc --to musicxml` | partial | First Java slice covers basic ABC text, tuplet timing, grace groups, basic decorations, repeat / ending metadata, and tie handoff to MusicXML; broader decorations, overlays, diagnostics parity, and golden fixtures remain pending |
-| `convert --from musicxml --to abc` | pending | not started | |
+| `convert --from musicxml --to abc` | `convert --from musicxml --to abc` | partial | Java CLI bridge covers stdin/file input and `.mxl` decode, then delegates to the migrated `AbcIo.musicXmlToAbc` exporter |
 | `convert --from midi --to musicxml` | pending | not started | |
 | `convert --from musicxml --to midi` | pending | not started | |
 | `convert --from mei --to musicxml` | pending | not started | |
@@ -33,8 +35,8 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | `convert --from musicxml --to musescore` | pending | not started | |
 | `convert --from vsqx --to musicxml` | excluded | out of initial Java conversion scope | VSQX bridge / dependency constraints |
 | `convert --from musicxml --to vsqx` | excluded | out of initial Java conversion scope | VSQX bridge / dependency constraints |
-| `render svg` | pending | unsupported in current Java slice | Upstream depends on `window.verovio` / `verovio.js`; Java renderer runtime strategy is not fixed |
-| `render svg --from abc` | pending | unsupported in current Java slice | Upstream one-shot flow is internally ABC -> MusicXML -> SVG, but SVG rendering has the same Verovio runtime constraint |
+| `render svg` | `render svg` | unsupported in current Java slice | Java CLI recognizes the command and reports the Verovio/browser runtime constraint |
+| `render svg --from abc` | `render svg --from abc` | unsupported in current Java slice | Java CLI recognizes the source option, but SVG rendering has the same Verovio/browser runtime constraint |
 | `state summarize` | `state summarize [--in <file>|-]` | partial | Supports MusicXML text input from stdin or file |
 | `state inspect-measure` | `state inspect-measure --measure <number> [--in <file>|-]` | partial | Supports MusicXML text input from stdin or file |
 | `state validate-command` | `state validate-command --command <json> [--in <file>|-]` | partial | Basic command catalog; supports `targetNodeId`/`selector` or `anchorNodeId`/`anchor_selector` where applicable |
