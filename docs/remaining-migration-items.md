@@ -15,7 +15,7 @@ This file records the current `mikuscore-java` status and next migration items.
 - Distribution zip: configured as an initial Maven assembly
 - CLI: foundation entrypoint plus first `convert --from musicxml --to musicxml` slice, first `convert --from abc --to musicxml` slice, first `convert --from musicxml --to abc` slice, constrained `render svg` unsupported recognition, `state summarize`, `state inspect-measure`, `state validate-command`, `state apply-command`, and `state diff`
 - Core conversion: partial basic command catalog and state inspection migration exists
-- Format I/O: MusicXML / MXL / ZIP helper subset migrated; MuseScore MSCZ/MSCX file I/O facade and MuseScore helper slices migrated; broader ABC / MuseScore conversion semantics / MIDI / MEI / LilyPond conversion remains pending
+- Format I/O: MusicXML / MXL / ZIP helper subset migrated; MuseScore MSCZ/MSCX file I/O facade, MuseScore helper slices, and MEI helper slices migrated; broader ABC / MuseScore conversion semantics / MIDI / MEI / LilyPond conversion remains pending
 - ABC lexer: first low-level `abc-lexer.ts` helper slice migrated
 - ABC parser: playable-event, structural token, body dispatcher, and grace group helper slices migrated
 - ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, measure beam XML, note notations decoration XML, body import voice stores helper, body lyric application, body field state update, body barline processing, non-playable body entry dispatch, simple body token dispatch, bracket / grace / fallback body dispatch, pending note state helper, ABC chord harmony XML helper, MusicXML to ABC harmony / lyric helper, MusicXML to ABC DOM utility helper, MusicXML to ABC lane definition helper, MusicXML to ABC meta line helper, MusicXML to ABC measure meta helper, MusicXML to ABC measure state helper, MusicXML to ABC direction token helper, MusicXML to ABC note lane / timing helper, MusicXML to ABC note ornament helper, MusicXML to ABC pitch token helper, MusicXML to ABC note ornament prefix helper, MusicXML to ABC note articulation prefix helper, MusicXML to ABC note technical prefix helper, first ABC body import to MusicXML integration, initial MusicXML to ABC public integration, initial ABC golden fixture roundtrip, ABC body tuplet timing, ABC body grace group import, ABC overlay import integration, basic / standard-shorthand / prefixed ABC body decoration pending state, ABC body navigation / wedge / dynamics decoration import, ABC richer decoration aliases, ABC overfull compatibility diagnostics, ABC body repeat / ending metadata, ABC body tie handoff, ABC chord tie handoff, missing voice measure rest fallback, grace-note occupancy exclusion, slur warning, and ABC body broken rhythm / slur handoff slices migrated
@@ -186,6 +186,66 @@ Out of scope for the initial Java conversion:
   - MuseScore export rest/chord voice event construction helper subset
 - [x] Add forty-seventh `src/ts/musescore-io.ts` helper slice
   - MuseScore export note cursor advance helper subset
+- [x] Add first `src/ts/mei-io.ts` helper slice
+  - XML escaping, safe integer parsing, MusicXML note type to MEI duration, alter / accidental to MEI accid, key signature, pname, lyric wordpos / syllabic, mks duration metadata, tie marker, and articulation token/XML helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add second `src/ts/mei-io.ts` helper slice
+  - harmony kind / degree suffix, offset tick to tstamp, and MusicXML harmony values to MEI harm XML helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add third `src/ts/mei-io.ts` helper slice
+  - MEI duration to MusicXML type / quarter length / beam depth, dots multiplier, tick duration inference, MEI accidental import, and MEI key signature import helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fourth `src/ts/mei-io.ts` helper slice
+  - tonic-to-fifths, MEI key source resolution, hex formatter, duration metadata resolution, and tie/slur import parser helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifth `src/ts/mei-io.ts` helper slice
+  - MusicXML note/event XML insertion helpers for slur, tie, ornament, articulation, fermata, glissando, slide, tuplet, and beam fragments
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixth `src/ts/mei-io.ts` helper slice
+  - MEI tstamp to ticks, event index / start tick, and control endpoint id / plist / tstamp resolution helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add seventh `src/ts/mei-io.ts` helper slice
+  - harmony alter / text parsing, transpose / time XML, dynamics tag detection, and MEI dynam to MusicXML direction helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add eighth `src/ts/mei-io.ts` helper slice
+  - MEI hairpin / pedal / octave / repeat mark / tempo / harm to MusicXML helper slices
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add ninth `src/ts/mei-io.ts` helper slice
+  - MEI target list / control layer applicability and slur / tie / single notation control event application helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add tenth `src/ts/mei-io.ts` helper slice
+  - MEI beamSpan / tupletSpan / gliss / slide control event application helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add eleventh `src/ts/mei-io.ts` helper slice
+  - MEI layer event measure-capacity trim helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twelfth `src/ts/mei-io.ts` helper slice
+  - MEI source raw miscellaneous fields, MusicXML miscellaneous XML, and measure meta parser helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirteenth `src/ts/mei-io.ts` helper slice
+  - MEI overfull diagnostic fields, pickup implicit attribute, layer body, and barline XML helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fourteenth `src/ts/mei-io.ts` helper slice
+  - MEI measure attributes XML helper for initial and delta attribute emission
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifteenth `src/ts/mei-io.ts` helper slice
+  - MEI imported measure, part, score-part, and score-partwise wrapper XML helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixteenth `src/ts/mei-io.ts` helper slice
+  - MEI tie carry accidental helper for tied stop notes without explicit alter
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add seventeenth `src/ts/mei-io.ts` helper slice
+  - MEI debug note miscellaneous field helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add eighteenth `src/ts/mei-io.ts` helper slice
+  - MEI import root / corpus selection, title, staff number, and part-list helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add nineteenth `src/ts/mei-io.ts` helper slice
+  - MEI staffDef label / clef / staff meta helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twentieth `src/ts/mei-io.ts` helper slice
+  - MEI scoreDef / staffDef document-order resolution, transpose, meter / time symbol / clef helpers
+  - focused JUnit tests added for upstream helper behavior
 - [x] Add first MusicXML command validation implementation for `change_to_pitch`
 - [x] Add first MusicXML command apply implementation for `change_to_pitch`
 - [x] Add `core/ScoreCore.ts` / `core/staffClefPolicy.ts` grand-staff staff assignment subset for `change_to_pitch`

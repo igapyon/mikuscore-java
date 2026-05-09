@@ -599,6 +599,26 @@
   - duration type / dots、default title / composer 判定、repeat / dynamics / articulation / ornament / key mode / direction XML / clef / transpose / measure length、direction staff / voice placement、tuplet XML / import state / voice utilities、beam level、ottava、import option、tick relative div / event routing、tie / trill transition、chord notation summary、chord note parse、ignored import tag、measure overflow warning、parsed / fallback measure carrier、part-list / identification / misc / document XML、voice event collection / chord follow merge / backup-forward cursor / by-staff push / direction routing / rest-chord construction / note cursor advance、attribute判定、measure header / finalization、part voice id resolver、accidental subtype / TPC accidental helper、MusicXML pitch / accidental / octave-shift / direction mark payload / mid-barline repeat / notation number / tuplet time-modification / articulation / technical / clef / direction tempo export helper、direction seed XML / collection、explicit clef scan、export metadata value / document body / final fallback / empty score / measure context / measure header / key signature helper、export source analysis / staff count / part identity / scaffold / instrument helper、export slur id / fraction state helper、export tuplet ref state helper、export voice / measure voice / staff XML helper、export staff state helper、export chord / rest XML helper、pending / trailing direction mark helper は `MuseScoreIo` に partial 移植済み
 - [ ] `src/ts/midi-io.ts`
 - [ ] `src/ts/mei-io.ts`
+  - note type -> MEI dur、alter / MusicXML accidental -> MEI accid、key signature、pname、lyric wordpos / syllabic、mks duration metadata、tie / articulation helper first slice は `MeiIo` に partial 移植済み
+  - harmony kind / degree suffix、offset tick -> tstamp、MusicXML harmony values -> MEI harm XML helper は `MeiIo` に partial 移植済み
+  - MEI dur -> MusicXML type / quarter length / beam depth、dots multiplier、tick duration inference、MEI accid / key signature import helper は `MeiIo` に partial 移植済み
+  - tonic -> key fifths、MEI key source resolution、hex formatter、duration metadata resolution、tie / slur import flag parser は `MeiIo` に partial 移植済み
+  - MusicXML note / event XML への slur / tie / ornament / articulation / fermata / glissando / slide / tuplet / beam 追加 helper は `MeiIo` に partial 移植済み
+  - MEI tstamp -> ticks、event index / start tick、control endpoint id / plist / tstamp resolution helper は `MeiIo` に partial 移植済み
+  - harmony alter / text parser、transpose / time XML、MEI dynam -> MusicXML direction helper は `MeiIo` に partial 移植済み
+  - MEI hairpin / pedal / octave / repeat mark / tempo / harm -> MusicXML helper は `MeiIo` に partial 移植済み
+  - MEI target list / control layer applicability、slur / tie / single notation control event application helper は `MeiIo` に partial 移植済み
+  - MEI beamSpan / tupletSpan / gliss / slide control event application helper は `MeiIo` に partial 移植済み
+  - MEI layer event measure-capacity trim helper は `MeiIo` に partial 移植済み
+  - MEI source raw miscellaneous fields / MusicXML miscellaneous XML / measure meta parser helper は `MeiIo` に partial 移植済み
+  - MEI overfull diagnostic fields / pickup implicit / layer body / barline XML helper は `MeiIo` に partial 移植済み
+  - MEI measure attributes XML helper は `MeiIo` に partial 移植済み
+  - MEI imported measure / part / score-partwise wrapper XML helper は `MeiIo` に partial 移植済み
+  - MEI tie carry accidental helper は `MeiIo` に partial 移植済み
+  - MEI debug note miscellaneous field helper は `MeiIo` に partial 移植済み
+  - MEI import root / corpus selection、title、staff number、part-list helper は `MeiIo` に partial 移植済み
+  - MEI staffDef label / clef / staff meta helper は `MeiIo` に partial 移植済み
+  - MEI scoreDef / staffDef document-order resolution、transpose、meter / time symbol / clef helper は `MeiIo` に partial 移植済み
 - [ ] `src/ts/lilypond-io.ts`
 - [x] `src/ts/vsqx-io.ts`
   - 初期 Java 移植対象外として固定する
@@ -626,6 +646,7 @@
 - [ ] `tests/unit/musescore-io.spec.ts`
 - [ ] `tests/unit/midi-io.spec.ts`
 - [ ] `tests/unit/mei-io.spec.ts`
+  - first through twentieth MEI helper slices は `MeiIoTest` で focused coverage 済み
 - [ ] `tests/unit/lilypond-io.spec.ts`
 - [ ] `tests/property/core.property.spec.ts`
 - [ ] `tests/fixtures/*.musicxml`
