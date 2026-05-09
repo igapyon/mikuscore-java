@@ -13,7 +13,7 @@ completed slice history remains below.
 ### Highest Priority Format Work
 
 - [ ] Continue broader MEI import / export parity
-  - fifty-ninth focused MEI helper slice is migrated through export MusicXML DOM facade
+  - sixty-sixth focused MEI helper / facade / regression slice is migrated through MEI tie/slur minimal public import parity
   - first MusicXML-to-MEI CoreApi / CLI bridge is migrated
   - remaining work is broader export body / control-event parity and golden-style coverage
 - [ ] Continue broader MuseScore conversion semantics
@@ -419,6 +419,29 @@ Out of scope for the initial Java conversion:
 - [x] Add fifty-ninth `src/ts/mei-io.ts` helper slice
   - MEI export MusicXML DOM facade
   - focused JUnit tests added for upstream helper behavior
+- [x] Add sixtieth `src/ts/mei-io.ts` helper / facade slice
+  - MEI export facade version / transpose / tempo / dynamics parity
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixty-first `src/ts/mei-io.ts` regression slice
+  - MEI import staff-level cross-layer hairpin control-event id resolution
+  - focused JUnit test added for upstream public conversion behavior
+- [x] Add sixty-second `src/ts/mei-io.ts` regression slice
+  - MEI import mRest / mSpace / space timing-preserving public conversion behavior
+  - focused JUnit test added for upstream public conversion behavior
+- [x] Add sixty-third `src/ts/mei-io.ts` regression slice
+  - MEI import beam breaksec secondary-beam split public conversion behavior
+  - focused JUnit test added for upstream public conversion behavior
+- [x] Add sixty-fourth `src/ts/mei-io.ts` regression slice
+  - MEI import beam / graceGrp pitch, timing, slash, accidental, and beam-continuity public conversion behavior
+  - focused JUnit test added for upstream public conversion behavior
+- [x] Add sixty-fifth `src/ts/mei-io.ts` regression slice
+  - MEI import beamSpan listed-note beam-continuity public conversion behavior
+  - connected staff/layer span control application into the public MEI import layer facade
+  - focused JUnit test added for upstream public conversion behavior
+- [x] Add sixty-sixth `src/ts/mei-io.ts` regression slice
+  - MEI import tie-crossbar minimal note-attribute public conversion behavior
+  - MEI import slur minimal i/m/t marker public conversion behavior
+  - focused JUnit tests added for upstream public conversion behavior
 - [x] Add first `convert --from musicxml --to mei` CoreApi / CLI bridge
   - `CoreApi.exportMusicXmlToMei`
   - Java CLI stdin/stdout path delegates through `CoreApi`
