@@ -619,6 +619,44 @@
   - MEI import root / corpus selection、title、staff number、part-list helper は `MeiIo` に partial 移植済み
   - MEI staffDef label / clef / staff meta helper は `MeiIo` に partial 移植済み
   - MEI scoreDef / staffDef document-order resolution、transpose、meter / time symbol / clef helper は `MeiIo` に partial 移植済み
+  - MEI key.sig attr / key fifths element parser、scoreDef-for-staff key / transpose helper は `MeiIo` に partial 移植済み
+  - MEI dynam / hairpin / pedal / octave Element wrapper helper は `MeiIo` に partial 移植済み
+  - MEI repeatMark / tempo / harm Element wrapper helper と harmony alter 0 省略は `MeiIo` に partial 移植済み
+  - MEI layer harmony / direction XML collection helper は `MeiIo` に partial 移植済み
+  - MEI staff / layer notation control application helper は `MeiIo` に partial 移植済み
+  - MEI staff / layer span control application helper は `MeiIo` に partial 移植済み
+  - MEI staff annot misc / measure meta extraction と debug field helper は `MeiIo` に partial 移植済み
+  - MEI import option resolution / initial import context helper は `MeiIo` に partial 移植済み
+  - MEI initial part import state helper は `MeiIo` に partial 移植済み
+  - MEI per-measure import state helper は `MeiIo` に partial 移植済み
+  - MEI note lyric / accid / articulation reader と MusicXML note XML builder は `MeiIo` に partial 移植済み
+  - MEI rest event XML builder と parsed event beam/breaksec metadata carrier は `MeiIo` に partial 移植済み
+  - MEI chord event XML builder と tie / measure accidental state update helper は `MeiIo` に partial 移植済み
+  - MEI note event XML builder と tie / measure accidental state update helper は `MeiIo` に partial 移植済み
+  - MEI beam container event XML application helper は `MeiIo` に partial 移植済み
+  - MEI tuplet / graceGrp forced context propagation helper は `MeiIo` に partial 移植済み
+  - MEI stem slash event expansion helper は `MeiIo` に partial 移植済み
+  - MEI mRest / mSpace measure duration metadata helper は `MeiIo` に partial 移植済み
+  - MEI layer event parser facade は `MeiIo` に partial 移植済み
+  - MEI parsed layer id-to-event-tick helper は `MeiIo` に partial 移植済み
+  - MEI processed layer XML facade は `MeiIo` に partial 移植済み
+  - MEI processed staff layers facade は `MeiIo` に partial 移植済み
+  - MEI imported measure XML facade は `MeiIo` に partial 移植済み
+  - MEI imported part XML facade は `MeiIo` に partial 移植済み
+  - MEI score-partwise document facade は `MeiIo` に partial 移植済み
+  - MEI public text import facade は `MeiIo` に partial 移植済み
+  - MEI export scoreDef / staffDef scaffold helper は `MeiIo` に partial 移植済み
+  - MEI export measure-number / document wrapper scaffold helper は `MeiIo` に partial 移植済み
+  - MEI export measure miscellaneous / meta annotation helper は `MeiIo` に partial 移植済み
+  - MEI export simple note / rest event helper は `MeiIo` に partial 移植済み
+  - MEI export simple chord event helper は `MeiIo` に partial 移植済み
+  - MEI export layer content helper は `MeiIo` に partial 移植済み
+  - MEI export harmony DOM / staff attribute helper は `MeiIo` に partial 移植済み
+  - MEI export direction control helper は `MeiIo` に partial 移植済み
+  - MEI export staff timeline / gliss-slide control helper は `MeiIo` に partial 移植済み
+  - MEI export tie/slur control helper は `MeiIo` に partial 移植済み
+  - MEI export ornament / breath control helper は `MeiIo` に partial 移植済み
+  - MEI export MusicXML DOM facade は `MeiIo` に partial 移植済み
 - [ ] `src/ts/lilypond-io.ts`
 - [x] `src/ts/vsqx-io.ts`
   - 初期 Java 移植対象外として固定する
@@ -626,9 +664,13 @@
   - `decodeCliMusicXmlInput` / `encodeCliMusicXmlOutput` の MusicXML/MXL file I/O facade は `CoreApi` に partial 移植済み
   - `decodeCliMuseScoreInput` / `encodeCliMuseScoreOutput` の MuseScore MSCZ/MSCX file I/O facade は `CoreApi` に partial 移植済み
   - `importAbcToMusicXml` / `exportMusicXmlToAbc` の text-result facade は `CoreApi` に partial 移植済み
+  - `importMeiToMusicXml` の text-result facade は `CoreApi` に partial 移植済み
+  - `exportMusicXmlToMei` の text-result facade は `CoreApi` に partial 移植済み
   - `summarizeMusicXmlState` / `inspectMusicXmlMeasure` / `validateMusicXmlCommand` / `applyMusicXmlCommand` / `diffMusicXmlState` の text-result facade は `CoreApi` に partial 移植済み
   - Java CLI は該当 convert / state path を `CoreApi` 経由で呼び出す
 - [ ] `scripts/mikuscore-cli.mjs`
+  - Java CLI の `convert --from mei --to musicxml` は partial 移植済み
+  - Java CLI の `convert --from musicxml --to mei` は partial 移植済み
   - Java CLI の `state` family subset は partial 移植済み
 - [ ] Web UI-only files are out of Java conversion scope, but their core-facing behavior should be checked where they reveal product semantics
 
@@ -646,7 +688,7 @@
 - [ ] `tests/unit/musescore-io.spec.ts`
 - [ ] `tests/unit/midi-io.spec.ts`
 - [ ] `tests/unit/mei-io.spec.ts`
-  - first through twentieth MEI helper slices は `MeiIoTest` で focused coverage 済み
+  - first through fifty-ninth MEI helper slices は `MeiIoTest` で focused coverage 済み
 - [ ] `tests/unit/lilypond-io.spec.ts`
 - [ ] `tests/property/core.property.spec.ts`
 - [ ] `tests/fixtures/*.musicxml`

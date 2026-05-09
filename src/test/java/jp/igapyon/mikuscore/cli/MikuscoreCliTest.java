@@ -222,6 +222,28 @@ public class MikuscoreCliTest {
     }
 
     @Test
+    public void convertMeiToMusicXmlReadsStdinAndWritesStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        String mei = "<mei><music><body><mdiv><score><title>CLI MEI</title>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\"><staffDef n=\"1\" label=\"Voice\"/></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><note pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(mei.getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "mei", "--to", "musicxml" },
+                inBytes,
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(0, exitCode);
+        assertTrue(outBytes.toString("UTF-8").contains("<work-title>CLI MEI</work-title>"));
+        assertTrue(outBytes.toString("UTF-8").contains("<part-name>Voice</part-name>"));
+        assertTrue(outBytes.toString("UTF-8").contains("<step>F</step>"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
     public void convertMusicXmlToAbcReadsStdinAndWritesStdout() throws Exception {
         ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
@@ -267,6 +289,26 @@ public class MikuscoreCliTest {
             Files.deleteIfExists(input);
             Files.deleteIfExists(output);
         }
+    }
+
+    @Test
+    public void convertMusicXmlToMeiReadsStdinAndWritesStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                MusicXmlStateTest.sampleMusicXml("CLI MusicXML to MEI").getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musicxml", "--to", "mei" },
+                inBytes,
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        String out = outBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(out.contains("<mei"));
+        assertTrue(out.contains("<title>CLI MusicXML to MEI</title>"));
+        assertTrue(out.contains("<scoreDef"));
+        assertEquals("", errBytes.toString("UTF-8"));
     }
 
     @Test

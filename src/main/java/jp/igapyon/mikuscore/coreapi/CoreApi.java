@@ -4,6 +4,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 import jp.igapyon.mikuscore.abc.AbcIo;
+import jp.igapyon.mikuscore.mei.MeiIo;
+import jp.igapyon.mikuscore.musicxml.MusicXmlIo;
 import jp.igapyon.mikuscore.musicxml.MusicXmlState;
 import jp.igapyon.mikuscore.musicxml.MxlIo;
 
@@ -25,6 +27,14 @@ public final class CoreApi {
             return textResult(AbcIo.musicXmlFromAbc(abcText, new AbcIo.AbcImportOptions()));
         } catch (Exception ex) {
             return failureResult("Failed to parse ABC: " + ex.getMessage());
+        }
+    }
+
+    public static CliResult importMeiToMusicXml(String meiText) {
+        try {
+            return textResult(MusicXmlIo.normalizeImportedMusicXmlText(MeiIo.convertMeiToMusicXml(meiText)));
+        } catch (Exception ex) {
+            return failureResult("Failed to parse MEI: " + ex.getMessage());
         }
     }
 
@@ -77,6 +87,14 @@ public final class CoreApi {
             return textResult(AbcIo.musicXmlToAbc(xmlText));
         } catch (Exception ex) {
             return failureResult("Failed to export ABC: " + ex.getMessage());
+        }
+    }
+
+    public static CliResult exportMusicXmlToMei(String xmlText) {
+        try {
+            return textResult(MeiIo.exportMusicXmlDomToMei(MusicXmlIo.parseMusicXmlDocument(xmlText)));
+        } catch (Exception ex) {
+            return failureResult("Failed to export MEI: " + ex.getMessage());
         }
     }
 

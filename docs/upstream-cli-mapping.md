@@ -28,7 +28,7 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | `convert --from midi --to musicxml` | pending | not started | |
 | `convert --from musicxml --to midi` | pending | not started | |
 | `convert --from mei --to musicxml` | pending | not started | |
-| `convert --from musicxml --to mei` | pending | not started | |
+| `convert --from musicxml --to mei` | `convert --from musicxml --to mei` | partial | First Java CLI bridge covers stdin/file MusicXML input and delegates to the migrated MEI exporter through `CoreApi.exportMusicXmlToMei`; broader MEI export parity remains pending |
 | `convert --from lilypond --to musicxml` | pending | not started | |
 | `convert --from musicxml --to lilypond` | pending | not started | |
 | `convert --from musescore --to musicxml` | pending | not started | |
