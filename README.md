@@ -70,7 +70,7 @@ java -jar target/mikuscore.jar --help
 Release asset workflow:
 
 - pushing a `v*` tag, for example `v0.5.0`, builds the CLI runtime and attaches release assets to the matching GitHub Release
-- attached files are `mikuscore-<version>.jar`, `mikuscore-sources-<version>.jar`, and `mikuscore-dist-<version>.zip`
+- attached files are `mikuscore-<version>.jar` and `mikuscore-sources-<version>.jar`
 - the Maven version is kept aligned with the upstream Node.js package version
 
 ## CLI
