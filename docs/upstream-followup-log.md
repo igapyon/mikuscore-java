@@ -13,10 +13,10 @@ This document records upstream-following questions, parity gaps, and conversion 
 
 ### `insert_note_after` timing parity
 
-- Status: open
+- Status: open, narrowed 2026-05-09
 - Area: `core/ScoreCore.ts`, `core/timeIndex.ts`
 - Upstream reference: `insert_note_after` dispatch path in `ScoreCore.ts`
-- Note: Java currently migrates payload/anchor validation, adjacent pitched-note insertion, overfull validation, and same-lane / backup-forward boundary checks. Underfull timing warnings still require later `timeIndex` work.
+- Note: Java currently migrates payload/anchor validation, adjacent pitched-note insertion, overfull validation, same-lane / backup-forward boundary checks, and the `MEASURE_UNDERFULL` warning subset for `validate-command`. Remaining parity work is preserving underfull warnings through a structured successful apply result if the Java apply API grows beyond XML-only success output.
 
 ### `split_note` timing parity
 
@@ -33,6 +33,27 @@ This document records upstream-following questions, parity gaps, and conversion 
 - Note: Upstream `renderMusicXmlDomToSvg` depends on `window.verovio`, `verovio.js` runtime initialization, and browser DOM serialization. Java direct conversion is therefore not part of the current initial slice. Keep Java `render svg` unsupported until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen.
 
 ## Closed Items
+
+### `core/accidentalSpelling.ts` helper parity
+
+- Status: closed for current Java helper slice
+- Area: `core/accidentalSpelling.ts`
+- Upstream reference: `midiToPitch`, `keySignatureAlterForStep`, `accidentalTextFromAlter`, `resolveAccidentalTextForPitch`
+- Note: Java now has `AccidentalSpelling` with the upstream helper behavior covered by focused JUnit tests. `MusicXmlState` uses the migrated accidental text mapping for pitch edits and inserted notes.
+
+### `core/staffClefPolicy.ts` helper parity
+
+- Status: closed for current Java helper slice
+- Area: `core/staffClefPolicy.ts`
+- Upstream reference: `shouldUseGrandStaffByRange`, `chooseSingleClefByKeys`, `pickStaffByPitchWithHysteresis`, `pickStaffForClusterWithHysteresis`
+- Note: Java now has `StaffClefPolicy` with the upstream thresholds and helper behavior covered by focused JUnit tests. `AbcIo` and `MusicXmlState` delegate their already-migrated clef/staff decisions to the shared helper.
+
+### `change_to_pitch` grand-staff staff assignment
+
+- Status: closed for current Java basic command slice
+- Area: `core/ScoreCore.ts`, `core/staffClefPolicy.ts`
+- Upstream reference: `autoAssignGrandStaffByPitch` and `pickStaffByPitchWithHysteresis`
+- Note: Java now updates `<staff>` after `change_to_pitch` when the edited note is in an inherited two-staff G/F grand-staff context. The staff choice follows the upstream hysteresis thresholds.
 
 ### ABC trill accidental metadata roundtrip
 
