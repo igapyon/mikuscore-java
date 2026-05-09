@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -1822,6 +1823,137 @@ public final class MuseScoreIo {
         return 0;
     }
 
+    public static Map<Integer, String> buildMuseBeamXmlByEventInfo(Collection<MuseBeamEvent> events, int beatDiv,
+            boolean allowImplicitInference) {
+        List<MuseBeamEvent> infos = events == null ? Collections.<MuseBeamEvent>emptyList()
+                : new ArrayList<MuseBeamEvent>(events);
+        Map<Integer, BeamAssignment> assignmentByIndex = new LinkedHashMap<Integer, BeamAssignment>();
+        boolean hasExplicitMuseBeamInfo = false;
+        for (MuseBeamEvent info : infos) {
+            if (info != null && info.isTimed()
+                    && ("begin".equals(info.getExplicitMode()) || "mid".equals(info.getExplicitMode()))) {
+                hasExplicitMuseBeamInfo = true;
+                break;
+            }
+        }
+        if (!hasExplicitMuseBeamInfo && !allowImplicitInference) {
+            return Collections.emptyMap();
+        }
+
+        if (!hasExplicitMuseBeamInfo) {
+            List<Integer> currentGroup = new ArrayList<Integer>();
+            int cursorDiv = 0;
+            int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
+            for (int index = 0; index < infos.size(); index++) {
+                MuseBeamEvent info = infos.get(index);
+                if (info != null && info.isTimed() && cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0) {
+                    flushMuseBeamGroup(currentGroup, infos, assignmentByIndex);
+                    currentGroup = new ArrayList<Integer>();
+                }
+                if (info == null || !info.isChord() || !isBeamableMuseTimedEvent(info)) {
+                    flushMuseBeamGroup(currentGroup, infos, assignmentByIndex);
+                    currentGroup = new ArrayList<Integer>();
+                    if (info != null && info.isTimed()) {
+                        cursorDiv += Math.max(0, info.getDurationDiv());
+                    }
+                    continue;
+                }
+                currentGroup.add(Integer.valueOf(index));
+                cursorDiv += Math.max(0, info.getDurationDiv());
+            }
+            flushMuseBeamGroup(currentGroup, infos, assignmentByIndex);
+            return museBeamXmlByIndex(assignmentByIndex);
+        }
+
+        List<Integer> activeGroup = new ArrayList<Integer>();
+        int cursorDiv = 0;
+        int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
+        for (int index = 0; index < infos.size(); index++) {
+            MuseBeamEvent info = infos.get(index);
+            if (info == null || !info.isTimed()) {
+                flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
+                activeGroup = new ArrayList<Integer>();
+                continue;
+            }
+            if (cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0) {
+                flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
+                activeGroup = new ArrayList<Integer>();
+            }
+            if (!isBeamableMuseTimedEvent(info)) {
+                flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
+                activeGroup = new ArrayList<Integer>();
+                continue;
+            }
+            if ("begin".equals(info.getExplicitMode())) {
+                flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
+                activeGroup = new ArrayList<Integer>();
+                activeGroup.add(Integer.valueOf(index));
+                cursorDiv += Math.max(0, info.getDurationDiv());
+                continue;
+            }
+            if ("mid".equals(info.getExplicitMode())) {
+                if (activeGroup.isEmpty()) {
+                    MuseBeamEvent previous = index > 0 ? infos.get(index - 1) : null;
+                    if (isBeamableMuseTimedEvent(previous)) {
+                        activeGroup.add(Integer.valueOf(index - 1));
+                    }
+                }
+                activeGroup.add(Integer.valueOf(index));
+                cursorDiv += Math.max(0, info.getDurationDiv());
+                continue;
+            }
+            activeGroup.add(Integer.valueOf(index));
+            cursorDiv += Math.max(0, info.getDurationDiv());
+        }
+        flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
+        return museBeamXmlByIndex(assignmentByIndex);
+    }
+
+    private static boolean isBeamableMuseTimedEvent(MuseBeamEvent info) {
+        return info != null && info.isTimed() && !info.isGrace() && info.getLevels() > 0;
+    }
+
+    private static void flushMuseBeamGroup(List<Integer> indices, List<MuseBeamEvent> infos,
+            Map<Integer, BeamAssignment> assignmentByIndex) {
+        List<Integer> chordIndices = new ArrayList<Integer>();
+        if (indices != null) {
+            for (Integer index : indices) {
+                if (index == null || index.intValue() < 0 || index.intValue() >= infos.size()) {
+                    continue;
+                }
+                MuseBeamEvent info = infos.get(index.intValue());
+                if (info != null && info.isChord() && !info.isGrace()) {
+                    chordIndices.add(index);
+                }
+            }
+        }
+        if (chordIndices.size() < 2) {
+            return;
+        }
+        for (int groupIndex = 0; groupIndex < chordIndices.size(); groupIndex++) {
+            Integer eventIndex = chordIndices.get(groupIndex);
+            MuseBeamEvent info = infos.get(eventIndex.intValue());
+            String state = groupIndex == 0 ? "begin" : (groupIndex == chordIndices.size() - 1 ? "end" : "continue");
+            assignmentByIndex.put(eventIndex, new BeamAssignment(state, info.getLevels()));
+        }
+    }
+
+    private static Map<Integer, String> museBeamXmlByIndex(Map<Integer, BeamAssignment> assignmentByIndex) {
+        Map<Integer, String> out = new LinkedHashMap<Integer, String>();
+        for (Map.Entry<Integer, BeamAssignment> entry : assignmentByIndex.entrySet()) {
+            BeamAssignment assignment = entry.getValue();
+            StringBuilder xml = new StringBuilder();
+            for (int level = 1; level <= assignment.levels; level++) {
+                xml.append("<beam number=\"").append(level).append("\">").append(assignment.state)
+                        .append("</beam>");
+            }
+            if (xml.length() > 0) {
+                out.put(entry.getKey(), xml.toString());
+            }
+        }
+        return out;
+    }
+
     public static OttavaShift parseOttavaSubtype(String raw) {
         String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         int size = normalized.contains("15") ? 15 : 8;
@@ -2160,6 +2292,91 @@ public final class MuseScoreIo {
             return new TrillSpannerTransition(false, false);
         }
         return new TrillSpannerTransition(hasStart, hasStop);
+    }
+
+    public static MuseSlurTransition parseMuseSlurSpannerTransition(String type, boolean hasStart, boolean hasStop) {
+        String normalized = type == null ? "" : type.trim().toLowerCase(Locale.ROOT);
+        if (!"slur".equals(normalized)) {
+            return new MuseSlurTransition(false, false);
+        }
+        return new MuseSlurTransition(hasStart, hasStop);
+    }
+
+    public static MuseSlurTransitions parseMuseChordSlurTransitions(Collection<MuseSlurElement> slurs,
+            Collection<MuseSlurTransition> spanners, MuseImportSlurState state) {
+        MuseImportSlurState safeState = state == null ? new MuseImportSlurState() : state;
+        List<Integer> starts = new ArrayList<Integer>();
+        List<Integer> stops = new ArrayList<Integer>();
+        if (slurs != null) {
+            for (MuseSlurElement slur : slurs) {
+                if (slur == null) {
+                    continue;
+                }
+                String type = slur.getType() == null ? "" : slur.getType().trim().toLowerCase(Locale.ROOT);
+                int number = resolveMuseImportSlurNumber(slur.getId(), safeState);
+                if ("start".equals(type)) {
+                    starts.add(Integer.valueOf(number));
+                    if (!safeState.getActiveSlurNumbers().contains(Integer.valueOf(number))) {
+                        safeState.getActiveSlurNumbers().add(Integer.valueOf(number));
+                    }
+                } else if ("stop".equals(type)) {
+                    stops.add(Integer.valueOf(number));
+                    safeState.getActiveSlurNumbers().remove(Integer.valueOf(number));
+                }
+            }
+        }
+        if (spanners != null) {
+            for (MuseSlurTransition spanner : spanners) {
+                if (spanner == null) {
+                    continue;
+                }
+                if (spanner.isStop()) {
+                    int number = 1;
+                    List<Integer> active = safeState.getActiveSlurNumbers();
+                    if (!active.isEmpty()) {
+                        number = active.remove(active.size() - 1).intValue();
+                    }
+                    stops.add(Integer.valueOf(number));
+                }
+                if (spanner.isStart()) {
+                    int number = safeState.getNextSlurNumber();
+                    safeState.setNextSlurNumber(number + 1);
+                    safeState.getActiveSlurNumbers().add(Integer.valueOf(number));
+                    starts.add(Integer.valueOf(number));
+                }
+            }
+        }
+        return new MuseSlurTransitions(starts, stops);
+    }
+
+    private static int resolveMuseImportSlurNumber(String rawId, MuseImportSlurState state) {
+        String key = rawId == null ? "" : rawId.trim();
+        if (key.length() == 0) {
+            int number = state.getNextSlurNumber();
+            state.setNextSlurNumber(number + 1);
+            return number;
+        }
+        Integer direct = parsePositiveIntegerOrNull(key);
+        if (direct != null) {
+            return direct.intValue();
+        }
+        Integer mapped = state.getSlurKeyToNumber().get(key);
+        if (mapped != null) {
+            return mapped.intValue();
+        }
+        int number = state.getNextSlurNumber();
+        state.setNextSlurNumber(number + 1);
+        state.getSlurKeyToNumber().put(key, Integer.valueOf(number));
+        return number;
+    }
+
+    private static Integer parsePositiveIntegerOrNull(String raw) {
+        try {
+            int parsed = Integer.parseInt(raw == null ? "" : raw.trim());
+            return parsed > 0 ? Integer.valueOf(parsed) : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     public static MuseScoreChordNotationSummary summarizeMuseChordNotations(Collection<String> articulationSubtypes,
@@ -4529,6 +4746,60 @@ public final class MuseScoreIo {
         }
     }
 
+    public static final class MuseBeamEvent {
+        private final boolean timed;
+        private final boolean chord;
+        private final boolean grace;
+        private final int durationDiv;
+        private final int levels;
+        private final String explicitMode;
+
+        public MuseBeamEvent(boolean timed, boolean chord, boolean grace, int durationDiv, int levels,
+                String explicitMode) {
+            this.timed = timed;
+            this.chord = chord;
+            this.grace = grace;
+            this.durationDiv = Math.max(0, durationDiv);
+            this.levels = Math.max(0, levels);
+            String normalized = explicitMode == null ? "" : explicitMode.trim().toLowerCase(Locale.ROOT);
+            this.explicitMode = "begin".equals(normalized) || "mid".equals(normalized) ? normalized : "";
+        }
+
+        public boolean isTimed() {
+            return timed;
+        }
+
+        public boolean isChord() {
+            return chord;
+        }
+
+        public boolean isGrace() {
+            return grace;
+        }
+
+        public int getDurationDiv() {
+            return durationDiv;
+        }
+
+        public int getLevels() {
+            return levels;
+        }
+
+        public String getExplicitMode() {
+            return explicitMode;
+        }
+    }
+
+    private static final class BeamAssignment {
+        private final String state;
+        private final int levels;
+
+        private BeamAssignment(String state, int levels) {
+            this.state = state;
+            this.levels = Math.max(0, levels);
+        }
+    }
+
     public static final class OttavaShift {
         private final int size;
         private final String shiftType;
@@ -4776,6 +5047,97 @@ public final class MuseScoreIo {
 
         public boolean isStop() {
             return stop;
+        }
+    }
+
+    public static final class MuseSlurElement {
+        private final String type;
+        private final String id;
+
+        public MuseSlurElement(String type, String id) {
+            this.type = type;
+            this.id = id;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public String getId() {
+            return id;
+        }
+    }
+
+    public static final class MuseSlurTransition {
+        private final boolean start;
+        private final boolean stop;
+
+        private MuseSlurTransition(boolean start, boolean stop) {
+            this.start = start;
+            this.stop = stop;
+        }
+
+        public boolean isStart() {
+            return start;
+        }
+
+        public boolean isStop() {
+            return stop;
+        }
+    }
+
+    public static final class MuseSlurTransitions {
+        private final List<Integer> starts;
+        private final List<Integer> stops;
+
+        private MuseSlurTransitions(Collection<Integer> starts, Collection<Integer> stops) {
+            this.starts = starts == null ? Collections.<Integer>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<Integer>(starts));
+            this.stops = stops == null ? Collections.<Integer>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<Integer>(stops));
+        }
+
+        public List<Integer> getStarts() {
+            return starts;
+        }
+
+        public List<Integer> getStops() {
+            return stops;
+        }
+    }
+
+    public static final class MuseImportSlurState {
+        private final List<Integer> activeSlurNumbers;
+        private final Map<String, Integer> slurKeyToNumber;
+        private int nextSlurNumber;
+
+        public MuseImportSlurState() {
+            this(1, null, null);
+        }
+
+        public MuseImportSlurState(int nextSlurNumber, Collection<Integer> activeSlurNumbers,
+                Map<String, Integer> slurKeyToNumber) {
+            this.nextSlurNumber = Math.max(1, nextSlurNumber);
+            this.activeSlurNumbers = activeSlurNumbers == null ? new ArrayList<Integer>()
+                    : new ArrayList<Integer>(activeSlurNumbers);
+            this.slurKeyToNumber = slurKeyToNumber == null ? new LinkedHashMap<String, Integer>()
+                    : new LinkedHashMap<String, Integer>(slurKeyToNumber);
+        }
+
+        public int getNextSlurNumber() {
+            return nextSlurNumber;
+        }
+
+        public void setNextSlurNumber(int nextSlurNumber) {
+            this.nextSlurNumber = Math.max(1, nextSlurNumber);
+        }
+
+        public List<Integer> getActiveSlurNumbers() {
+            return activeSlurNumbers;
+        }
+
+        public Map<String, Integer> getSlurKeyToNumber() {
+            return slurKeyToNumber;
         }
     }
 

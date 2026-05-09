@@ -10,6 +10,29 @@
 
 ## 最重要
 
+### 2026-05-10 一時停止メモ
+
+- [x] ここまでの最新検証: `mvn test` 成功、352 tests / 0 failures / 0 errors
+- [x] 直近完了 slice: upstream `tests/unit/musescore-io.spec.ts` の MuseScore Slur spanner / legacy chord-level Slur id transition intent を `MuseScoreIo` / `MuseScoreIoTest` へ focused coverage として移植
+- [x] 直近の upstream 基準 checkout: `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`
+- [ ] 再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
+- [ ] 再開時の第一候補は `workplace/mikuscore/tests/unit/musescore-io.spec.ts` の Slur import 直後の intent
+  - 目安: `imports MuseScore note tie markers into MusicXML tie/tied`
+  - 既存 Java 側には `parseMuseTieFlags` と note/chord helper coverage があるため、まず不足が helper regression で足りるか確認する
+  - full MuseScore import pipeline へ無理に拡張せず、既存の public helper 境界で upstream semantics を固定する
+- [ ] 次点候補は同じ upstream file の chord articulation subtype import intent
+  - 既存 Java 側には `summarizeMuseChordNotations` があるため、focused coverage の不足を先に確認する
+- [ ] 再開時の確認コマンド
+  - `git status --short`
+  - `rg -n "imports MuseScore note tie markers|imports MuseScore chord articulation|Slur spanner" workplace/mikuscore/tests/unit/musescore-io.spec.ts`
+  - `mvn test -Dtest=MuseScoreIoTest`
+  - 最後に `mvn test`
+- [ ] 再開時に更新する tracking files
+  - `TODO.md`
+  - `docs/remaining-migration-items.md`
+  - `docs/upstream-class-mapping.md`
+  - `docs/upstream-test-mapping.md`
+
 ### 2026-05-07 最新 upstream 取り込み方針
 
 - [x] upstream `workplace/mikuscore` を `cc776ec` まで fast-forward する
@@ -559,7 +582,7 @@
   - pitch / duration / rest creation / insert / delete / chord-head promotion / split helper subset は partial 移植済み
 - [ ] `src/ts/musicxml-io.ts`
   - state command 用 DOM parse / serialize subset は partial 移植済み
-  - parse / serialize / pretty-print、part-list / part id / tuplet notation / final barline normalization、explicit implicit beam pass subset は `MusicXmlIo` に partial 移植済み
+  - parse / serialize / pretty-print、part-list / part id / tuplet notation / missing tuplet group補完 / final barline normalization、explicit implicit beam pass subset は `MusicXmlIo` に partial 移植済み
 - [ ] `src/ts/abc-io.ts`
   - fraction / length token / pitch / accidental / key / tempo unit helpers は `AbcIo` に partial 移植済み
   - abcjs wrapper line / measure content duration estimate / ABC key fifths helper は `AbcIo` に partial 移植済み
@@ -596,7 +619,7 @@
 - [ ] `src/ts/musescore-io.ts`
   - MuseScore 本体変換は未移植
   - `.mscz` / `.mscx` file I/O facade は `src/ts/cli-api.ts` 経由の範囲として `CoreApi` / `MxlIo` に partial 移植済み
-  - duration type / dots、default title / composer 判定、repeat / dynamics / articulation / ornament / key mode / direction XML / clef / transpose / measure length、direction staff / voice placement、tuplet XML / import state / voice utilities、beam level、ottava、import option、tick relative div / event routing、tie / trill transition、chord notation summary、chord note parse、ignored import tag、measure overflow warning、parsed / fallback measure carrier、part-list / identification / misc / document XML、voice event collection / chord follow merge / backup-forward cursor / by-staff push / direction routing / rest-chord construction / note cursor advance、attribute判定、measure header / finalization、part voice id resolver、accidental subtype / TPC accidental helper、MusicXML pitch / accidental / octave-shift / direction mark payload / mid-barline repeat / notation number / tuplet time-modification / articulation / technical / clef / direction tempo export helper、direction seed XML / collection、explicit clef scan、export metadata value / document body / final fallback / empty score / measure context / measure header / key signature helper、export source analysis / staff count / part identity / scaffold / instrument helper、export slur id / fraction state helper、export tuplet ref state helper、export voice / measure voice / staff XML helper、export staff state helper、export chord / rest XML helper、pending / trailing direction mark helper は `MuseScoreIo` に partial 移植済み
+  - duration type / dots、default title / composer 判定、repeat / dynamics / articulation / ornament / key mode / direction XML / clef / transpose / measure length、direction staff / voice placement、tuplet XML / import state / voice utilities、tuplet id reference numbering、tuplet written duration type、beam level / explicit BeamMode XML assignment / implicit beam XML assignment、MuseScore Slur spanner / legacy Slur id transition、ottava、import option、tick relative div / event routing、tie / trill transition、chord notation summary、chord note parse、ignored import tag、measure overflow warning、parsed / fallback measure carrier、part-list / identification / misc / document XML、voice event collection / chord follow merge / backup-forward cursor / by-staff push / direction routing / rest-chord construction / note cursor advance、attribute判定、measure header / finalization、part voice id resolver、accidental subtype / TPC accidental helper、MusicXML pitch / accidental / octave-shift / direction mark payload / mid-barline repeat / notation number / tuplet time-modification / articulation / technical / clef / direction tempo export helper、direction seed XML / collection、explicit clef scan、export metadata value / document body / final fallback / empty score / measure context / measure header / key signature helper、export source analysis / staff count / part identity / scaffold / instrument helper、export slur id / fraction state helper、export tuplet ref state helper、export voice / measure voice / staff XML helper、export staff state helper、export chord / rest XML helper、pending / trailing direction mark helper は `MuseScoreIo` に partial 移植済み
 - [ ] `src/ts/midi-io.ts`
 - [ ] `src/ts/mei-io.ts`
   - note type -> MEI dur、alter / MusicXML accidental -> MEI accid、key signature、pname、lyric wordpos / syllabic、mks duration metadata、tie / articulation helper first slice は `MeiIo` に partial 移植済み
@@ -665,6 +688,10 @@
   - MEI import beamSpan listed-note beam-continuity public conversion regression は `MeiIo` / `MeiIoTest` に partial 移植済み
   - MEI import tie-crossbar minimal note-attribute public conversion regression は `MeiIoTest` に partial 移植済み
   - MEI import slur minimal i/m/t marker public conversion regression は `MeiIoTest` に partial 移植済み
+  - MEI import dynam minimal public conversion regression は `MeiIoTest` に partial 移植済み
+  - MEI import tuplet minimal 3:2 time-modification public conversion regression は `MeiIoTest` に partial 移植済み
+  - MEI import fermata minimal public conversion regression は `MeiIoTest` に partial 移植済み
+  - MEI import gliss minimal start/stop public conversion regression は `MeiIoTest` に partial 移植済み
 - [ ] `src/ts/lilypond-io.ts`
 - [x] `src/ts/vsqx-io.ts`
   - 初期 Java 移植対象外として固定する
@@ -686,6 +713,7 @@
 
 - [ ] `tests/unit/core.spec.ts`
 - [ ] `tests/unit/musicxml-io.spec.ts`
+  - missing tuplet group補完 regression は `MusicXmlIoTest` で focused coverage 済み
 - [ ] `tests/unit/abc-io.spec.ts`
 - [ ] `tests/unit/abc-parser.spec.ts`
 - [x] `tests/unit/abc-roundtrip-golden.spec.ts`
@@ -694,9 +722,14 @@
 - [ ] `tests/unit/cli-api.spec.ts`
 - [ ] `tests/unit/mikuscore-cli.spec.ts`
 - [ ] `tests/unit/musescore-io.spec.ts`
+  - tuplet id reference numbering helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - tuplet written duration type helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - explicit BeamMode beam XML assignment helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - implicit beam XML assignment helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore Slur spanner / legacy Slur id transition helper regression は `MuseScoreIoTest` で focused coverage 済み
 - [ ] `tests/unit/midi-io.spec.ts`
 - [ ] `tests/unit/mei-io.spec.ts`
-  - first through sixty-sixth MEI helper / facade / regression slices は `MeiIoTest` で focused coverage 済み
+  - first through sixty-eighth MEI helper / facade / regression slices は `MeiIoTest` で focused coverage 済み
 - [ ] `tests/unit/lilypond-io.spec.ts`
 - [ ] `tests/property/core.property.spec.ts`
 - [ ] `tests/fixtures/*.musicxml`

@@ -815,6 +815,63 @@ public class MuseScoreIoTest {
     }
 
     @Test
+    public void buildsMuseBeamXmlFromExplicitBeamModeChain() {
+        Map<Integer, String> beams = MuseScoreIo.buildMuseBeamXmlByEventInfo(Arrays.asList(
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, "begin"),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, null)), 480, false);
+
+        assertEquals("<beam number=\"1\">begin</beam><beam number=\"2\">begin</beam>", beams.get(Integer.valueOf(0)));
+        assertEquals("<beam number=\"1\">continue</beam><beam number=\"2\">continue</beam>",
+                beams.get(Integer.valueOf(1)));
+        assertEquals("<beam number=\"1\">end</beam><beam number=\"2\">end</beam>", beams.get(Integer.valueOf(2)));
+    }
+
+    @Test
+    public void includesPrecedingChordWhenMuseRestStartsWithBeamModeMid() {
+        Map<Integer, String> beams = MuseScoreIo.buildMuseBeamXmlByEventInfo(Arrays.asList(
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 240, 1, null),
+                new MuseScoreIo.MuseBeamEvent(true, false, false, 120, 2, "mid"),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, null)), 480, false);
+
+        assertEquals("<beam number=\"1\">begin</beam>", beams.get(Integer.valueOf(0)));
+        assertNull(beams.get(Integer.valueOf(1)));
+        assertEquals("<beam number=\"1\">end</beam><beam number=\"2\">end</beam>", beams.get(Integer.valueOf(2)));
+        assertEquals("<beam number=\"1\">begin</beam><beam number=\"2\">begin</beam>", beams.get(Integer.valueOf(3)));
+        assertEquals("<beam number=\"1\">end</beam><beam number=\"2\">end</beam>", beams.get(Integer.valueOf(4)));
+    }
+
+    @Test
+    public void skipsImplicitMuseBeamInferenceWhenDisabled() {
+        Map<Integer, String> beams = MuseScoreIo.buildMuseBeamXmlByEventInfo(Arrays.asList(
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 120, 2, null)), 480, false);
+
+        assertEquals(true, beams.isEmpty());
+    }
+
+    @Test
+    public void infersMuseBeamsAtBeatBoundariesWhenBeamModeIsAbsent() {
+        Map<Integer, String> beams = MuseScoreIo.buildMuseBeamXmlByEventInfo(Arrays.asList(
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 240, 1, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 240, 1, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 240, 1, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 240, 1, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 240, 1, null),
+                new MuseScoreIo.MuseBeamEvent(true, true, false, 240, 1, null)), 720, true);
+
+        assertEquals("<beam number=\"1\">begin</beam>", beams.get(Integer.valueOf(0)));
+        assertEquals("<beam number=\"1\">continue</beam>", beams.get(Integer.valueOf(1)));
+        assertEquals("<beam number=\"1\">end</beam>", beams.get(Integer.valueOf(2)));
+        assertEquals("<beam number=\"1\">begin</beam>", beams.get(Integer.valueOf(3)));
+        assertEquals("<beam number=\"1\">continue</beam>", beams.get(Integer.valueOf(4)));
+        assertEquals("<beam number=\"1\">end</beam>", beams.get(Integer.valueOf(5)));
+    }
+
+    @Test
     public void parsesOttavaHelpers() {
         MuseScoreIo.OttavaShift down = MuseScoreIo.parseOttavaSubtype("15mb");
         assertEquals(15, down.getSize());
@@ -946,6 +1003,51 @@ public class MuseScoreIoTest {
     }
 
     @Test
+    public void resolvesIndependentMuseTupletIdReferences() {
+        Map<String, Integer> tupletNumberById = new HashMap<String, Integer>();
+        MuseScoreIo.MutableInt next = new MuseScoreIo.MutableInt(1);
+
+        int first = MuseScoreIo.resolveTupletNumberById("1", tupletNumberById, next);
+        int firstAgain = MuseScoreIo.resolveTupletNumberById("1", tupletNumberById, next);
+        int second = MuseScoreIo.resolveTupletNumberById("2", tupletNumberById, next);
+        MuseScoreIo.TimeModification triplet = MuseScoreIo.parseMusicXmlTupletTimeModification("3", "2");
+        MuseScoreIo.TupletMusicXml firstStart = MuseScoreIo.buildTupletMusicXml(triplet,
+                Arrays.asList(new MuseScoreIo.TupletStart(first, "actual", "yes")), Arrays.<Integer>asList());
+        MuseScoreIo.TupletMusicXml firstStop = MuseScoreIo.buildTupletMusicXml(triplet,
+                Arrays.<MuseScoreIo.TupletStart>asList(), Arrays.asList(Integer.valueOf(first)));
+        MuseScoreIo.TupletMusicXml secondStart = MuseScoreIo.buildTupletMusicXml(triplet,
+                Arrays.asList(new MuseScoreIo.TupletStart(second, "actual", "yes")), Arrays.<Integer>asList());
+        MuseScoreIo.TupletMusicXml secondStop = MuseScoreIo.buildTupletMusicXml(triplet,
+                Arrays.<MuseScoreIo.TupletStart>asList(), Arrays.asList(Integer.valueOf(second)));
+
+        assertEquals(1, first);
+        assertEquals(1, firstAgain);
+        assertEquals(2, second);
+        assertEquals(3, next.getCurrent());
+        assertEquals(true, first != second);
+        assertEquals("<tuplet type=\"start\" number=\"1\" bracket=\"yes\" show-number=\"actual\"/>",
+                firstStart.getNotationItems().get(0));
+        assertEquals("<tuplet type=\"stop\" number=\"1\"/>", firstStop.getNotationItems().get(0));
+        assertEquals("<tuplet type=\"start\" number=\"2\" bracket=\"yes\" show-number=\"actual\"/>",
+                secondStart.getNotationItems().get(0));
+        assertEquals("<tuplet type=\"stop\" number=\"2\"/>", secondStop.getNotationItems().get(0));
+    }
+
+    @Test
+    public void keepsWrittenDurationTypeSeparateFromTupletScaledDuration() {
+        Integer written = MuseScoreIo.durationTypeToDivisions("16th", 480);
+        MuseScoreIo.TimeModification triplet = MuseScoreIo.parseMusicXmlTupletTimeModification("3", "2");
+        MuseScoreIo.TupletMusicXml tuplet = MuseScoreIo.buildTupletMusicXml(triplet,
+                Arrays.asList(new MuseScoreIo.TupletStart(1, "actual", "yes")), Arrays.<Integer>asList());
+        int scaledDuration = (int) Math.round(written.intValue() * (2.0d / 3.0d));
+
+        assertEquals(Integer.valueOf(120), written);
+        assertEquals(80, scaledDuration);
+        assertEquals("<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>",
+                tuplet.getTimeModificationXml());
+    }
+
+    @Test
     public void readsMuseImportEventRouting() {
         MuseScoreIo.MuseScoreImportEventRouting routed = MuseScoreIo.readMuseImportEventRouting("Chord",
                 Integer.valueOf(5), 1, 1, Integer.valueOf(-1));
@@ -979,6 +1081,46 @@ public class MuseScoreIoTest {
         MuseScoreIo.TrillSpannerTransition other = MuseScoreIo.parseTrillSpannerTransition("slur", true, true);
         assertEquals(false, other.isStart());
         assertEquals(false, other.isStop());
+    }
+
+    @Test
+    public void importsMuseSlurSpannerAsMusicXmlStartStop() {
+        MuseScoreIo.MuseImportSlurState state = new MuseScoreIo.MuseImportSlurState();
+        MuseScoreIo.MuseSlurTransitions start = MuseScoreIo.parseMuseChordSlurTransitions(
+                null, Arrays.asList(MuseScoreIo.parseMuseSlurSpannerTransition("Slur", true, false)), state);
+        MuseScoreIo.MuseSlurTransitions stop = MuseScoreIo.parseMuseChordSlurTransitions(
+                null, Arrays.asList(MuseScoreIo.parseMuseSlurSpannerTransition("Slur", false, true)), state);
+
+        assertEquals(Arrays.asList(Integer.valueOf(1)), start.getStarts());
+        assertEquals(Arrays.asList(Integer.valueOf(1)), stop.getStops());
+        assertEquals(2, state.getNextSlurNumber());
+        assertEquals(0, state.getActiveSlurNumbers().size());
+    }
+
+    @Test
+    public void keepsMuseSlurSpannerNumberAcrossMeasureBoundary() {
+        MuseScoreIo.MuseImportSlurState state = new MuseScoreIo.MuseImportSlurState();
+        MuseScoreIo.MuseSlurTransitions firstMeasure = MuseScoreIo.parseMuseChordSlurTransitions(
+                null, Arrays.asList(MuseScoreIo.parseMuseSlurSpannerTransition("Slur", true, false)), state);
+        MuseScoreIo.MuseSlurTransitions secondMeasure = MuseScoreIo.parseMuseChordSlurTransitions(
+                null, Arrays.asList(MuseScoreIo.parseMuseSlurSpannerTransition("Slur", false, true)), state);
+
+        assertEquals(firstMeasure.getStarts().get(0), secondMeasure.getStops().get(0));
+        assertEquals(Arrays.asList(Integer.valueOf(1)), firstMeasure.getStarts());
+        assertEquals(Arrays.asList(Integer.valueOf(1)), secondMeasure.getStops());
+    }
+
+    @Test
+    public void importsMuseLegacyChordLevelSlurStartStopWithId() {
+        MuseScoreIo.MuseImportSlurState state = new MuseScoreIo.MuseImportSlurState();
+        MuseScoreIo.MuseSlurTransitions start = MuseScoreIo.parseMuseChordSlurTransitions(
+                Arrays.asList(new MuseScoreIo.MuseSlurElement("start", "2")), null, state);
+        MuseScoreIo.MuseSlurTransitions stop = MuseScoreIo.parseMuseChordSlurTransitions(
+                Arrays.asList(new MuseScoreIo.MuseSlurElement("stop", "2")), null, state);
+
+        assertEquals(Arrays.asList(Integer.valueOf(2)), start.getStarts());
+        assertEquals(Arrays.asList(Integer.valueOf(2)), stop.getStops());
+        assertEquals(0, state.getActiveSlurNumbers().size());
     }
 
     @Test

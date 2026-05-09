@@ -69,6 +69,23 @@ public class MusicXmlIoTest {
     }
 
     @Test
+    public void fillsMissingTupletGroupAfterExistingExplicitTupletInSameLane() {
+        String normalized = MusicXmlIo.normalizeImportedMusicXmlText(twoTupletGroupsMusicXml());
+        Document doc = MusicXmlIo.parseMusicXmlDocument(normalized);
+
+        Element firstGroupStart = firstDirectChild(directChild(noteAt(doc, 0), "notations"), "tuplet");
+        Element firstGroupStop = firstDirectChild(directChild(noteAt(doc, 2), "notations"), "tuplet");
+        Element secondGroupStart = firstDirectChild(directChild(noteAt(doc, 4), "notations"), "tuplet");
+        Element secondGroupStop = firstDirectChild(directChild(noteAt(doc, 6), "notations"), "tuplet");
+        assertEquals("7", firstGroupStart.getAttribute("number"));
+        assertEquals("7", firstGroupStop.getAttribute("number"));
+        assertEquals("start", secondGroupStart.getAttribute("type"));
+        assertEquals("stop", secondGroupStop.getAttribute("type"));
+        assertEquals("yes", secondGroupStart.getAttribute("bracket"));
+        assertEquals("actual", secondGroupStart.getAttribute("show-number"));
+    }
+
+    @Test
     public void doesNotAddImplicitBeamsDuringImportedTextNormalization() {
         String normalized = MusicXmlIo.normalizeImportedMusicXmlText(beamMusicXml(false));
         Document doc = MusicXmlIo.parseMusicXmlDocument(normalized);
@@ -168,6 +185,25 @@ public class MusicXmlIoTest {
                 + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>" + firstNotations + "</note>\n"
                 + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>\n"
                 + "      <note><pitch><step>E</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>" + thirdNotations + "</note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>\n";
+    }
+
+    private static String twoTupletGroupsMusicXml() {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>P1</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>\n"
+                + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type=\"start\" number=\"7\"/></notations></note>\n"
+                + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>E</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type=\"stop\" number=\"7\"/></notations></note>\n"
+                + "      <note><rest/></note>\n"
+                + "      <note><pitch><step>F</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>G</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>A</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>\n"
                 + "    </measure>\n"
                 + "  </part>\n"
                 + "</score-partwise>\n";
