@@ -10,13 +10,22 @@ This file records the current `mikuscore-java` status and next migration items.
 Use this section as the short entry point for what is still open. The detailed
 completed slice history remains below.
 
+### Pause / Resume Note
+
+- 2026-05-10 pause point: `mvn test` passed with 352 tests / 0 failures / 0 errors.
+- Latest completed MuseScore slice: fifty-second focused helper regression slice, covering Slur spanner and legacy chord-level Slur id import transitions.
+- Resume with `igapyon-miku-soft-developer` and continue straight-conversion slices from upstream `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`.
+- Suggested next upstream intent: `tests/unit/musescore-io.spec.ts` immediately after the Slur import cases, starting with `imports MuseScore note tie markers into MusicXML tie/tied`, then chord articulation subtype import if still uncovered.
+- Prefer existing Java helper boundaries first: `parseMuseTieFlags`, `summarizeMuseChordNotations`, `parseMuseChordNotes`, and related `MuseScoreIoTest` focused coverage. Avoid broad pipeline rewrites unless a slice explicitly requires it.
+
 ### Highest Priority Format Work
 
 - [ ] Continue broader MEI import / export parity
-  - sixty-sixth focused MEI helper / facade / regression slice is migrated through MEI tie/slur minimal public import parity
+  - sixty-eighth focused MEI helper / facade / regression slice is migrated through MEI fermata/gliss minimal public import parity
   - first MusicXML-to-MEI CoreApi / CLI bridge is migrated
   - remaining work is broader export body / control-event parity and golden-style coverage
 - [ ] Continue broader MuseScore conversion semantics
+  - fifty-second focused MuseScore helper slice is migrated through Slur spanner / legacy Slur import state transitions
   - many import/export helpers and `.mscz` / `.mscx` CLI facade slices are migrated
   - remaining work is broader end-to-end conversion parity against upstream behavior
 - [ ] Continue broader ABC body import parity
@@ -241,6 +250,21 @@ Out of scope for the initial Java conversion:
   - MuseScore export rest/chord voice event construction helper subset
 - [x] Add forty-seventh `src/ts/musescore-io.ts` helper slice
   - MuseScore export note cursor advance helper subset
+- [x] Add forty-eighth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore import tuplet id reference numbering helper subset
+  - focused JUnit test added for upstream helper behavior
+- [x] Add forty-ninth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore import tuplet written duration type helper subset
+  - focused JUnit test added for upstream helper behavior
+- [x] Add fiftieth `src/ts/musescore-io.ts` helper slice
+  - MuseScore import explicit BeamMode beam XML assignment helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-first `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore import implicit beam XML assignment helper subset
+  - focused JUnit test added for upstream helper behavior
+- [x] Add fifty-second `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore import Slur spanner and legacy chord-level Slur id transition helper subset
+  - focused JUnit tests added for upstream helper behavior
 - [x] Add first `src/ts/mei-io.ts` helper slice
   - XML escaping, safe integer parsing, MusicXML note type to MEI duration, alter / accidental to MEI accid, key signature, pname, lyric wordpos / syllabic, mks duration metadata, tie marker, and articulation token/XML helpers
   - focused JUnit tests added for upstream helper behavior
@@ -442,6 +466,14 @@ Out of scope for the initial Java conversion:
   - MEI import tie-crossbar minimal note-attribute public conversion behavior
   - MEI import slur minimal i/m/t marker public conversion behavior
   - focused JUnit tests added for upstream public conversion behavior
+- [x] Add sixty-seventh `src/ts/mei-io.ts` regression slice
+  - MEI import dynam minimal public conversion behavior
+  - MEI import tuplet minimal 3:2 time-modification public conversion behavior
+  - focused JUnit tests added for upstream public conversion behavior
+- [x] Add sixty-eighth `src/ts/mei-io.ts` regression slice
+  - MEI import fermata minimal public conversion behavior
+  - MEI import gliss minimal start/stop public conversion behavior
+  - focused JUnit tests added for upstream public conversion behavior
 - [x] Add first `convert --from musicxml --to mei` CoreApi / CLI bridge
   - `CoreApi.exportMusicXmlToMei`
   - Java CLI stdin/stdout path delegates through `CoreApi`
@@ -476,6 +508,7 @@ Out of scope for the initial Java conversion:
   - first slice is `musicxml-io.ts` imported-text normalization subset
 - [x] Add `musicxml-io.ts` parse / serialize / pretty-print and basic normalization subset
 - [x] Add `musicxml-io.ts` tuplet notation enrichment subset
+- [x] Add `musicxml-io.ts` missing tuplet group normalization regression
 - [x] Add `musicxml-io.ts` explicit implicit beam pass subset
 - [x] Add `mxl-io.ts` / `zip-io.ts` container extraction and encoding subset
 - [x] Add first latest-upstream CLI taxonomy slice: `convert --from musicxml --to musicxml`
