@@ -1,0 +1,82 @@
+name: Release CLI runtime
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "GitHub Release tag to attach the CLI runtime to"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  release-cli-runtime:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.inputs.tag_name || github.ref_name, 'v')
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag_name || github.ref }}
+
+      - name: Set up Java 21 for build
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build
+        run: mvn -B package
+
+      - name: Prepare release assets
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG_NAME#v}"
+          ARTIFACT_ID="$(mvn help:evaluate -Dexpression=project.artifactId -q -DforceStdout)"
+          POM_VERSION="$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)"
+          echo "RELEASE_ARTIFACT_ID=${ARTIFACT_ID}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          case "${VERSION}" in
+            "${POM_VERSION}"|"${POM_VERSION}".*) ;;
+            *)
+              echo "Release tag version (${VERSION}) must match pom.xml version (${POM_VERSION}) or add a dot suffix such as ${POM_VERSION}.1." >&2
+              exit 1
+              ;;
+          esac
+
+          mkdir -p release-assets
+          cp "target/mikuscore.jar" "release-assets/${ARTIFACT_ID}-${VERSION}.jar"
+          cp "target/mikuscore-sources.jar" "release-assets/${ARTIFACT_ID}-sources-${VERSION}.jar"
+          cp "target/mikuscore-dist.zip" "release-assets/${ARTIFACT_ID}-dist-${VERSION}.zip"
+
+      - name: Set up Java 8 for runtime verification
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+
+      - name: Verify CLI runtime asset
+        run: |
+          set -euo pipefail
+          java -jar "release-assets/${RELEASE_ARTIFACT_ID}-${RELEASE_VERSION}.jar" --version
+
+      - name: Upload CLI runtime to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          files: release-assets/*
+          overwrite_files: true
+          draft: false
+          prerelease: false

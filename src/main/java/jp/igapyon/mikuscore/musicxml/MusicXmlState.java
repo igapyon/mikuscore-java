@@ -24,6 +24,8 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import jp.igapyon.mikuscore.core.StaffClefPolicy;
+
 public final class MusicXmlState {
     private MusicXmlState() {
     }
@@ -182,8 +184,10 @@ public final class MusicXmlState {
 
         if ("change_to_pitch".equals(type)) {
             setPitch(note, MusicXmlCommandJson.castMap(command.get("pitch")));
+            autoAssignGrandStaffByPitch(note);
         } else if ("change_duration".equals(type)) {
-            setDurationValue(note, MusicXmlCommandJson.intValue(command, "duration").intValue());
+            changeDuration(note, MusicXmlCommandJson.stringValue(command, "voice"),
+                    MusicXmlCommandJson.intValue(command, "duration").intValue());
         } else if ("delete_note".equals(type)) {
             deleteNote(note, MusicXmlCommandJson.stringValue(command, "voice"));
         } else if ("split_note".equals(type)) {
@@ -249,6 +253,11 @@ public final class MusicXmlState {
         if (commandVoice == null) {
             commandVoice = target.selector.getVoice();
         }
+        if ("change_duration".equals(type) && isTripletDuration(note, MusicXmlCommandJson.intValue(command, "duration"))
+                && !measureVoiceHasTupletContext(note, commandVoice)) {
+            return validationFailure("MVP_INVALID_COMMAND_PAYLOAD",
+                    "Tuplet durations are not allowed because this measure/voice has no tuplet context.");
+        }
         if (target.selector.getVoice() != null && commandVoice != null && !target.selector.getVoice().equals(commandVoice)) {
             return validationFailure("MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
                     "Target note voice (" + target.selector.getVoice() + ") does not match command voice (" + commandVoice
@@ -262,6 +271,8 @@ public final class MusicXmlState {
         if (timingFailure != null) {
             return timingFailure;
         }
+        List<MusicXmlCommandValidation.Warning> warnings = buildProjectedMeasureTimingWarnings(type, note, command,
+                commandVoice);
 
         List<String> changedNodeIds = new ArrayList<String>();
         changedNodeIds.add(nodeId);
@@ -273,7 +284,7 @@ public final class MusicXmlState {
         }
         List<String> affectedMeasureNumbers = new ArrayList<String>();
         affectedMeasureNumbers.add(target.selector.getMeasureNumber());
-        return new MusicXmlCommandValidation(true, true, changedNodeIds, affectedMeasureNumbers,
+        return new MusicXmlCommandValidation(true, true, changedNodeIds, affectedMeasureNumbers, warnings,
                 new ArrayList<MusicXmlCommandValidation.Diagnostic>());
     }
 
@@ -377,12 +388,75 @@ public final class MusicXmlState {
             if (insertedDuration != null) {
                 projected = Integer.valueOf(timing.occupied + insertedDuration.intValue());
             }
+        } else if ("split_note".equals(type)) {
+            projected = Integer.valueOf(timing.occupied);
         }
         if (projected != null && projected.intValue() > timing.capacity) {
+            if ("change_duration".equals(type)) {
+                int overflow = projected.intValue() - timing.capacity;
+                if (overflow <= availableRestDurationForExpansion(note, commandVoice)) {
+                    return null;
+                }
+            }
             return validationFailure("MEASURE_OVERFULL",
                     "Projected occupied time " + projected + " exceeds capacity " + timing.capacity + ".");
         }
         return null;
+    }
+
+    private static List<MusicXmlCommandValidation.Warning> buildProjectedMeasureTimingWarnings(String type, Element note,
+            Map<String, Object> command, String commandVoice) {
+        List<MusicXmlCommandValidation.Warning> warnings = new ArrayList<MusicXmlCommandValidation.Warning>();
+        if (!"insert_note_after".equals(type) || commandVoice == null) {
+            return warnings;
+        }
+        MeasureTiming timing = getMeasureTimingForVoice(note, commandVoice);
+        if (timing == null) {
+            return warnings;
+        }
+        Map<String, Object> notePayload = MusicXmlCommandJson.castMap(command.get("note"));
+        Integer insertedDuration = MusicXmlCommandJson.intValue(notePayload, "duration");
+        if (insertedDuration == null) {
+            return warnings;
+        }
+        int projected = timing.occupied + insertedDuration.intValue();
+        if (projected < timing.capacity) {
+            warnings.add(new MusicXmlCommandValidation.Warning("MEASURE_UNDERFULL",
+                    "Projected occupied time " + projected + " is below capacity " + timing.capacity + "."));
+        }
+        return warnings;
+    }
+
+    private static boolean isTripletDuration(Element note, Integer duration) {
+        if (duration == null) {
+            return false;
+        }
+        Integer divisions = resolveEffectiveDivisions(note);
+        if (divisions == null || divisions.intValue() <= 0) {
+            return false;
+        }
+        DurationNotation notation = durationToNotation(duration.intValue(), divisions.intValue());
+        return notation != null && notation.triplet;
+    }
+
+    private static boolean measureVoiceHasTupletContext(Element target, String voice) {
+        Element measure = findAncestor(target, "measure");
+        if (measure == null) {
+            return false;
+        }
+        for (Element note : directChildren(measure, "note")) {
+            if (!equalsNullable(directChildText(note, "voice"), voice)) {
+                continue;
+            }
+            if (directChild(note, "time-modification") != null) {
+                return true;
+            }
+            Element notations = directChild(note, "notations");
+            if (notations != null && directChild(notations, "tuplet") != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void setPitch(Element note, Map<String, Object> pitch) {
@@ -412,6 +486,132 @@ public final class MusicXmlState {
     private static void setDurationValue(Element note, int duration) {
         upsertSimpleChild(note, "duration", Integer.toString(duration));
         syncSimpleTypeFromDuration(note, duration);
+    }
+
+    private static void autoAssignGrandStaffByPitch(Element note) {
+        if (!hasGrandStaffContext(note)) {
+            return;
+        }
+        Integer midi = notePitchToMidi(note);
+        if (midi == null) {
+            return;
+        }
+        Element staff = directChild(note, "staff");
+        String existingStaffText = directChildText(note, "staff");
+        Integer previousStaff = "1".equals(existingStaffText) ? Integer.valueOf(1)
+                : ("2".equals(existingStaffText) ? Integer.valueOf(2) : null);
+        int desiredStaff = StaffClefPolicy.pickStaffByPitchWithHysteresis(midi.intValue(), previousStaff);
+        if (staff == null) {
+            staff = note.getOwnerDocument().createElement("staff");
+            note.appendChild(staff);
+        }
+        staff.setTextContent(Integer.toString(desiredStaff));
+    }
+
+    private static boolean hasGrandStaffContext(Element note) {
+        Element measure = findAncestor(note, "measure");
+        Element part = findAncestor(measure, "part");
+        if (measure == null || part == null) {
+            return false;
+        }
+        List<Element> measures = directChildren(part, "measure");
+        int targetIndex = measures.indexOf(measure);
+        if (targetIndex < 0) {
+            return false;
+        }
+        int staves = 1;
+        String clef1 = "";
+        String clef2 = "";
+        for (int index = 0; index <= targetIndex; index++) {
+            Element attributes = directChild(measures.get(index), "attributes");
+            if (attributes == null) {
+                continue;
+            }
+            Integer parsedStaves = parseIntegerOrNull(directChildText(attributes, "staves"));
+            if (parsedStaves != null && parsedStaves.intValue() > 0) {
+                staves = parsedStaves.intValue();
+            }
+            for (Element clef : directChildren(attributes, "clef")) {
+                String number = trimToNull(clef.getAttribute("number"));
+                String sign = directChildText(clef, "sign");
+                if ("1".equals(number) && sign != null) {
+                    clef1 = sign;
+                }
+                if ("2".equals(number) && sign != null) {
+                    clef2 = sign;
+                }
+            }
+        }
+        return staves >= 2 && "G".equals(clef1) && "F".equals(clef2);
+    }
+
+    private static Integer notePitchToMidi(Element note) {
+        Element pitch = directChild(note, "pitch");
+        if (pitch == null) {
+            return null;
+        }
+        String step = directChildText(pitch, "step");
+        Integer octave = parseIntegerOrNull(directChildText(pitch, "octave"));
+        Integer alter = parseIntegerOrNull(directChildText(pitch, "alter"));
+        Integer base = semitoneByStep(step);
+        if (base == null || octave == null) {
+            return null;
+        }
+        return Integer.valueOf((octave.intValue() + 1) * 12 + base.intValue() + (alter == null ? 0 : alter.intValue()));
+    }
+
+    private static Integer semitoneByStep(String step) {
+        if ("C".equals(step)) {
+            return Integer.valueOf(0);
+        }
+        if ("D".equals(step)) {
+            return Integer.valueOf(2);
+        }
+        if ("E".equals(step)) {
+            return Integer.valueOf(4);
+        }
+        if ("F".equals(step)) {
+            return Integer.valueOf(5);
+        }
+        if ("G".equals(step)) {
+            return Integer.valueOf(7);
+        }
+        if ("A".equals(step)) {
+            return Integer.valueOf(9);
+        }
+        if ("B".equals(step)) {
+            return Integer.valueOf(11);
+        }
+        return null;
+    }
+
+    private static void changeDuration(Element note, String voice, int duration) {
+        Integer oldDuration = parseIntegerOrNull(directChildText(note, "duration"));
+        String effectiveVoice = voice == null ? directChildText(note, "voice") : voice;
+        MeasureTiming timing = effectiveVoice == null ? null : getMeasureTimingForVoice(note, effectiveVoice);
+        int underfullDelta = 0;
+        if (oldDuration != null && timing != null) {
+            int projected = timing.occupied - oldDuration.intValue() + duration;
+            int overflow = projected - timing.capacity;
+            if (overflow > 0) {
+                int consumedAfter = consumeFollowingRestsForDurationExpansion(note, effectiveVoice, overflow);
+                int remainingAfter = overflow - consumedAfter;
+                if (remainingAfter > 0) {
+                    consumePrecedingRestsForDurationExpansion(note, effectiveVoice, remainingAfter);
+                }
+            }
+            MeasureTiming adjusted = getMeasureTimingForVoice(note, effectiveVoice);
+            if (adjusted != null) {
+                int adjustedProjected = adjusted.occupied - oldDuration.intValue() + duration;
+                if (adjustedProjected < timing.capacity) {
+                    underfullDelta = timing.capacity - adjustedProjected;
+                }
+            }
+        }
+        setDurationValue(note, duration);
+        if (underfullDelta > 0 && effectiveVoice != null) {
+            fillUnderfullGapAfterTarget(note, effectiveVoice, underfullDelta);
+        }
     }
 
     private static void deleteNote(Element note, String fallbackVoice) {
@@ -511,6 +711,16 @@ public final class MusicXmlState {
         return note;
     }
 
+    private static Element createRestElement(Document doc, String voice, int duration) {
+        Element note = doc.createElement("note");
+        Element rest = doc.createElement("rest");
+        note.appendChild(rest);
+        upsertSimpleChild(note, "duration", Integer.toString(duration));
+        upsertSimpleChild(note, "voice", voice == null ? "1" : voice);
+        syncSimpleTypeFromDuration(note, duration);
+        return note;
+    }
+
     private static void syncSimpleTypeFromDuration(Element note, int duration) {
         Integer divisions = resolveEffectiveDivisions(note);
         if (divisions == null || divisions.intValue() <= 0) {
@@ -566,6 +776,153 @@ public final class MusicXmlState {
             return null;
         }
         return new MeasureTiming(capacity.intValue(), getOccupiedTime(measure, voice));
+    }
+
+    private static int availableRestDurationForExpansion(Element target, String voice) {
+        return availableFollowingRestDurationForExpansion(target, voice, Integer.MAX_VALUE)
+                + availablePrecedingRestDurationForExpansion(target, voice, Integer.MAX_VALUE);
+    }
+
+    private static int availableFollowingRestDurationForExpansion(Element target, String voice, int overflow) {
+        if (overflow <= 0) {
+            return 0;
+        }
+        int remaining = overflow;
+        Element cursor = nextElementSibling(target);
+        while (cursor != null && remaining > 0) {
+            if (isBackupOrForward(cursor)) {
+                break;
+            }
+            Element next = nextElementSibling(cursor);
+            if ("note".equals(cursor.getTagName()) && isConsumableRest(cursor, voice)) {
+                Integer duration = parseIntegerOrNull(directChildText(cursor, "duration"));
+                remaining -= Math.min(remaining, duration == null ? 0 : duration.intValue());
+            }
+            cursor = next;
+        }
+        return overflow - remaining;
+    }
+
+    private static int availablePrecedingRestDurationForExpansion(Element target, String voice, int overflow) {
+        if (overflow <= 0) {
+            return 0;
+        }
+        int remaining = overflow;
+        Element cursor = previousElementSibling(target);
+        while (cursor != null && remaining > 0) {
+            if (isBackupOrForward(cursor)) {
+                break;
+            }
+            Element previous = previousElementSibling(cursor);
+            if ("note".equals(cursor.getTagName()) && isConsumableRest(cursor, voice)) {
+                Integer duration = parseIntegerOrNull(directChildText(cursor, "duration"));
+                remaining -= Math.min(remaining, duration == null ? 0 : duration.intValue());
+            }
+            cursor = previous;
+        }
+        return overflow - remaining;
+    }
+
+    private static int consumeFollowingRestsForDurationExpansion(Element target, String voice, int overflow) {
+        if (overflow <= 0) {
+            return 0;
+        }
+        int remaining = overflow;
+        Element cursor = nextElementSibling(target);
+        while (cursor != null && remaining > 0) {
+            if (isBackupOrForward(cursor)) {
+                break;
+            }
+            Element next = nextElementSibling(cursor);
+            if ("note".equals(cursor.getTagName()) && isConsumableRest(cursor, voice)) {
+                Integer duration = parseIntegerOrNull(directChildText(cursor, "duration"));
+                int restDuration = duration == null ? 0 : duration.intValue();
+                if (restDuration <= remaining) {
+                    remaining -= restDuration;
+                    cursor.getParentNode().removeChild(cursor);
+                } else {
+                    setDurationValue(cursor, restDuration - remaining);
+                    remaining = 0;
+                }
+            }
+            cursor = next;
+        }
+        return overflow - remaining;
+    }
+
+    private static int consumePrecedingRestsForDurationExpansion(Element target, String voice, int overflow) {
+        if (overflow <= 0) {
+            return 0;
+        }
+        int remaining = overflow;
+        Element cursor = previousElementSibling(target);
+        while (cursor != null && remaining > 0) {
+            if (isBackupOrForward(cursor)) {
+                break;
+            }
+            Element previous = previousElementSibling(cursor);
+            if ("note".equals(cursor.getTagName()) && isConsumableRest(cursor, voice)) {
+                Integer duration = parseIntegerOrNull(directChildText(cursor, "duration"));
+                int restDuration = duration == null ? 0 : duration.intValue();
+                if (restDuration <= remaining) {
+                    remaining -= restDuration;
+                    cursor.getParentNode().removeChild(cursor);
+                } else {
+                    setDurationValue(cursor, restDuration - remaining);
+                    remaining = 0;
+                }
+            }
+            cursor = previous;
+        }
+        return overflow - remaining;
+    }
+
+    private static boolean fillUnderfullGapAfterTarget(Element target, String voice, int deficit) {
+        if (deficit <= 0) {
+            return true;
+        }
+        Element measure = findAncestor(target, "measure");
+        if (measure == null || measureHasBackupOrForward(measure)) {
+            return false;
+        }
+        Element next = nextElementSibling(target);
+        if (next != null && "note".equals(next.getTagName()) && isConsumableRest(next, voice)) {
+            Integer current = parseIntegerOrNull(directChildText(next, "duration"));
+            setDurationValue(next, (current == null ? 0 : current.intValue()) + deficit);
+            return true;
+        }
+        Element rest = createRestElement(target.getOwnerDocument(), voice, deficit);
+        Node parent = target.getParentNode();
+        Node nextNode = target.getNextSibling();
+        if (nextNode == null) {
+            parent.appendChild(rest);
+        } else {
+            parent.insertBefore(rest, nextNode);
+        }
+        return true;
+    }
+
+    private static boolean isConsumableRest(Element note, String voice) {
+        if (note == null || !"note".equals(note.getTagName())) {
+            return false;
+        }
+        if (directChild(note, "rest") == null || directChild(note, "chord") != null) {
+            return false;
+        }
+        if (!equalsNullable(directChildText(note, "voice"), voice)) {
+            return false;
+        }
+        Integer duration = parseIntegerOrNull(directChildText(note, "duration"));
+        return duration != null && duration.intValue() > 0;
+    }
+
+    private static boolean measureHasBackupOrForward(Element measure) {
+        for (Element child : directElementChildren(measure)) {
+            if (isBackupOrForward(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Integer getMeasureCapacity(Element measure) {
@@ -665,19 +1022,8 @@ public final class MusicXmlState {
     }
 
     private static String accidentalFromAlter(int alter) {
-        if (alter == -2) {
-            return "flat-flat";
-        }
-        if (alter == -1) {
-            return "flat";
-        }
-        if (alter == 1) {
-            return "sharp";
-        }
-        if (alter == 2) {
-            return "double-sharp";
-        }
-        return "natural";
+        String accidental = AccidentalSpelling.accidentalTextFromAlter(alter);
+        return accidental == null ? "natural" : accidental;
     }
 
     private static void upsertSimpleChild(Element parent, String tagName, String text) {

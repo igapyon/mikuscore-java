@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 import jp.igapyon.mikuscore.musicxml.MusicXmlStateTest;
+import jp.igapyon.mikuscore.musicxml.MxlIo;
 
 public class MikuscoreCliTest {
     @Test
@@ -27,10 +28,26 @@ public class MikuscoreCliTest {
         String out = outBytes.toString("UTF-8");
         String err = errBytes.toString("UTF-8");
         assertEquals(0, exitCode);
-        assertTrue(out.contains("convert --from <format> --to <format>"));
-        assertTrue(out.contains("render svg"));
-        assertTrue(out.contains("state <command>"));
+        assertTrue(out.contains("convert --from musicxml --to musicxml"));
+        assertTrue(out.contains("state summarize"));
+        assertTrue(out.contains("Commands:"));
         assertEquals("", err);
+    }
+
+    @Test
+    public void convertHelpReturnsZeroAndMentionsMusicXmlPair() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--help" },
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        String out = outBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(out.contains("Convert score text between supported formats"));
+        assertTrue(out.contains("--from musicxml --to musicxml"));
+        assertEquals("", errBytes.toString("UTF-8"));
     }
 
     @Test
@@ -47,6 +64,209 @@ public class MikuscoreCliTest {
         assertEquals(2, exitCode);
         assertEquals("", out);
         assertTrue(err.contains("Unsupported command: unknown"));
+    }
+
+    @Test
+    public void renderHelpReturnsZeroAndMentionsSvgConstraint() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "render", "--help" },
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        String out = outBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(out.contains("render svg"));
+        assertTrue(out.contains("verovio.js/browser runtime"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void renderSvgReturnsUnsupportedRuntimeConstraint() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "render", "svg", "--from", "musicxml" },
+                new ByteArrayInputStream(MusicXmlStateTest.sampleMusicXml("CLI render").getBytes(StandardCharsets.UTF_8)),
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(2, exitCode);
+        assertEquals("", outBytes.toString("UTF-8"));
+        assertTrue(errBytes.toString("UTF-8").contains("SVG render is unsupported"));
+    }
+
+    @Test
+    public void renderSvgRejectsUnsupportedSource() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "render", "svg", "--from", "midi" },
+                new ByteArrayInputStream(new byte[0]),
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(2, exitCode);
+        assertEquals("", outBytes.toString("UTF-8"));
+        assertTrue(errBytes.toString("UTF-8").contains("Unsupported render source: --from midi"));
+    }
+
+    @Test
+    public void convertMusicXmlToMusicXmlReadsStdinAndWritesStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        String xml = MusicXmlStateTest.sampleMusicXml("CLI convert stdin");
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musicxml", "--to", "musicxml" },
+                inBytes,
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(0, exitCode);
+        assertEquals(xml, outBytes.toString("UTF-8"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertMusicXmlToMusicXmlReadsTextFileAndWritesTextFile() throws Exception {
+        Path input = Files.createTempFile("mikuscore-convert-in", ".musicxml");
+        Path output = Files.createTempFile("mikuscore-convert-out", ".musicxml");
+        try {
+            String xml = MusicXmlStateTest.sampleMusicXml("CLI convert file");
+            Files.write(input, xml.getBytes(StandardCharsets.UTF_8));
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+            int exitCode = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "musicxml", "--to", "musicxml", "--in", input.toString(),
+                            "--out", output.toString() },
+                    new ByteArrayInputStream(new byte[0]),
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            assertEquals(0, exitCode);
+            assertEquals("", outBytes.toString("UTF-8"));
+            assertEquals(xml, new String(Files.readAllBytes(output), StandardCharsets.UTF_8));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(input);
+            Files.deleteIfExists(output);
+        }
+    }
+
+    @Test
+    public void convertMusicXmlToMusicXmlReadsMxlInputFile() throws Exception {
+        Path input = Files.createTempFile("mikuscore-convert-in", ".mxl");
+        try {
+            String xml = MusicXmlStateTest.sampleMusicXml("CLI convert mxl in");
+            Files.write(input, MxlIo.makeMxlBytes(xml));
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+            int exitCode = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "musicxml", "--to", "musicxml", "--in", input.toString() },
+                    new ByteArrayInputStream(new byte[0]),
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            assertEquals(0, exitCode);
+            assertEquals(xml, outBytes.toString("UTF-8"));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(input);
+        }
+    }
+
+    @Test
+    public void convertMusicXmlToMusicXmlWritesMxlOutputFile() throws Exception {
+        Path output = Files.createTempFile("mikuscore-convert-out", ".mxl");
+        try {
+            String xml = MusicXmlStateTest.sampleMusicXml("CLI convert mxl out");
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+            ByteArrayInputStream inBytes = new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8));
+
+            int exitCode = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "musicxml", "--to", "musicxml", "--out", output.toString() },
+                    inBytes,
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            assertEquals(0, exitCode);
+            assertEquals("", outBytes.toString("UTF-8"));
+            assertEquals(xml, MxlIo.extractMusicXmlTextFromMxl(Files.readAllBytes(output)));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(output);
+        }
+    }
+
+    @Test
+    public void convertAbcToMusicXmlReadsStdinAndWritesStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                "X:1\nT:CLI ABC\nM:4/4\nL:1/4\nK:C\nC D E F|]\n".getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "abc", "--to", "musicxml" },
+                inBytes,
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(0, exitCode);
+        assertTrue(outBytes.toString("UTF-8").contains("<work-title>CLI ABC</work-title>"));
+        assertTrue(outBytes.toString("UTF-8").contains("<step>C</step>"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertMusicXmlToAbcReadsStdinAndWritesStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                MusicXmlStateTest.sampleMusicXml("CLI MusicXML to ABC").getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musicxml", "--to", "abc" },
+                inBytes,
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        String out = outBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(out.contains("X:1"));
+        assertTrue(out.contains("T:CLI MusicXML to ABC"));
+        assertTrue(out.contains("K:C"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertMusicXmlToAbcReadsMxlFileAndWritesAbcFile() throws Exception {
+        Path input = Files.createTempFile("mikuscore-convert-abc-in", ".mxl");
+        Path output = Files.createTempFile("mikuscore-convert-abc-out", ".abc");
+        try {
+            Files.write(input, MxlIo.makeMxlBytes(MusicXmlStateTest.sampleMusicXml("CLI MXL to ABC")));
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+            int exitCode = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "musicxml", "--to", "abc", "--in", input.toString(),
+                            "--out", output.toString() },
+                    new ByteArrayInputStream(new byte[0]),
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            String abc = new String(Files.readAllBytes(output), StandardCharsets.UTF_8);
+            assertEquals(0, exitCode);
+            assertEquals("", outBytes.toString("UTF-8"));
+            assertTrue(abc.contains("T:CLI MXL to ABC"));
+            assertTrue(abc.contains("K:C"));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(input);
+            Files.deleteIfExists(output);
+        }
     }
 
     @Test

@@ -67,6 +67,12 @@ Expected execution path:
 java -jar target/mikuscore.jar --help
 ```
 
+Release asset workflow:
+
+- pushing a `v*` tag, for example `v0.5.0`, builds the CLI runtime and attaches release assets to the matching GitHub Release
+- attached files are `mikuscore-<version>.jar`, `mikuscore-sources-<version>.jar`, and `mikuscore-dist-<version>.zip`
+- the Maven version is kept aligned with the upstream Node.js package version
+
 ## CLI
 
 The current Java CLI is only a foundation entrypoint.
@@ -76,6 +82,8 @@ Current foundation commands:
 
 - `--help`
 - `--version`
+- `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]`
 - `state summarize [--in <file>|-]`
 - `state inspect-measure --measure <number> [--in <file>|-]`
 - `state validate-command --command <json> [--in <file>|-]`
@@ -97,10 +105,19 @@ Current MusicXML I/O support also includes a Java `MusicXmlIo` normalization sub
 
 MXL container support is available through the Java `MxlIo` slice for `META-INF/container.xml` based MusicXML extraction, fallback `.musicxml` / `.xml` extraction, and `score.musicxml` MXL encoding.
 
+The first `convert` slice is intentionally narrow and follows the latest upstream CLI taxonomy while Java format conversion is still partial:
+
+- stdin / stdout MusicXML text pass-through
+- `.musicxml` / `.xml` file input and output
+- `.mxl` file input decoded to MusicXML text
+- `.mxl` file output encoded from MusicXML text
+- first ABC text to MusicXML conversion slice for basic headers, notes, rests, chords, tuplets, grace groups, overlay voices, basic / standard-shorthand / prefixed decorations, richer decoration aliases, accidental annotations, navigation / wedge / dynamics decorations, overfull compatibility reflow diagnostics, repeat / ending metadata, tie handoff, broken rhythm / slur handoff, barline-separated measures, and initial MusicXML -> ABC -> MusicXML fixture roundtrip coverage
+- unsupported conversion pairs return usage error status `2`
+
 Planned upstream command families:
 
 - `convert --from ... --to ...`
-- `render svg`
+- `render svg` (pending; upstream currently depends on `verovio.js` browser runtime)
 - `state summarize`
 - `state inspect-measure`
 - `state validate-command`

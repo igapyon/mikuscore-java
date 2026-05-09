@@ -34,6 +34,16 @@ public class MxlIoTest {
     }
 
     @Test
+    public void makesAndExtractsMsczBytes() {
+        String mscx = "<museScore version=\"4.0\"><Score/></museScore>";
+
+        byte[] archive = MxlIo.makeMsczBytes(mscx);
+        String extracted = MxlIo.extractTextFromZipByExtensions(archive, new String[] { ".mscx" });
+
+        assertEquals(mscx, extracted);
+    }
+
+    @Test
     public void extractsMusicXmlFromContainerRootFilePath() {
         Map<String, byte[]> entries = new LinkedHashMap<String, byte[]>();
         entries.put("META-INF/container.xml", ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"

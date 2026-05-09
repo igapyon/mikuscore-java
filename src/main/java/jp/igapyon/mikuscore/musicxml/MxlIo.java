@@ -98,6 +98,12 @@ public final class MxlIo {
         return makeZipBytes(entries);
     }
 
+    public static byte[] makeMsczBytes(String mscxText) {
+        Map<String, byte[]> entries = new LinkedHashMap<String, byte[]>();
+        entries.put("score.mscx", mscxText.getBytes(StandardCharsets.UTF_8));
+        return makeZipBytes(entries);
+    }
+
     public static byte[] makeZipBytes(Map<String, byte[]> entries) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
