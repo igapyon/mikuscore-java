@@ -657,6 +657,14 @@
   - MEI export tie/slur control helper は `MeiIo` に partial 移植済み
   - MEI export ornament / breath control helper は `MeiIo` に partial 移植済み
   - MEI export MusicXML DOM facade は `MeiIo` に partial 移植済み
+  - MEI export facade version / transpose / tempo / dynamics parity は `MeiIo` に partial 移植済み
+  - MEI import staff-level cross-layer hairpin control-event id resolution regression は `MeiIoTest` に partial 移植済み
+  - MEI import mRest / mSpace / space timing-preserving public conversion regression は `MeiIoTest` に partial 移植済み
+  - MEI import beam breaksec secondary-beam split public conversion regression は `MeiIoTest` に partial 移植済み
+  - MEI import beam / graceGrp pitch, timing, slash, accidental, and beam-continuity public conversion regression は `MeiIoTest` に partial 移植済み
+  - MEI import beamSpan listed-note beam-continuity public conversion regression は `MeiIo` / `MeiIoTest` に partial 移植済み
+  - MEI import tie-crossbar minimal note-attribute public conversion regression は `MeiIoTest` に partial 移植済み
+  - MEI import slur minimal i/m/t marker public conversion regression は `MeiIoTest` に partial 移植済み
 - [ ] `src/ts/lilypond-io.ts`
 - [x] `src/ts/vsqx-io.ts`
   - 初期 Java 移植対象外として固定する
@@ -688,7 +696,7 @@
 - [ ] `tests/unit/musescore-io.spec.ts`
 - [ ] `tests/unit/midi-io.spec.ts`
 - [ ] `tests/unit/mei-io.spec.ts`
-  - first through fifty-ninth MEI helper slices は `MeiIoTest` で focused coverage 済み
+  - first through sixty-sixth MEI helper / facade / regression slices は `MeiIoTest` で focused coverage 済み
 - [ ] `tests/unit/lilypond-io.spec.ts`
 - [ ] `tests/property/core.property.spec.ts`
 - [ ] `tests/fixtures/*.musicxml`

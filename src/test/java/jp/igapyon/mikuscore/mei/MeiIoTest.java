@@ -629,6 +629,188 @@ public class MeiIoTest {
     }
 
     @Test
+    public void importsMeiMeasureRestsAndSpacesAsTimingPreservingRests() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"3\" meter.unit=\"4\"><staffGrp>"
+                + "<staffDef n=\"1\" lines=\"5\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><mRest/></layer></staff></measure>"
+                + "<measure n=\"2\"><staff n=\"1\"><layer n=\"1\"><mSpace/></layer></staff></measure>"
+                + "<measure n=\"3\"><staff n=\"1\"><layer n=\"1\"><space dur=\"4\"/><space dur=\"2\"/></layer></staff></measure>"
+                + "</section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure1Note = firstNoteOfMeasure(doc, "1");
+        org.w3c.dom.Element measure2Note = firstNoteOfMeasure(doc, "2");
+        org.w3c.dom.NodeList measure3Notes = findMeasureByNumber(doc, "3").getElementsByTagName("note");
+
+        assertTrue(measure1Note.getElementsByTagName("rest").getLength() > 0);
+        assertTrue(measure2Note.getElementsByTagName("rest").getLength() > 0);
+        assertEquals("1440", directChildText(measure1Note, "duration"));
+        assertEquals("1440", directChildText(measure2Note, "duration"));
+        assertEquals("half", directChildText(measure1Note, "type"));
+        assertEquals(1, measure1Note.getElementsByTagName("dot").getLength());
+        assertEquals("half", directChildText(measure2Note, "type"));
+        assertEquals(1, measure2Note.getElementsByTagName("dot").getLength());
+        assertEquals("480", directChildText((org.w3c.dom.Element) measure3Notes.item(0), "duration"));
+        assertEquals("960", directChildText((org.w3c.dom.Element) measure3Notes.item(1), "duration"));
+    }
+
+    @Test
+    public void importsMeiBeamBreaksecAsSecondaryBeamSplit() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\"><staffGrp>"
+                + "<staffDef n=\"1\" lines=\"5\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><beam>"
+                + "<note pname=\"c\" oct=\"5\" dur=\"8\"/>"
+                + "<note pname=\"d\" oct=\"5\" dur=\"16\"/>"
+                + "<note pname=\"e\" oct=\"5\" dur=\"32\"/>"
+                + "<note pname=\"f\" oct=\"5\" dur=\"32\"/>"
+                + "<note pname=\"g\" oct=\"5\" dur=\"16\" breaksec=\"1\"/>"
+                + "<note pname=\"a\" oct=\"5\" dur=\"32\"/>"
+                + "<note pname=\"b\" oct=\"5\" dur=\"32\"/>"
+                + "<note pname=\"c\" oct=\"6\" dur=\"32\"/>"
+                + "<note pname=\"d\" oct=\"6\" dur=\"32\"/>"
+                + "</beam></layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(9, notes.getLength());
+        assertEquals("eighth", directChildText((org.w3c.dom.Element) notes.item(0), "type"));
+        assertEquals("16th", directChildText((org.w3c.dom.Element) notes.item(1), "type"));
+        assertEquals("32nd", directChildText((org.w3c.dom.Element) notes.item(2), "type"));
+        assertEquals("32nd", directChildText((org.w3c.dom.Element) notes.item(8), "type"));
+        assertEquals("begin", beamText((org.w3c.dom.Element) notes.item(0), "1"));
+        assertEquals("end", beamText((org.w3c.dom.Element) notes.item(8), "1"));
+        assertEquals("begin", beamText((org.w3c.dom.Element) notes.item(1), "2"));
+        assertEquals("end", beamText((org.w3c.dom.Element) notes.item(4), "2"));
+        assertEquals("begin", beamText((org.w3c.dom.Element) notes.item(5), "2"));
+        assertEquals("end", beamText((org.w3c.dom.Element) notes.item(8), "2"));
+        assertEquals("begin", beamText((org.w3c.dom.Element) notes.item(2), "3"));
+        assertEquals("end", beamText((org.w3c.dom.Element) notes.item(3), "3"));
+        assertEquals("begin", beamText((org.w3c.dom.Element) notes.item(5), "3"));
+        assertEquals("end", beamText((org.w3c.dom.Element) notes.item(8), "3"));
+    }
+
+    @Test
+    public void importsMeiBeamGraceGroupWithPitchTimingAndBeamContinuity() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\"><staffGrp>"
+                + "<staffDef n=\"1\" lines=\"5\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><beam>"
+                + "<note pname=\"d\" oct=\"5\" dur=\"8\" stem.dir=\"down\"/>"
+                + "<graceGrp slash=\"yes\"><note pname=\"e\" oct=\"5\" dur=\"8\" stem.dir=\"up\"/></graceGrp>"
+                + "<note pname=\"d\" oct=\"5\" dur=\"8\"/>"
+                + "<graceGrp slash=\"yes\"><note pname=\"c\" oct=\"5\" accid=\"s\" dur=\"8\" stem.dir=\"up\"/></graceGrp>"
+                + "<note pname=\"d\" oct=\"5\" dur=\"8\"/>"
+                + "<note pname=\"b\" oct=\"4\" dur=\"8\"/>"
+                + "</beam></layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(6, notes.getLength());
+        assertEquals("D5", pitchToken((org.w3c.dom.Element) notes.item(0)));
+        assertEquals("E5", pitchToken((org.w3c.dom.Element) notes.item(1)));
+        assertEquals("D5", pitchToken((org.w3c.dom.Element) notes.item(2)));
+        assertEquals("C5", pitchToken((org.w3c.dom.Element) notes.item(3)));
+        assertEquals("D5", pitchToken((org.w3c.dom.Element) notes.item(4)));
+        assertEquals("B4", pitchToken((org.w3c.dom.Element) notes.item(5)));
+        assertEquals("240", directChildText((org.w3c.dom.Element) notes.item(0), "duration"));
+        assertEquals("", directChildText((org.w3c.dom.Element) notes.item(1), "duration"));
+        assertEquals("", directChildText((org.w3c.dom.Element) notes.item(3), "duration"));
+        assertEquals("1", nestedText((org.w3c.dom.Element) notes.item(3), "alter"));
+        assertEquals("down", directChildText((org.w3c.dom.Element) notes.item(0), "stem"));
+        assertEquals("up", directChildText((org.w3c.dom.Element) notes.item(1), "stem"));
+        assertEquals("yes", ((org.w3c.dom.Element) notes.item(1)).getElementsByTagName("grace").item(0)
+                .getAttributes().getNamedItem("slash").getNodeValue());
+        assertEquals("yes", ((org.w3c.dom.Element) notes.item(3)).getElementsByTagName("grace").item(0)
+                .getAttributes().getNamedItem("slash").getNodeValue());
+        assertEquals("begin", beamText((org.w3c.dom.Element) notes.item(0), "1"));
+        assertEquals("continue", beamText((org.w3c.dom.Element) notes.item(1), "1"));
+        assertEquals("continue", beamText((org.w3c.dom.Element) notes.item(4), "1"));
+        assertEquals("end", beamText((org.w3c.dom.Element) notes.item(5), "1"));
+    }
+
+    @Test
+    public void importsMeiBeamSpanAsBeamContinuityOnListedNotes() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\"><staffGrp>"
+                + "<staffDef n=\"1\" lines=\"5\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"n1\" pname=\"c\" oct=\"5\" dur=\"8\"/>"
+                + "<note xml:id=\"n2\" pname=\"d\" oct=\"5\" dur=\"8\"/>"
+                + "<note xml:id=\"n3\" pname=\"e\" oct=\"5\" dur=\"8\"/>"
+                + "<note xml:id=\"n4\" pname=\"f\" oct=\"5\" dur=\"8\"/>"
+                + "</layer><beamSpan plist=\"#n1 #n2 #n3 #n4\"/></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(4, notes.getLength());
+        assertEquals("begin", beamText((org.w3c.dom.Element) notes.item(0), "1"));
+        assertEquals("continue", beamText((org.w3c.dom.Element) notes.item(1), "1"));
+        assertEquals("continue", beamText((org.w3c.dom.Element) notes.item(2), "1"));
+        assertEquals("end", beamText((org.w3c.dom.Element) notes.item(3), "1"));
+    }
+
+    @Test
+    public void importsMeiTieAttributesAcrossMeasuresAsTieStartStop() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\"><staffGrp>"
+                + "<staffDef n=\"1\" lines=\"5\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"n1\" pname=\"c\" oct=\"4\" dur=\"1\" tie=\"i\"/>"
+                + "</layer></staff></measure><measure n=\"2\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"n2\" pname=\"c\" oct=\"4\" dur=\"1\" tie=\"t\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element first = firstNoteOfMeasure(doc, "1");
+        org.w3c.dom.Element second = firstNoteOfMeasure(doc, "2");
+
+        assertTrue(hasDirectChildWithAttribute(first, "tie", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute(first, "tied", "type", "start"));
+        assertTrue(hasDirectChildWithAttribute(second, "tie", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute(second, "tied", "type", "stop"));
+    }
+
+    @Test
+    public void importsMeiSlurAttributesAsStartMiddleStopNotations() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\"><staffGrp>"
+                + "<staffDef n=\"1\" lines=\"5\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\" slur=\"i1\"/>"
+                + "<note pname=\"d\" oct=\"4\" dur=\"4\" slur=\"m1\"/>"
+                + "<note pname=\"e\" oct=\"4\" dur=\"4\" slur=\"t1\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(0), "slur", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(0), "slur", "number", "1"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(1), "slur", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(1), "slur", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(2), "slur", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(2), "slur", "number", "1"));
+    }
+
+    @Test
     public void buildsMeiExportScoreDefScaffoldFromMusicXml() {
         assertEquals("5.1+basic", MeiIo.normalizeMeiVersion(""));
         assertEquals("5.1+basic", MeiIo.normalizeMeiVersion("latest"));
@@ -939,6 +1121,50 @@ public class MeiIoTest {
         assertTrue(mei.contains("<harm tstamp=\"1\">F7</harm>"));
         assertTrue(mei.contains("<slur startid=\"#mkN1\" endid=\"#mkN2\"/>"));
         assertTrue(mei.contains("<dynam staff=\"1\" tstamp=\"1\" place=\"above\">mf</dynam>"));
+    }
+
+    @Test
+    public void exportsMusicXmlDomToMeiVersionAndTransposeParity() {
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(
+                "<score-partwise version=\"3.1\">"
+                        + "<part-list><score-part id=\"P1\"><part-name>Clarinet in A</part-name></score-part></part-list>"
+                        + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions>"
+                        + "<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>"
+                        + "<transpose><diatonic>-2</diatonic><chromatic>-3</chromatic></transpose>"
+                        + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                        + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                        + "<voice>1</voice><type>quarter</type></note></measure></part></score-partwise>");
+
+        String mei = MeiIo.exportMusicXmlDomToMei(doc);
+        String custom = MeiIo.exportMusicXmlDomToMei(doc, "4.0.1");
+
+        assertTrue(mei.contains("meiversion=\"5.1+basic\""));
+        assertTrue(custom.contains("meiversion=\"4.0.1\""));
+        assertTrue(mei.contains("trans.diat=\"-2\""));
+        assertTrue(mei.contains("trans.semi=\"-3\""));
+    }
+
+    @Test
+    public void exportsMusicXmlDomToMeiTempoAndDynamicsParity() {
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(
+                "<score-partwise version=\"3.1\">"
+                        + "<part-list><score-part id=\"P1\"><part-name>P1</part-name></score-part></part-list>"
+                        + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions>"
+                        + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                        + "<direction placement=\"above\"><direction-type><words>Allegretto moderato</words></direction-type>"
+                        + "<sound tempo=\"116\"/></direction>"
+                        + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                        + "<voice>1</voice><type>quarter</type></note>"
+                        + "<direction placement=\"below\"><direction-type><dynamics><p/></dynamics></direction-type></direction>"
+                        + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                        + "<voice>1</voice><type>quarter</type></note></measure></part></score-partwise>");
+
+        String mei = MeiIo.exportMusicXmlDomToMei(doc);
+
+        assertTrue(mei.contains(
+                "<tempo staff=\"1\" tstamp=\"1\" midi.bpm=\"116\" place=\"above\">Allegretto moderato</tempo>"));
+        assertFalse(mei.contains("<dynam tstamp=\"1\" place=\"above\">Allegretto moderato</dynam>"));
+        assertTrue(mei.contains("<dynam staff=\"1\" tstamp=\"2\" place=\"below\">p</dynam>"));
     }
 
     @Test
@@ -1845,6 +2071,44 @@ public class MeiIoTest {
         assertEquals("3", missing.getMeasureNo());
     }
 
+    @Test
+    public void resolvesStaffLevelHairpinIdsAcrossLayersByTickOnImport() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" lines=\"5\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\">"
+                + "<hairpin form=\"cres\" startid=\"#n1\" endid=\"#n4\"/>"
+                + "<layer n=\"1\"><note xml:id=\"n1\" pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"n2\" pname=\"d\" oct=\"4\" dur=\"4\"/></layer>"
+                + "<layer n=\"2\"><note xml:id=\"n3\" pname=\"e\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"n4\" pname=\"f\" oct=\"4\" dur=\"4\"/></layer>"
+                + "</staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element start = null;
+        org.w3c.dom.Element stop = null;
+        org.w3c.dom.NodeList directions = doc.getElementsByTagName("direction");
+        for (int i = 0; i < directions.getLength(); i++) {
+            org.w3c.dom.Element direction = (org.w3c.dom.Element) directions.item(i);
+            org.w3c.dom.NodeList wedges = direction.getElementsByTagName("wedge");
+            for (int j = 0; j < wedges.getLength(); j++) {
+                org.w3c.dom.Element wedge = (org.w3c.dom.Element) wedges.item(j);
+                if ("crescendo".equals(wedge.getAttribute("type"))) {
+                    start = direction;
+                }
+                if ("stop".equals(wedge.getAttribute("type"))) {
+                    stop = direction;
+                }
+            }
+        }
+
+        assertTrue(start != null);
+        assertTrue(stop != null);
+        assertEquals("480", stop.getElementsByTagName("offset").item(0).getTextContent().trim());
+    }
+
     private static int countOccurrences(String text, String pattern) {
         int count = 0;
         int index = 0;
@@ -1857,5 +2121,82 @@ public class MeiIoTest {
             index = found + pattern.length();
         }
         return count;
+    }
+
+    private static org.w3c.dom.Element firstNoteOfMeasure(org.w3c.dom.Document doc, String measureNumber) {
+        return (org.w3c.dom.Element) findMeasureByNumber(doc, measureNumber).getElementsByTagName("note").item(0);
+    }
+
+    private static org.w3c.dom.Element findMeasureByNumber(org.w3c.dom.Document doc, String measureNumber) {
+        org.w3c.dom.NodeList measures = doc.getElementsByTagName("measure");
+        for (int i = 0; i < measures.getLength(); i++) {
+            org.w3c.dom.Element measure = (org.w3c.dom.Element) measures.item(i);
+            if (measureNumber.equals(measure.getAttribute("number"))) {
+                return measure;
+            }
+        }
+        throw new AssertionError("measure not found: " + measureNumber);
+    }
+
+    private static String directChildText(org.w3c.dom.Element element, String childName) {
+        org.w3c.dom.NodeList children = element.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            org.w3c.dom.Node child = children.item(i);
+            if (child instanceof org.w3c.dom.Element && childName.equals(child.getNodeName())) {
+                return child.getTextContent() == null ? "" : child.getTextContent().trim();
+            }
+        }
+        return "";
+    }
+
+    private static String nestedText(org.w3c.dom.Element element, String childName) {
+        org.w3c.dom.NodeList nodes = element.getElementsByTagName(childName);
+        if (nodes.getLength() == 0) {
+            return "";
+        }
+        String text = nodes.item(0).getTextContent();
+        return text == null ? "" : text.trim();
+    }
+
+    private static String pitchToken(org.w3c.dom.Element note) {
+        return nestedText(note, "step") + nestedText(note, "octave");
+    }
+
+    private static String beamText(org.w3c.dom.Element note, String number) {
+        org.w3c.dom.NodeList beams = note.getElementsByTagName("beam");
+        for (int i = 0; i < beams.getLength(); i++) {
+            org.w3c.dom.Element beam = (org.w3c.dom.Element) beams.item(i);
+            if (number.equals(beam.getAttribute("number"))) {
+                return beam.getTextContent() == null ? "" : beam.getTextContent().trim();
+            }
+        }
+        return "";
+    }
+
+    private static boolean hasDirectChildWithAttribute(org.w3c.dom.Element element, String childName, String attrName,
+            String attrValue) {
+        org.w3c.dom.NodeList children = element.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            org.w3c.dom.Node child = children.item(i);
+            if (child instanceof org.w3c.dom.Element && childName.equals(child.getNodeName())) {
+                org.w3c.dom.Element childElement = (org.w3c.dom.Element) child;
+                if (attrValue.equals(childElement.getAttribute(attrName))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasNestedChildWithAttribute(org.w3c.dom.Element element, String childName, String attrName,
+            String attrValue) {
+        org.w3c.dom.NodeList nodes = element.getElementsByTagName(childName);
+        for (int i = 0; i < nodes.getLength(); i++) {
+            org.w3c.dom.Element child = (org.w3c.dom.Element) nodes.item(i);
+            if (attrValue.equals(child.getAttribute(attrName))) {
+                return true;
+            }
+        }
+        return false;
     }
 }

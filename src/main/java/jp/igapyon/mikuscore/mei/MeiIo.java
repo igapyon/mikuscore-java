@@ -889,7 +889,9 @@ public final class MeiIo {
         String safeVoice = voice == null ? "" : voice;
         List<ParsedMeiXmlEvent> slurAppliedEvents = applyStaffSlurControlEvents(staff, layer, safeLayer.getEvents(),
                 safeLayer.getIdToEventIndex(), idToEventTick, divisions, beatType);
-        MeiTieCarryResult tieApplied = applyTieCarryAccidentalsForLayerEvents(slurAppliedEvents, tieCarryIn);
+        List<ParsedMeiXmlEvent> spanAppliedEvents = applyStaffSpanControlEvents(staff, layer, slurAppliedEvents,
+                safeLayer.getIdToEventIndex(), idToEventTick, divisions, beatType);
+        MeiTieCarryResult tieApplied = applyTieCarryAccidentalsForLayerEvents(spanAppliedEvents, tieCarryIn);
         List<ParsedMeiEvent> plainEvents = toParsedMeiEvents(tieApplied.getEvents());
         String directionXml = collectLayerDirectionXml(staff, layer, divisions, beatType, safeVoice, plainEvents,
                 safeLayer.getIdToEventIndex(), idToEventTick);
@@ -2056,7 +2058,7 @@ public final class MeiIo {
             double tempo = parsePositiveDouble(sound == null ? "" : sound.getAttribute("tempo"));
             String words = firstDirectionTypeText(direction, "words").trim();
             if (words.length() > 0 && tempo > 0.0d) {
-                out.add("<tempo tstamp=\"" + xmlEscape(tstamp) + "\" midi.bpm=\"" + xmlEscape(Double.toString(tempo))
+                out.add("<tempo tstamp=\"" + xmlEscape(tstamp) + "\" midi.bpm=\"" + xmlEscape(formatInferredMeiTempo(tempo))
                         + "\"" + placeAttr + ">" + xmlEscape(words) + "</tempo>");
                 continue;
             }
@@ -3480,11 +3482,13 @@ public final class MeiIo {
                 plist, idToEventTick);
         Integer endIndex = resolveXmlEventEndpointIndex(endId, tstamp2, idToEventIndex, out, divisions, beatType, null,
                 idToEventTick);
-        if (!isValidXmlEventIndex(out, startIndex) || !isValidXmlEventIndex(out, endIndex)) {
-            return out;
+        List<Integer> spanIndexes = resolveBeamSpanPlistIndexes(plist, idToEventIndex);
+        if (spanIndexes.isEmpty()) {
+            if (!isValidXmlEventIndex(out, startIndex) || !isValidXmlEventIndex(out, endIndex)) {
+                return out;
+            }
+            spanIndexes = resolveBeamSpanIndexes(startIndex.intValue(), endIndex.intValue());
         }
-        List<Integer> spanIndexes = resolveBeamSpanIndexes(plist, idToEventIndex, startIndex.intValue(),
-                endIndex.intValue());
         List<Integer> pitchedIndexes = new ArrayList<Integer>();
         for (Integer index : spanIndexes) {
             if (isValidXmlEventIndex(out, index) && !"rest".equals(out.get(index.intValue()).getKind())) {
@@ -4560,14 +4564,22 @@ public final class MeiIo {
         }
         int eventIndex = events.size();
         events.add(event);
-        addMeiEventId(source == null ? "" : source.getAttribute("xml:id"), eventIndex, idToEventIndex, false);
+        addMeiEventId(xmlIdAttribute(source), eventIndex, idToEventIndex, false);
         addMeiEventId(source == null ? "" : source.getAttribute("id"), eventIndex, idToEventIndex, false);
         if ("chord".equals(event.getKind()) && source != null) {
             for (Element chordNote : directChildElementsByLocalName(source, "note")) {
-                addMeiEventId(chordNote.getAttribute("xml:id"), eventIndex, idToEventIndex, true);
+                addMeiEventId(xmlIdAttribute(chordNote), eventIndex, idToEventIndex, true);
                 addMeiEventId(chordNote.getAttribute("id"), eventIndex, idToEventIndex, true);
             }
         }
+    }
+
+    private static String xmlIdAttribute(Element element) {
+        if (element == null) {
+            return "";
+        }
+        String namespaced = element.getAttributeNS("http://www.w3.org/XML/1998/namespace", "id");
+        return namespaced == null || namespaced.trim().length() == 0 ? element.getAttribute("xml:id") : namespaced;
     }
 
     private static void addMeiEventId(String rawId, int eventIndex, Map<String, Integer> idToEventIndex,
@@ -4673,8 +4685,7 @@ public final class MeiIo {
         return eventXml == null ? "" : eventXml;
     }
 
-    private static List<Integer> resolveBeamSpanIndexes(String plist, Map<String, Integer> idToEventIndex,
-            int startIndex, int endIndex) {
+    private static List<Integer> resolveBeamSpanPlistIndexes(String plist, Map<String, Integer> idToEventIndex) {
         List<Integer> plistIndexes = new ArrayList<Integer>();
         String raw = plist == null ? "" : plist.trim();
         Map<String, Integer> indexMap = idToEventIndex == null ? Collections.<String, Integer>emptyMap()
@@ -4688,9 +4699,10 @@ public final class MeiIo {
                 }
             }
         }
-        if (!plistIndexes.isEmpty()) {
-            return plistIndexes;
-        }
+        return plistIndexes;
+    }
+
+    private static List<Integer> resolveBeamSpanIndexes(int startIndex, int endIndex) {
         int from = Math.min(startIndex, endIndex);
         int to = Math.max(startIndex, endIndex);
         List<Integer> span = new ArrayList<Integer>();
