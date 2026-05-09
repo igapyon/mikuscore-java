@@ -93,6 +93,23 @@ public final class MikuscoreCli {
                 return 1;
             }
         }
+        if ("mei".equals(from) && "musicxml".equals(to)) {
+            String inputPath = optionValue(args, "--in");
+            String outputPath = optionValue(args, "--out");
+            try {
+                String meiText = readInputText(inputPath, in);
+                CoreApi.CliResult result = CoreApi.importMeiToMusicXml(meiText);
+                if (!result.isOk()) {
+                    err.println(result.getDiagnostic());
+                    return 1;
+                }
+                writeMusicXmlOutput(outputPath, result.getOutput(), out);
+                return 0;
+            } catch (Exception ex) {
+                err.println("MEI to MusicXML conversion failed: " + ex.getMessage());
+                return 1;
+            }
+        }
         if ("musicxml".equals(from) && "abc".equals(to)) {
             String inputPath = optionValue(args, "--in");
             String outputPath = optionValue(args, "--out");
@@ -107,6 +124,23 @@ public final class MikuscoreCli {
                 return 0;
             } catch (Exception ex) {
                 err.println("MusicXML to ABC conversion failed: " + ex.getMessage());
+                return 1;
+            }
+        }
+        if ("musicxml".equals(from) && "mei".equals(to)) {
+            String inputPath = optionValue(args, "--in");
+            String outputPath = optionValue(args, "--out");
+            try {
+                String xmlText = readMusicXmlInput(inputPath, in);
+                CoreApi.CliResult result = CoreApi.exportMusicXmlToMei(xmlText);
+                if (!result.isOk()) {
+                    err.println(result.getDiagnostic());
+                    return 1;
+                }
+                writeOutputText(outputPath, result.getOutput(), out);
+                return 0;
+            } catch (Exception ex) {
+                err.println("MusicXML to MEI conversion failed: " + ex.getMessage());
                 return 1;
             }
         }
@@ -257,6 +291,7 @@ public final class MikuscoreCli {
         out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/mikuscore.jar convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar render svg [--from musicxml|abc] [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar state summarize [--in <file>|-]");
         out.println("  java -jar target/mikuscore.jar state inspect-measure --measure <number> [--in <file>|-]");
@@ -287,6 +322,8 @@ public final class MikuscoreCli {
         out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/mikuscore.jar convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to mei [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/mikuscore.jar convert --help");
         out.println();
         out.println("Description:");
@@ -296,10 +333,12 @@ public final class MikuscoreCli {
         out.println("  --from musicxml --to musicxml");
         out.println("  --from abc --to musicxml");
         out.println("  --from musicxml --to abc");
+        out.println("  --from mei --to musicxml");
+        out.println("  --from musicxml --to mei");
         out.println();
         out.println("Input:");
-        out.println("  --in <file>|-  Read MusicXML, MXL, or ABC text from file or stdin");
-        out.println("  file paths     musicxml accepts .musicxml / .xml / .mxl; abc accepts UTF-8 text");
+        out.println("  --in <file>|-  Read MusicXML, MXL, ABC, or MEI text from file or stdin");
+        out.println("  file paths     musicxml accepts .musicxml / .xml / .mxl; abc and mei accept UTF-8 text");
         out.println();
         out.println("Output:");
         out.println("  --out <file>|-  Write MusicXML text or MXL bytes to file or stdout");

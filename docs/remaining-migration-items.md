@@ -5,6 +5,61 @@ This document tracks repository-specific remaining work for the `mikuscore-java`
 The shared policy is described in `docs/miku-soft-30-straight-conversion-v20260425.md`.
 This file records the current `mikuscore-java` status and next migration items.
 
+## Current Remaining Work
+
+Use this section as the short entry point for what is still open. The detailed
+completed slice history remains below.
+
+### Highest Priority Format Work
+
+- [ ] Continue broader MEI import / export parity
+  - fifty-ninth focused MEI helper slice is migrated through export MusicXML DOM facade
+  - first MusicXML-to-MEI CoreApi / CLI bridge is migrated
+  - remaining work is broader export body / control-event parity and golden-style coverage
+- [ ] Continue broader MuseScore conversion semantics
+  - many import/export helpers and `.mscz` / `.mscx` CLI facade slices are migrated
+  - remaining work is broader end-to-end conversion parity against upstream behavior
+- [ ] Continue broader ABC body import parity
+  - many parser/import/export helper slices and initial golden roundtrip fixtures are migrated
+  - remaining work is broader fixture-based parity expansion
+
+### Not Started Format Work
+
+- [ ] MIDI I/O
+  - upstream `src/ts/midi-io.ts`
+  - upstream `tests/unit/midi-io.spec.ts`
+- [ ] LilyPond I/O
+  - upstream `src/ts/lilypond-io.ts`
+  - upstream `tests/unit/lilypond-io.spec.ts`
+
+### Core / State Work
+
+- [ ] Re-check existing `state` family API names, diagnostics, and input / output contracts against latest upstream
+- [ ] Continue deeper `core/timeIndex.ts` parity and remaining core helper parity
+- [ ] Reclassify ABC / MuseScore / MIDI / MEI / LilyPond / VSQX against the latest upstream responsibility split
+
+### CLI / Artifact Work
+
+- [ ] Complete upstream CLI command tree inventory
+  - `convert --from ... --to ...`
+  - `render svg`
+  - remaining option / stdout / stderr / exit-code correspondence
+- [ ] Complete supported input / output format matrix
+- [ ] Decide final Java handling for `render svg`
+  - current Java behavior recognizes the command family and reports the Verovio/browser runtime constraint
+- [ ] Clarify artifact roles and release artifact expectations
+- [ ] Decide whether to add a Maven wrapper
+
+### Tests / Fixtures
+
+- [ ] Expand upstream test intent mapping beyond focused helper coverage
+  - core / MusicXML / ABC / CLI / MuseScore / MEI broader tests
+- [ ] Add or classify remaining upstream fixtures and samples
+  - `tests/fixtures/*.musicxml`
+  - `src/samples/**`
+- [ ] Decide Java strategy for property tests
+  - upstream `tests/property/core.property.spec.ts`
+
 ## Current Status
 
 - Build foundation: initial Maven skeleton exists
@@ -246,6 +301,128 @@ Out of scope for the initial Java conversion:
 - [x] Add twentieth `src/ts/mei-io.ts` helper slice
   - MEI scoreDef / staffDef document-order resolution, transpose, meter / time symbol / clef helpers
   - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-first `src/ts/mei-io.ts` helper slice
+  - MEI key.sig attr / key fifths element parser and scoreDef-for-staff key / transpose helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-second `src/ts/mei-io.ts` helper slice
+  - MEI dynam / hairpin / pedal / octave Element wrapper helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-third `src/ts/mei-io.ts` helper slice
+  - MEI repeatMark / tempo / harm Element wrapper helpers and harmony alter-zero omission
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-fourth `src/ts/mei-io.ts` helper slice
+  - MEI layer harmony / direction XML collection helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-fifth `src/ts/mei-io.ts` helper slice
+  - MEI staff / layer notation control application helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-sixth `src/ts/mei-io.ts` helper slice
+  - MEI staff / layer span control application helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-seventh `src/ts/mei-io.ts` helper slice
+  - MEI staff annot miscellaneous / measure meta extraction and debug field helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-eighth `src/ts/mei-io.ts` helper slice
+  - MEI import option resolution and initial import context helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add twenty-ninth `src/ts/mei-io.ts` helper slice
+  - MEI initial part import state helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirtieth `src/ts/mei-io.ts` helper slice
+  - MEI per-measure import state helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-first `src/ts/mei-io.ts` helper slice
+  - MEI note lyric / accid / articulation readers and MusicXML note XML builder
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-second `src/ts/mei-io.ts` helper slice
+  - MEI rest event XML builder and parsed event beam / breaksec metadata carrier
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-third `src/ts/mei-io.ts` helper slice
+  - MEI chord event XML builder and tie / measure accidental state update helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-fourth `src/ts/mei-io.ts` helper slice
+  - MEI note event XML builder and tie / measure accidental state update helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-fifth `src/ts/mei-io.ts` helper slice
+  - MEI beam container event XML application helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-sixth `src/ts/mei-io.ts` helper slice
+  - MEI tuplet / graceGrp forced context propagation helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-seventh `src/ts/mei-io.ts` helper slice
+  - MEI stem slash event expansion helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-eighth `src/ts/mei-io.ts` helper slice
+  - MEI mRest / mSpace measure duration metadata helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add thirty-ninth `src/ts/mei-io.ts` helper slice
+  - MEI layer event parser facade
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fortieth `src/ts/mei-io.ts` helper slice
+  - MEI parsed layer id-to-event-tick helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-first `src/ts/mei-io.ts` helper slice
+  - MEI processed layer XML facade
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-second `src/ts/mei-io.ts` helper slice
+  - MEI processed staff layers facade
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-third `src/ts/mei-io.ts` helper slice
+  - MEI imported measure XML facade
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-fourth `src/ts/mei-io.ts` helper slice
+  - MEI imported part XML facade
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-fifth `src/ts/mei-io.ts` helper slice
+  - MEI score-partwise document facade
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-sixth `src/ts/mei-io.ts` helper slice
+  - MEI public text import facade
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-seventh MEI import integration slice
+  - `CoreApi.importMeiToMusicXml`
+  - CLI `convert --from mei --to musicxml`
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-eighth `src/ts/mei-io.ts` helper slice
+  - MEI export scoreDef / staffDef scaffold helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add forty-ninth `src/ts/mei-io.ts` helper slice
+  - MEI export measure-number / document wrapper scaffold helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fiftieth `src/ts/mei-io.ts` helper slice
+  - MEI export measure miscellaneous / meta annotation helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-first `src/ts/mei-io.ts` helper slice
+  - MEI export simple note / rest event helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-second `src/ts/mei-io.ts` helper slice
+  - MEI export simple chord event helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-third `src/ts/mei-io.ts` helper slice
+  - MEI export layer content helper
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-fourth `src/ts/mei-io.ts` helper slice
+  - MEI export harmony DOM / staff attribute helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-fifth `src/ts/mei-io.ts` helper slice
+  - MEI export direction control helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-sixth `src/ts/mei-io.ts` helper slice
+  - MEI export staff timeline / gliss-slide control helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-seventh `src/ts/mei-io.ts` helper slice
+  - MEI export tie/slur control helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-eighth `src/ts/mei-io.ts` helper slice
+  - MEI export ornament / breath control helpers
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-ninth `src/ts/mei-io.ts` helper slice
+  - MEI export MusicXML DOM facade
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add first `convert --from musicxml --to mei` CoreApi / CLI bridge
+  - `CoreApi.exportMusicXmlToMei`
+  - Java CLI stdin/stdout path delegates through `CoreApi`
+  - focused JUnit tests added for upstream CLI/API bridge behavior
 - [x] Add first MusicXML command validation implementation for `change_to_pitch`
 - [x] Add first MusicXML command apply implementation for `change_to_pitch`
 - [x] Add `core/ScoreCore.ts` / `core/staffClefPolicy.ts` grand-staff staff assignment subset for `change_to_pitch`
