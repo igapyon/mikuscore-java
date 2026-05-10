@@ -9,6 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
+
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -142,6 +144,60 @@ public class MusicXmlIoTest {
         assertEquals(invalid, MusicXmlIo.normalizeImportedMusicXmlText(invalid));
     }
 
+    @Test
+    public void buildsRenderDocWithSvgNodeIdsWithoutMutatingSource() {
+        Document source = MusicXmlIo.parseMusicXmlDocument(twoMeasureMusicXml());
+
+        MusicXmlIo.RenderDocBundle bundle = MusicXmlIo.buildRenderDocWithNodeIds(source,
+                Arrays.asList("n1", "n2"), "mks");
+
+        assertEquals(2, bundle.getNoteCount());
+        assertEquals("n1", bundle.getSvgIdToNodeId().get("mks-n1"));
+        assertEquals("mks-n1", noteAt(bundle.getRenderDoc(), 0).getAttribute("xml:id"));
+        assertEquals("mks-n2", noteAt(bundle.getRenderDoc(), 1).getAttribute("id"));
+        assertEquals("", noteAt(source, 0).getAttribute("xml:id"));
+    }
+
+    @Test
+    public void extractsMeasureEditorDocumentWithEffectiveAttributesAndBlankPartNames() {
+        Document source = MusicXmlIo.parseMusicXmlDocument(twoMeasureMusicXml());
+
+        Document editor = MusicXmlIo.extractMeasureEditorDocument(source, "P1", "2");
+
+        assertNotNull(editor);
+        Element root = editor.getDocumentElement();
+        assertEquals("score-partwise", root.getTagName());
+        assertEquals("4.0", root.getAttribute("version"));
+        Element scorePart = firstDirectChild(firstDirectChild(root, "part-list"), "score-part");
+        assertEquals("", firstDirectChild(scorePart, "part-name").getTextContent());
+        assertEquals("", firstDirectChild(scorePart, "part-abbreviation").getTextContent());
+        Element measure = firstDirectChild(firstDirectChild(root, "part"), "measure");
+        Element attrs = firstDirectChild(measure, "attributes");
+        assertEquals("480", firstDirectChild(attrs, "divisions").getTextContent());
+        assertEquals("0", firstDirectChild(firstDirectChild(attrs, "key"), "fifths").getTextContent());
+        assertEquals("4", firstDirectChild(firstDirectChild(attrs, "time"), "beats").getTextContent());
+        assertEquals("G", firstDirectChild(firstDirectChild(attrs, "clef"), "sign").getTextContent());
+    }
+
+    @Test
+    public void replacesMeasureInMainDocumentAndDropsPreviewOnlyAttributes() {
+        Document main = MusicXmlIo.parseMusicXmlDocument(twoMeasureMusicXml());
+        Document editor = MusicXmlIo.extractMeasureEditorDocument(main, "P1", "2");
+        Element editorMeasure = firstDirectChild(firstDirectChild(editor.getDocumentElement(), "part"), "measure");
+        Element editorNote = firstDirectChild(editorMeasure, "note");
+        firstDirectChild(firstDirectChild(editorNote, "pitch"), "step").setTextContent("A");
+
+        Document replaced = MusicXmlIo.replaceMeasureInMainDocument(main, "P1", "2", editor);
+
+        assertNotNull(replaced);
+        Element replacedPart = firstDirectChild(replaced.getDocumentElement(), "part");
+        Element replacedMeasure = directMeasureAt(replacedPart, 1);
+        assertNull(firstDirectChild(replacedMeasure, "attributes"));
+        assertEquals("A", firstDirectChild(firstDirectChild(firstDirectChild(replacedMeasure, "note"), "pitch"), "step")
+                .getTextContent());
+        assertEquals("D", firstDirectChild(firstDirectChild(noteAt(main, 1), "pitch"), "step").getTextContent());
+    }
+
     private static String minimalMusicXmlWithoutPartList(String title) {
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                 + "<score-partwise version=\"4.0\">\n"
@@ -223,6 +279,22 @@ public class MusicXmlIoTest {
                 + "</score-partwise>\n";
     }
 
+    private static String twoMeasureMusicXml() {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Piano</part-name><part-abbreviation>Pno.</part-abbreviation></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes><divisions>480</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>\n"
+                + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "    </measure>\n"
+                + "    <measure number=\"2\">\n"
+                + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>\n";
+    }
+
     private static int countOccurrences(String text, String pattern) {
         int count = 0;
         int index = 0;
@@ -264,5 +336,20 @@ public class MusicXmlIoTest {
             }
         }
         return count;
+    }
+
+    private static Element directMeasureAt(Element part, int index) {
+        int measureIndex = 0;
+        NodeList children = part.getChildNodes();
+        for (int childIndex = 0; childIndex < children.getLength(); childIndex++) {
+            if (children.item(childIndex) instanceof Element
+                    && "measure".equals(((Element) children.item(childIndex)).getTagName())) {
+                if (measureIndex == index) {
+                    return (Element) children.item(childIndex);
+                }
+                measureIndex++;
+            }
+        }
+        return null;
     }
 }

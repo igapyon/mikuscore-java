@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import jp.igapyon.mikuscore.musicxml.AccidentalSpelling;
+
 public final class MuseScoreIo {
     private MuseScoreIo() {
     }
@@ -1657,6 +1659,50 @@ public final class MuseScoreIo {
         return normalized;
     }
 
+    public static Transpose readPartTransposeFromValues(String diatonicRaw, String chromaticRaw) {
+        Integer diatonic = parseRoundedIntegerOrNull(diatonicRaw);
+        Integer chromatic = parseRoundedIntegerOrNull(chromaticRaw);
+        if (diatonic == null && chromatic == null) {
+            return null;
+        }
+        return new Transpose(diatonic, chromatic);
+    }
+
+    public static Integer readMuseKeyFifthsFromValues(String transposeKeyRaw, String accidentalRaw,
+            String concertKeyRaw, boolean transposingPart) {
+        Integer transposeKey = parseRoundedIntegerOrNull(transposeKeyRaw);
+        Integer accidental = parseRoundedIntegerOrNull(accidentalRaw);
+        Integer concertKey = parseRoundedIntegerOrNull(concertKeyRaw);
+        Integer resolved = transposingPart ? firstNonNull(transposeKey, accidental, concertKey)
+                : firstNonNull(accidental, concertKey, transposeKey);
+        if (resolved == null) {
+            return null;
+        }
+        return Integer.valueOf(Math.max(-7, Math.min(7, resolved.intValue())));
+    }
+
+    private static Integer firstNonNull(Integer first, Integer second, Integer third) {
+        if (first != null) {
+            return first;
+        }
+        if (second != null) {
+            return second;
+        }
+        return third;
+    }
+
+    private static Integer parseRoundedIntegerOrNull(String raw) {
+        try {
+            double parsed = Double.parseDouble(raw == null ? "" : raw.trim());
+            if (!Double.isFinite(parsed)) {
+                return null;
+            }
+            return Integer.valueOf((int) Math.round(parsed));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
     public static String buildTransposeXml(Transpose transpose) {
         if (transpose == null) {
             return "";
@@ -1909,6 +1955,22 @@ public final class MuseScoreIo {
         return museBeamXmlByIndex(assignmentByIndex);
     }
 
+    public static MuseBeamEvent buildMuseImportedBeamEventInfo(boolean timed, boolean chord, boolean grace,
+            int durationDiv, Integer displayDurationDiv, int divisions, String explicitMode) {
+        int displayDuration = displayDurationDiv == null ? durationDiv : displayDurationDiv.intValue();
+        TypeAndDots info = timed ? divisionToTypeAndDots(divisions, displayDuration) : null;
+        int levels = info == null ? 0 : beamLevelFromType(info.getType());
+        return new MuseBeamEvent(timed, chord, grace, Math.max(0, durationDiv), levels, explicitMode);
+    }
+
+    public static String readMuseImportedBeamXmlByEventIndex(Map<Integer, String> beamXmlByEventIndex, int eventIndex) {
+        if (beamXmlByEventIndex == null) {
+            return "";
+        }
+        String xml = beamXmlByEventIndex.get(Integer.valueOf(Math.max(0, eventIndex)));
+        return xml == null ? "" : xml;
+    }
+
     private static boolean isBeamableMuseTimedEvent(MuseBeamEvent info) {
         return info != null && info.isTimed() && !info.isGrace() && info.getLevels() > 0;
     }
@@ -2127,9 +2189,44 @@ public final class MuseScoreIo {
                 + "\"/></direction-type></direction>";
     }
 
+    public static List<String> applyMuseOttavaSpannerTransition(String subtype, boolean hasStart, boolean hasStop,
+            List<OttavaState> activeOttavaStates, MutableInt nextOttavaNumber) {
+        List<OttavaState> active = activeOttavaStates == null ? new ArrayList<OttavaState>() : activeOttavaStates;
+        MutableInt next = nextOttavaNumber == null ? new MutableInt(1) : nextOttavaNumber;
+        List<String> directions = new ArrayList<String>();
+        if (hasStop) {
+            OttavaState state = active.isEmpty() ? new OttavaState(1, 8, "up") : active.remove(active.size() - 1);
+            directions.add(buildOctaveShiftDirectionXml("stop", state));
+        }
+        if (hasStart) {
+            OttavaShift parsed = parseOttavaSubtype(subtype);
+            OttavaState state = new OttavaState(next.getCurrent(), parsed.getSize(), parsed.getShiftType());
+            next.setCurrent(next.getCurrent() + 1);
+            active.add(state);
+            directions.add(buildOctaveShiftDirectionXml("start", state));
+        }
+        return directions;
+    }
+
     public static int semitoneShiftForOttavaDisplay(OttavaState state) {
         int amount = state.getSize() == 15 ? 24 : 12;
         return "up".equals(state.getShiftType()) ? amount : -amount;
+    }
+
+    public static int semitoneShiftForActiveOttavaDisplay(Collection<OttavaState> activeOttavaStates) {
+        int sum = 0;
+        if (activeOttavaStates != null) {
+            for (OttavaState state : activeOttavaStates) {
+                if (state != null) {
+                    sum += semitoneShiftForOttavaDisplay(state);
+                }
+            }
+        }
+        return sum;
+    }
+
+    public static int applyActiveOttavaDisplayShiftToMidi(int midi, Collection<OttavaState> activeOttavaStates) {
+        return Math.max(0, Math.min(127, Math.round(midi + semitoneShiftForActiveOttavaDisplay(activeOttavaStates))));
     }
 
     public static ResolvedMuseScoreImportOptions resolveMuseScoreImportOptions(Boolean sourceMetadata,
@@ -2277,6 +2374,101 @@ public final class MuseScoreIo {
         return new TieFlags(tieStart, tieStop);
     }
 
+    public static String buildMuseImportedNoteTieXml(TieFlags tieFlags) {
+        TieFlags safe = tieFlags == null ? new TieFlags(false, false) : tieFlags;
+        StringBuilder xml = new StringBuilder();
+        if (safe.isTieStart()) {
+            xml.append("<tie type=\"start\"/>");
+        }
+        if (safe.isTieStop()) {
+            xml.append("<tie type=\"stop\"/>");
+        }
+        return xml.toString();
+    }
+
+    public static String buildMuseImportedNoteNotationsXml(Collection<String> tupletNotationItems,
+            Collection<Integer> slurStarts, Collection<Integer> slurStops, Collection<String> trillNotationItems,
+            Collection<String> articulationTags, Collection<String> technicalTags, TieFlags tiedFlags,
+            String fingeringText, Integer stringNumber) {
+        StringBuilder items = new StringBuilder();
+        appendStringItems(items, tupletNotationItems);
+        if (slurStarts != null) {
+            for (Integer number : slurStarts) {
+                if (number != null) {
+                    items.append("<slur type=\"start\" number=\"")
+                            .append(Math.max(1, Math.round(number.intValue()))).append("\"/>");
+                }
+            }
+        }
+        if (slurStops != null) {
+            for (Integer number : slurStops) {
+                if (number != null) {
+                    items.append("<slur type=\"stop\" number=\"")
+                            .append(Math.max(1, Math.round(number.intValue()))).append("\"/>");
+                }
+            }
+        }
+        appendStringItems(items, trillNotationItems);
+        String articulationXml = buildMuseImportedArticulationsXml(articulationTags);
+        if (articulationXml.length() > 0) {
+            items.append(articulationXml);
+        }
+        String technicalXml = buildMuseImportedTechnicalXml(technicalTags, fingeringText, stringNumber);
+        if (technicalXml.length() > 0) {
+            items.append(technicalXml);
+        }
+        TieFlags safeTied = tiedFlags == null ? new TieFlags(false, false) : tiedFlags;
+        if (safeTied.isTieStart()) {
+            items.append("<tied type=\"start\"/>");
+        }
+        if (safeTied.isTieStop()) {
+            items.append("<tied type=\"stop\"/>");
+        }
+        return items.length() == 0 ? "" : "<notations>" + items.toString() + "</notations>";
+    }
+
+    private static void appendStringItems(StringBuilder out, Collection<String> items) {
+        if (items == null) {
+            return;
+        }
+        for (String item : items) {
+            if (item != null && item.length() > 0) {
+                out.append(item);
+            }
+        }
+    }
+
+    private static String buildMuseImportedArticulationsXml(Collection<String> articulationTags) {
+        StringBuilder items = new StringBuilder();
+        if (articulationTags != null) {
+            for (String tag : articulationTags) {
+                if (tag != null && tag.trim().length() > 0) {
+                    items.append("<").append(tag.trim()).append("/>");
+                }
+            }
+        }
+        return items.length() == 0 ? "" : "<articulations>" + items.toString() + "</articulations>";
+    }
+
+    private static String buildMuseImportedTechnicalXml(Collection<String> technicalTags, String fingeringText,
+            Integer stringNumber) {
+        StringBuilder items = new StringBuilder();
+        if (technicalTags != null) {
+            for (String tag : technicalTags) {
+                if (tag != null && tag.trim().length() > 0) {
+                    items.append("<").append(tag.trim()).append("/>");
+                }
+            }
+        }
+        if (fingeringText != null && fingeringText.trim().length() > 0) {
+            items.append("<fingering>").append(xmlEscape(fingeringText.trim())).append("</fingering>");
+        }
+        if (stringNumber != null && stringNumber.intValue() > 0) {
+            items.append("<string>").append(Math.round(stringNumber.intValue())).append("</string>");
+        }
+        return items.length() == 0 ? "" : "<technical>" + items.toString() + "</technical>";
+    }
+
     public static String parseMuseStringText(String directText, String nestedText) {
         String candidate = nestedText != null ? nestedText : directText;
         if (candidate == null) {
@@ -2292,6 +2484,62 @@ public final class MuseScoreIo {
             return new TrillSpannerTransition(false, false);
         }
         return new TrillSpannerTransition(hasStart, hasStop);
+    }
+
+    public static void applyMuseTrillSpannerTransition(TrillSpannerTransition transition,
+            List<Integer> activeTrillNumbers, MutableInt nextTrillNumber, List<Integer> pendingTrillStarts,
+            List<Integer> pendingTrillStops) {
+        TrillSpannerTransition safe = transition == null ? new TrillSpannerTransition(false, false) : transition;
+        List<Integer> active = activeTrillNumbers == null ? new ArrayList<Integer>() : activeTrillNumbers;
+        MutableInt next = nextTrillNumber == null ? new MutableInt(1) : nextTrillNumber;
+        if (safe.isStop()) {
+            int number = 1;
+            if (!active.isEmpty()) {
+                number = active.remove(active.size() - 1).intValue();
+            }
+            if (pendingTrillStops != null) {
+                pendingTrillStops.add(Integer.valueOf(number));
+            }
+        }
+        if (safe.isStart()) {
+            int number = next.getCurrent();
+            next.setCurrent(number + 1);
+            active.add(Integer.valueOf(number));
+            if (pendingTrillStarts != null) {
+                pendingTrillStarts.add(Integer.valueOf(number));
+            }
+        }
+    }
+
+    public static List<String> buildMuseImportedTrillNotationItems(Collection<Integer> trillStarts,
+            Collection<Integer> trillStops, boolean trillMarkOnly, String accidentalMark) {
+        List<String> items = new ArrayList<String>();
+        String accidentalMarkXml = accidentalMark != null && accidentalMark.trim().length() > 0
+                ? "<accidental-mark>" + xmlEscape(accidentalMark.trim()) + "</accidental-mark>"
+                : "";
+        List<Integer> starts = trillStarts == null ? Collections.<Integer>emptyList()
+                : new ArrayList<Integer>(trillStarts);
+        for (int index = 0; index < starts.size(); index++) {
+            Integer number = starts.get(index);
+            if (number == null) {
+                continue;
+            }
+            items.add("<ornaments><trill-mark/>" + (index == 0 ? accidentalMarkXml : "")
+                    + "<wavy-line type=\"start\" number=\"" + Math.max(1, Math.round(number.intValue()))
+                    + "\"/></ornaments>");
+        }
+        if (trillStops != null) {
+            for (Integer number : trillStops) {
+                if (number != null) {
+                    items.add("<ornaments><wavy-line type=\"stop\" number=\""
+                            + Math.max(1, Math.round(number.intValue())) + "\"/></ornaments>");
+                }
+            }
+        }
+        if (starts.isEmpty() && trillMarkOnly) {
+            items.add("<ornaments><trill-mark/>" + accidentalMarkXml + "</ornaments>");
+        }
+        return items;
     }
 
     public static MuseSlurTransition parseMuseSlurSpannerTransition(String type, boolean hasStart, boolean hasStop) {
@@ -2449,6 +2697,468 @@ public final class MuseScoreIo {
         return notes;
     }
 
+    public static MuseImportedPitchXml buildMuseImportedPitchXml(MuseScoreChordNote note, int keyFifths, int staffNo,
+            Map<String, Integer> previousAlterByPitchKey) {
+        if (note == null) {
+            return new MuseImportedPitchXml("", "");
+        }
+        String preferredAccidental = note.getAccidentalText() != null ? note.getAccidentalText()
+                : note.getTpcAccidentalText();
+        AccidentalSpelling.SpelledPitch pitch = AccidentalSpelling.midiToPitch(note.getMidi(),
+                Integer.valueOf(keyFifths), preferredAccidental);
+        String pitchXml = "<pitch><step>" + pitch.getStep() + "</step>"
+                + (pitch.getAlter() != 0 ? "<alter>" + pitch.getAlter() + "</alter>" : "") + "<octave>"
+                + pitch.getOctave() + "</octave></pitch>";
+        String pitchKey = Math.max(1, staffNo) + ":" + pitch.getOctave() + ":" + pitch.getStep();
+        String accidentalText = AccidentalSpelling.resolveAccidentalTextForPitch(pitch, keyFifths,
+                previousAlterByPitchKey, pitchKey, preferredAccidental);
+        String accidentalXml = accidentalText != null && accidentalText.trim().length() > 0
+                ? "<accidental>" + xmlEscape(accidentalText.trim()) + "</accidental>"
+                : "";
+        return new MuseImportedPitchXml(pitchXml, accidentalXml);
+    }
+
+    public static List<MuseImportedPitchXml> buildMuseImportedVoicePitchXmlItems(
+            Collection<MuseScoreChordNote> notes, int keyFifths, int staffNo,
+            Map<String, Integer> previousAlterByPitchKey) {
+        List<MuseImportedPitchXml> items = new ArrayList<MuseImportedPitchXml>();
+        if (notes == null) {
+            return items;
+        }
+        Map<String, Integer> state = previousAlterByPitchKey == null ? new LinkedHashMap<String, Integer>()
+                : previousAlterByPitchKey;
+        for (MuseScoreChordNote note : notes) {
+            if (note != null) {
+                items.add(buildMuseImportedPitchXml(note, keyFifths, staffNo, state));
+            }
+        }
+        return items;
+    }
+
+    public static String buildMuseImportedRestNoteXml(int durationDiv, int partVoiceNo, String type, int dots,
+            String timeModificationXml, String beamXml, int staffNo, Collection<String> notationItems) {
+        String notationsXml = buildMuseImportedNotationItemsXml(notationItems);
+        return "<note><rest/><duration>" + Math.max(0, durationDiv) + "</duration><voice>"
+                + Math.max(1, partVoiceNo) + "</voice><type>" + xmlEscape(type == null ? "" : type)
+                + "</type>" + repeatXml("<dot/>", dots) + safeXmlFragment(timeModificationXml)
+                + safeXmlFragment(beamXml) + "<staff>" + Math.max(1, staffNo) + "</staff>" + notationsXml
+                + "</note>";
+    }
+
+    public static String buildMuseImportedPitchedNoteXml(boolean chordFollow, boolean grace, boolean graceSlash,
+            MuseImportedPitchXml pitch, TieFlags tieFlags, int durationDiv, int partVoiceNo, String type, int dots,
+            String timeModificationXml, String beamXml, int staffNo, Collection<String> notationItems) {
+        return buildMuseImportedPitchedNoteXml(chordFollow, grace, graceSlash, grace, pitch, tieFlags, durationDiv,
+                partVoiceNo, type, dots, timeModificationXml, beamXml, staffNo, notationItems);
+    }
+
+    public static String buildMuseImportedPitchedNoteXml(boolean chordFollow, boolean grace, boolean graceSlash,
+            boolean omitDuration, MuseImportedPitchXml pitch, TieFlags tieFlags, int durationDiv, int partVoiceNo,
+            String type, int dots, String timeModificationXml, String beamXml, int staffNo,
+            Collection<String> notationItems) {
+        MuseImportedPitchXml safePitch = pitch == null ? new MuseImportedPitchXml("", "") : pitch;
+        String graceXml = grace ? (graceSlash ? "<grace slash=\"yes\"/>" : "<grace/>") : "";
+        String durationXml = omitDuration ? "" : "<duration>" + Math.max(0, durationDiv) + "</duration>";
+        return "<note>" + (chordFollow ? "<chord/>" : "") + graceXml + safePitch.getPitchXml()
+                + buildMuseImportedNoteTieXml(tieFlags) + durationXml + "<voice>" + Math.max(1, partVoiceNo)
+                + "</voice><type>" + xmlEscape(type == null ? "" : type) + "</type>"
+                + repeatXml("<dot/>", dots) + safeXmlFragment(timeModificationXml)
+                + safePitch.getAccidentalXml() + safeXmlFragment(beamXml) + "<staff>" + Math.max(1, staffNo)
+                + "</staff>" + buildMuseImportedNotationItemsXml(notationItems) + "</note>";
+    }
+
+    public static String buildMuseImportedRestEventXml(int durationDiv, Integer displayDurationDiv, int divisions,
+            int partVoiceNo, int staffNo, TupletMusicXml tupletXml, String beamXml) {
+        int displayDuration = displayDurationDiv == null ? durationDiv : displayDurationDiv.intValue();
+        TypeAndDots info = divisionToTypeAndDots(divisions, displayDuration);
+        TupletMusicXml tuplet = tupletXml == null ? new TupletMusicXml("", Collections.<String>emptyList())
+                : tupletXml;
+        return buildMuseImportedRestNoteXml(durationDiv, partVoiceNo, info.getType(), info.getDots(),
+                tuplet.getTimeModificationXml(), beamXml, staffNo, tuplet.getNotationItems());
+    }
+
+    public static String buildMuseImportedChordEventXml(Collection<MuseScoreChordNote> notes, int keyFifths,
+            int staffNo, Map<String, Integer> previousAlterByPitchKey, int durationDiv, Integer displayDurationDiv,
+            int divisions, int partVoiceNo, boolean grace, boolean graceSlash, TupletMusicXml tupletXml,
+            String beamXml, Collection<Integer> slurStarts, Collection<Integer> slurStops,
+            Collection<String> trillNotationItems, Collection<String> articulationTags,
+            Collection<String> technicalTags) {
+        int displayDuration = displayDurationDiv == null ? durationDiv : displayDurationDiv.intValue();
+        TypeAndDots info = divisionToTypeAndDots(divisions, displayDuration);
+        TupletMusicXml tuplet = tupletXml == null ? new TupletMusicXml("", Collections.<String>emptyList())
+                : tupletXml;
+        List<MuseImportedPitchXml> pitches = buildMuseImportedVoicePitchXmlItems(notes, keyFifths, staffNo,
+                previousAlterByPitchKey);
+        List<MuseScoreChordNote> safeNotes = notes == null ? Collections.<MuseScoreChordNote>emptyList()
+                : new ArrayList<MuseScoreChordNote>(notes);
+        StringBuilder body = new StringBuilder();
+        int pitchIndex = 0;
+        for (int index = 0; index < safeNotes.size(); index++) {
+            MuseScoreChordNote note = safeNotes.get(index);
+            if (note == null) {
+                continue;
+            }
+            boolean first = index == 0;
+            TieFlags tieFlags = new TieFlags(note.isTieStart(), note.isTieStop());
+            Collection<String> tupletItems = first ? tuplet.getNotationItems() : null;
+            Collection<Integer> effectiveSlurStarts = first ? slurStarts : null;
+            Collection<Integer> effectiveSlurStops = first ? slurStops : null;
+            Collection<String> effectiveTrillItems = first ? trillNotationItems : null;
+            Collection<String> effectiveArticulations = first ? articulationTags : null;
+            Collection<String> effectiveTechnicalTags = first ? technicalTags : null;
+            String notationsXml = buildMuseImportedNoteNotationsXml(tupletItems, effectiveSlurStarts,
+                    effectiveSlurStops, effectiveTrillItems, effectiveArticulations, effectiveTechnicalTags, tieFlags,
+                    note.getFingeringText(), note.getStringNumber());
+            List<String> notationItems = new ArrayList<String>();
+            if (notationsXml.startsWith("<notations>") && notationsXml.endsWith("</notations>")) {
+                notationItems.add(notationsXml.substring("<notations>".length(), notationsXml.length()
+                        - "</notations>".length()));
+            }
+            body.append(buildMuseImportedPitchedNoteXml(!first, grace && first, graceSlash, grace,
+                    pitches.get(pitchIndex), tieFlags, durationDiv, partVoiceNo, info.getType(), info.getDots(),
+                    first && !grace ? tuplet.getTimeModificationXml() : "", first ? beamXml : "", staffNo,
+                    notationItems));
+            pitchIndex++;
+        }
+        return body.toString();
+    }
+
+    public static String buildMuseImportedForwardXml(int leadDiv, int partVoiceNo, int staffNo) {
+        int lead = Math.max(0, leadDiv);
+        if (lead <= 0) {
+            return "";
+        }
+        return "<forward><duration>" + lead + "</duration><voice>" + Math.max(1, partVoiceNo)
+                + "</voice><staff>" + Math.max(1, staffNo) + "</staff></forward>";
+    }
+
+    public static boolean shouldClampMuseImportedTimedEvent(int occupiedDiv, int timedDurationDiv, int capacityDiv,
+            int tupletToleranceDiv) {
+        int duration = Math.max(0, timedDurationDiv);
+        return duration > 0 && Math.max(0, occupiedDiv) + duration > Math.max(0, capacityDiv)
+                + Math.max(0, tupletToleranceDiv);
+    }
+
+    public static String buildMuseImportedTailRestNoteXml(int occupiedDiv, int capacityDiv, int tupletToleranceDiv,
+            int divisions, int partVoiceNo, int staffNo) {
+        int occupied = Math.max(0, occupiedDiv);
+        int capacity = Math.max(0, capacityDiv);
+        int restDiv = capacity - occupied;
+        if (occupied >= capacity || restDiv <= Math.max(0, tupletToleranceDiv)) {
+            return "";
+        }
+        TypeAndDots info = divisionToTypeAndDots(divisions, restDiv);
+        return buildMuseImportedRestNoteXml(restDiv, partVoiceNo, info.getType(), info.getDots(), "", "", staffNo,
+                null);
+    }
+
+    public static String buildMuseImportedPlacedDirectionXml(int eventAtDiv, int occupiedDiv, int partVoiceNo,
+            int staffNo, String directionXml) {
+        int lead = Math.max(0, eventAtDiv - Math.max(0, occupiedDiv));
+        return buildMuseImportedForwardXml(lead, partVoiceNo, staffNo)
+                + withDirectionPlacement(directionXml, Math.max(1, staffNo), Math.max(1, partVoiceNo));
+    }
+
+    public static String buildMuseImportedPlacedDynamicXml(int eventAtDiv, int occupiedDiv, int partVoiceNo,
+            int staffNo, String mark, Double soundDynamics) {
+        return buildMuseImportedPlacedDirectionXml(eventAtDiv, occupiedDiv, partVoiceNo, staffNo,
+                buildDynamicDirectionXml(mark, soundDynamics));
+    }
+
+    public static String buildMuseImportedPlacedBarlineXml(int eventAtDiv, int occupiedDiv, int partVoiceNo,
+            int staffNo, String barlineXml) {
+        int lead = Math.max(0, eventAtDiv - Math.max(0, occupiedDiv));
+        return buildMuseImportedForwardXml(lead, partVoiceNo, staffNo) + safeXmlFragment(barlineXml);
+    }
+
+    public static MuseImportedVoiceCursorStep advanceMuseImportedVoiceCursorForEvent(Integer eventAtDivRaw,
+            int occupiedDiv, int timedDurationDiv, int capacityDiv, int tupletToleranceDiv, int partVoiceNo,
+            int staffNo) {
+        int occupied = Math.max(0, occupiedDiv);
+        int eventAtDiv = eventAtDivRaw == null ? occupied : Math.max(0, Math.round(eventAtDivRaw.intValue()));
+        int lead = Math.max(0, eventAtDiv - occupied);
+        int occupiedAfterLead = occupied + lead;
+        int timedDuration = Math.max(0, timedDurationDiv);
+        boolean clamped = shouldClampMuseImportedTimedEvent(occupiedAfterLead, timedDuration, capacityDiv,
+                tupletToleranceDiv);
+        int occupiedAfterTimed = clamped ? occupiedAfterLead : occupiedAfterLead + timedDuration;
+        return new MuseImportedVoiceCursorStep(eventAtDiv,
+                buildMuseImportedForwardXml(lead, partVoiceNo, staffNo), occupiedAfterLead, occupiedAfterTimed,
+                clamped);
+    }
+
+    public static String buildMuseImportedVoiceXml(int beats, int beatType, int keyFifths, int staffNo,
+            int partVoiceNo, int capacityDiv, int divisions, boolean applyImplicitBeams,
+            Collection<MuseImportedVoiceEvent> voiceEvents) {
+        List<MuseImportedVoiceEvent> events = voiceEvents == null ? Collections.<MuseImportedVoiceEvent>emptyList()
+                : new ArrayList<MuseImportedVoiceEvent>(voiceEvents);
+        int tupletTolerance = tupletRoundingToleranceByMuseImportedVoiceEvents(events);
+        int baseBeatDiv = Math.max(1, Math.round((divisions * 4.0f) / Math.max(1, beatType)));
+        int inferredBeamBeatDiv = beatType == 8 && beats >= 6 && beats % 3 == 0 ? baseBeatDiv * 3 : baseBeatDiv;
+        List<MuseBeamEvent> beamEvents = new ArrayList<MuseBeamEvent>();
+        for (MuseImportedVoiceEvent event : events) {
+            beamEvents.add(buildMuseImportedBeamEventInfo(event != null && event.isTimed(),
+                    event != null && event.isChord(), event != null && event.isGrace(),
+                    event == null ? 0 : event.getDurationDiv(), event == null ? null : event.getDisplayDurationDiv(),
+                    divisions, event == null ? null : event.getExplicitBeamMode()));
+        }
+        Map<Integer, String> beamXmlByEventIndex = buildMuseBeamXmlByEventInfo(beamEvents, inferredBeamBeatDiv,
+                applyImplicitBeams);
+        Map<String, Integer> accidentalStateByPitch = new LinkedHashMap<String, Integer>();
+        StringBuilder body = new StringBuilder();
+        int occupied = 0;
+        for (int eventIndex = 0; eventIndex < events.size(); eventIndex++) {
+            MuseImportedVoiceEvent event = events.get(eventIndex);
+            if (event == null) {
+                continue;
+            }
+            int eventStaffNo = event.getStaffNo() == null ? staffNo : Math.max(1, event.getStaffNo().intValue());
+            if (event.isDynamic()) {
+                int lead = Math.max(0, event.getEventAtDiv(occupied) - occupied);
+                body.append(buildMuseImportedPlacedDynamicXml(event.getEventAtDiv(occupied), occupied, partVoiceNo,
+                        eventStaffNo, event.getDynamicMark(), event.getSoundDynamics()));
+                occupied += lead;
+                continue;
+            }
+            if (event.isDirectionXml()) {
+                int lead = Math.max(0, event.getEventAtDiv(occupied) - occupied);
+                body.append(buildMuseImportedPlacedDirectionXml(event.getEventAtDiv(occupied), occupied, partVoiceNo,
+                        eventStaffNo, event.getXml()));
+                occupied += lead;
+                continue;
+            }
+            if (event.isBarlineXml()) {
+                int lead = Math.max(0, event.getEventAtDiv(occupied) - occupied);
+                body.append(buildMuseImportedPlacedBarlineXml(event.getEventAtDiv(occupied), occupied, partVoiceNo,
+                        eventStaffNo, event.getXml()));
+                occupied += lead;
+                continue;
+            }
+            MuseImportedVoiceCursorStep cursor = advanceMuseImportedVoiceCursorForEvent(event.getAtDiv(), occupied,
+                    event.getDurationDiv(), capacityDiv, tupletTolerance, partVoiceNo, eventStaffNo);
+            body.append(cursor.getForwardXml());
+            if (cursor.isClamped()) {
+                break;
+            }
+            occupied = cursor.getOccupiedAfterTimed();
+            TupletMusicXml tuplet = buildTupletMusicXml(event.getTimeModification(), event.getTupletStarts(),
+                    event.getTupletStops());
+            String beamXml = readMuseImportedBeamXmlByEventIndex(beamXmlByEventIndex, eventIndex);
+            if (event.isRest()) {
+                body.append(buildMuseImportedRestEventXml(event.getDurationDiv(), event.getDisplayDurationDiv(),
+                        divisions, partVoiceNo, eventStaffNo, tuplet, beamXml));
+                continue;
+            }
+            body.append(buildMuseImportedChordEventXml(event.getNotes(), keyFifths, eventStaffNo,
+                    accidentalStateByPitch, event.getDurationDiv(), event.getDisplayDurationDiv(), divisions,
+                    partVoiceNo, event.isGrace(), event.isGraceSlash(), tuplet, beamXml, event.getSlurStarts(),
+                    event.getSlurStops(), event.getTrillNotationItems(), event.getArticulationTags(),
+                    event.getTechnicalTags()));
+        }
+        body.append(buildMuseImportedTailRestNoteXml(occupied, capacityDiv, tupletTolerance, divisions, partVoiceNo,
+                staffNo));
+        return body.toString();
+    }
+
+    public static String buildMuseImportedBackupXml(int durationDiv) {
+        return "<backup><duration>" + Math.max(0, durationDiv) + "</duration></backup>";
+    }
+
+    public static String buildMuseImportedStaffVoicesXml(int beats, int beatType, int keyFifths, int staffNo,
+            int capacityDiv, int divisions, boolean applyImplicitBeams, MuseImportedPartVoiceIdResolver resolver,
+            Collection<MuseImportedVoiceEvent> staffEvents) {
+        MuseImportedPartVoiceIdResolver safeResolver = resolver == null ? new MuseImportedPartVoiceIdResolver()
+                : resolver;
+        StringBuilder body = new StringBuilder();
+        List<Integer> voiceNos = resolveMuseImportedTypedVoiceNos(staffEvents);
+        for (int index = 0; index < voiceNos.size(); index++) {
+            int voiceNo = voiceNos.get(index).intValue();
+            int partVoiceNo = safeResolver.resolve(Math.max(1, staffNo), voiceNo);
+            if (index > 0) {
+                body.append(buildMuseImportedBackupXml(capacityDiv));
+            }
+            body.append(buildMuseImportedVoiceXml(beats, beatType, keyFifths, staffNo, partVoiceNo, capacityDiv,
+                    divisions, applyImplicitBeams, collectMuseImportedTypedVoiceEvents(staffEvents, voiceNo)));
+        }
+        return body.toString();
+    }
+
+    public static String buildMuseImportedMeasureXml(ParsedMuseScorePart part, ParsedMuseScoreMeasure primaryMeasure,
+            int partIndex, int measureIndex, int measureCount, boolean startsWithPickup, int divisions,
+            String miscXml, boolean needsAttributes, boolean applyImplicitBeams,
+            MuseImportedPartVoiceIdResolver resolver,
+            Map<Integer, ? extends Collection<MuseImportedVoiceEvent>> staffEventsByStaffNo) {
+        ParsedMuseScoreMeasure measure = primaryMeasure == null
+                ? buildFallbackParsedMuseScoreMeasure(measureIndex + 1, 4, 4, null, Math.max(1, divisions * 4),
+                        false, 0, "major")
+                : primaryMeasure;
+        ParsedMuseScorePart safePart = part == null
+                ? new ParsedMuseScorePart("P1", "Music", null, Collections.<ParsedMuseScoreStaff>emptyList())
+                : part;
+        MuseImportedPartVoiceIdResolver safeResolver = resolver == null ? buildMuseImportedPartVoiceIdResolver(safePart)
+                : resolver;
+        int capacity = Math.max(1, Math.round(measure.getCapacityDiv()));
+        StringBuilder body = new StringBuilder();
+        body.append(buildMuseImportedMeasureHeaderXml(measure, safePart, partIndex, divisions, miscXml,
+                needsAttributes));
+        int staffCount = Math.max(1, safePart.getStaffs().size());
+        for (int staffIndex = 0; staffIndex < staffCount; staffIndex++) {
+            int staffNo = staffIndex + 1;
+            if (staffIndex > 0) {
+                body.append(buildMuseImportedBackupXml(capacity));
+            }
+            Collection<MuseImportedVoiceEvent> staffEvents = staffEventsByStaffNo == null ? null
+                    : staffEventsByStaffNo.get(Integer.valueOf(staffNo));
+            body.append(buildMuseImportedStaffVoicesXml(measure.getBeats(), measure.getBeatType(),
+                    measure.getFifths(), staffNo, capacity, divisions, applyImplicitBeams, safeResolver,
+                    staffEvents));
+        }
+        return finalizeMuseImportedMeasureXml(body.toString(), measure, measureIndex, measureCount,
+                startsWithPickup);
+    }
+
+    public static String buildMuseImportedPartXml(ParsedMuseScorePart part, int partIndex, int divisions,
+            String miscXml, boolean applyImplicitBeams, int initialBeats, int initialBeatType,
+            String initialTimeSymbol, int initialFifths, String initialMode,
+            Map<Integer, ? extends Map<Integer, ? extends Collection<MuseImportedVoiceEvent>>> eventsByMeasureStaff) {
+        ParsedMuseScorePart safePart = part == null
+                ? new ParsedMuseScorePart("P1", "Music", null, Collections.<ParsedMuseScoreStaff>emptyList())
+                : part;
+        MuseImportedPartVoiceIdResolver resolver = buildMuseImportedPartVoiceIdResolver(safePart);
+        int prevBeats = Math.max(1, initialBeats);
+        int prevBeatType = Math.max(1, initialBeatType);
+        String prevTimeSymbol = initialTimeSymbol;
+        int prevFifths = Math.max(-7, Math.min(7, initialFifths));
+        String prevMode = initialMode == null || initialMode.length() == 0 ? "major" : initialMode;
+        int measureCount = 1;
+        for (ParsedMuseScoreStaff staff : safePart.getStaffs()) {
+            if (staff != null) {
+                measureCount = Math.max(measureCount, staff.getMeasures().size());
+            }
+        }
+        boolean startsWithPickup = safePart.getStaffs().size() > 0 && safePart.getStaffs().get(0).getMeasures().size() > 0
+                && safePart.getStaffs().get(0).getMeasures().get(0).isImplicit();
+        StringBuilder measuresXml = new StringBuilder();
+        for (int measureIndex = 0; measureIndex < measureCount; measureIndex++) {
+            ParsedMuseScoreMeasure primaryMeasure = resolveMuseImportedPrimaryMeasure(safePart, measureIndex,
+                    divisions, prevBeats, prevBeatType, prevTimeSymbol, prevFifths, prevMode);
+            boolean needsAttributes = needsMuseImportedMeasureAttributes(measureIndex, primaryMeasure, prevBeats,
+                    prevBeatType, prevTimeSymbol, prevFifths, prevMode);
+            Map<Integer, ? extends Collection<MuseImportedVoiceEvent>> staffEvents = eventsByMeasureStaff == null ? null
+                    : eventsByMeasureStaff.get(Integer.valueOf(measureIndex));
+            measuresXml.append(buildMuseImportedMeasureXml(safePart, primaryMeasure, measureIndex == 0 ? partIndex : -1,
+                    measureIndex, measureCount, startsWithPickup, divisions, measureIndex == 0 ? miscXml : "",
+                    needsAttributes, applyImplicitBeams, resolver, staffEvents));
+            prevBeats = primaryMeasure.getBeats();
+            prevBeatType = primaryMeasure.getBeatType();
+            prevTimeSymbol = primaryMeasure.getTimeSymbol();
+            prevFifths = primaryMeasure.getFifths();
+            prevMode = primaryMeasure.getMode();
+        }
+        return "<part id=\"" + safePart.getPartId() + "\">" + measuresXml.toString() + "</part>";
+    }
+
+    private static int tupletRoundingToleranceByMuseImportedVoiceEvents(Collection<MuseImportedVoiceEvent> events) {
+        int tupletCount = 0;
+        if (events != null) {
+            for (MuseImportedVoiceEvent event : events) {
+                if (event == null || !event.isTimed() || event.getDurationDiv() <= 0 || event.isGrace()
+                        || event.getTimeModification() == null) {
+                    continue;
+                }
+                tupletCount++;
+            }
+        }
+        return tupletCount <= 0 ? 0 : (int) Math.floor(tupletCount / 2.0d);
+    }
+
+    public static List<MuseImportedVoiceEvent> collectMuseImportedTypedVoiceEvents(
+            Collection<MuseImportedVoiceEvent> events, int voiceNo) {
+        List<MuseImportedVoiceEvent> out = new ArrayList<MuseImportedVoiceEvent>();
+        if (events != null) {
+            for (MuseImportedVoiceEvent event : events) {
+                if (event != null && event.getVoiceNo() == Math.max(1, voiceNo)) {
+                    out.add(event);
+                }
+            }
+        }
+        Collections.sort(out, new java.util.Comparator<MuseImportedVoiceEvent>() {
+            @Override
+            public int compare(MuseImportedVoiceEvent left, MuseImportedVoiceEvent right) {
+                return Integer.valueOf(left.getEventAtDiv(0)).compareTo(Integer.valueOf(right.getEventAtDiv(0)));
+            }
+        });
+        return out;
+    }
+
+    public static List<Integer> resolveMuseImportedTypedVoiceNos(Collection<MuseImportedVoiceEvent> events) {
+        java.util.Set<Integer> voiceNos = new java.util.TreeSet<Integer>();
+        if (events != null) {
+            for (MuseImportedVoiceEvent event : events) {
+                if (event != null) {
+                    voiceNos.add(Integer.valueOf(event.getVoiceNo()));
+                }
+            }
+        }
+        if (voiceNos.isEmpty()) {
+            voiceNos.add(Integer.valueOf(1));
+        }
+        return new ArrayList<Integer>(voiceNos);
+    }
+
+    public static List<MuseImportedVoiceEvent> buildMuseImportedRestVoiceEvents(Collection<TimedEvent> events,
+            int staffNo) {
+        List<MuseImportedVoiceEvent> out = new ArrayList<MuseImportedVoiceEvent>();
+        if (events != null) {
+            for (TimedEvent event : events) {
+                if (event == null) {
+                    continue;
+                }
+                out.add(MuseImportedVoiceEvent.restForVoice(Integer.valueOf(event.getAtDiv()), event.getVoice(),
+                        event.getDurationDiv(), null, Integer.valueOf(Math.max(1, staffNo)), null, null,
+                        event.getTupletStops(), null));
+            }
+        }
+        return out;
+    }
+
+    public static Map<Integer, Collection<MuseImportedVoiceEvent>> buildMuseImportedRestStaffEventsByStaffNo(
+            ParsedMuseScorePart part, int measureIndex, ParsedMuseScoreMeasure primaryMeasure) {
+        Map<Integer, Collection<MuseImportedVoiceEvent>> out = new LinkedHashMap<Integer, Collection<MuseImportedVoiceEvent>>();
+        ParsedMuseScorePart safePart = part == null
+                ? new ParsedMuseScorePart("P1", "Music", null, Collections.<ParsedMuseScoreStaff>emptyList())
+                : part;
+        int staffCount = Math.max(1, safePart.getStaffs().size());
+        ParsedMuseScoreMeasure safePrimary = primaryMeasure == null
+                ? buildFallbackParsedMuseScoreMeasure(measureIndex + 1, 4, 4, null, 4, false, 0, "major")
+                : primaryMeasure;
+        for (int staffIndex = 0; staffIndex < staffCount; staffIndex++) {
+            ParsedMuseScoreMeasure measure = resolveMuseImportedStaffMeasure(safePart, staffIndex, measureIndex,
+                    safePrimary);
+            out.put(Integer.valueOf(staffIndex + 1),
+                    buildMuseImportedRestVoiceEvents(measure.getEvents(), staffIndex + 1));
+        }
+        return out;
+    }
+
+    private static String buildMuseImportedNotationItemsXml(Collection<String> notationItems) {
+        StringBuilder items = new StringBuilder();
+        appendStringItems(items, notationItems);
+        return items.length() == 0 ? "" : "<notations>" + items.toString() + "</notations>";
+    }
+
+    private static String repeatXml(String xml, int count) {
+        StringBuilder out = new StringBuilder();
+        for (int index = 0; index < Math.max(0, count); index++) {
+            out.append(xml);
+        }
+        return out.toString();
+    }
+
+    private static String safeXmlFragment(String xml) {
+        return xml == null ? "" : xml;
+    }
+
     public static boolean isIgnoredMuseImportTag(String tag) {
         String normalized = tag == null ? "" : tag.trim().toLowerCase(Locale.ROOT);
         return "timesig".equals(normalized) || "keysig".equals(normalized) || "layoutbreak".equals(normalized)
@@ -2571,6 +3281,24 @@ public final class MuseScoreIo {
                 + movementNumberXml + subtitleCreditXml + identificationXml + "<part-list>"
                 + buildMuseScoreImportPartListXml(parsedByPart) + "</part-list>" + partXml.toString()
                 + "</score-partwise>";
+    }
+
+    public static String buildMuseScoreImportDocumentXml(Collection<ParsedMuseScorePart> parsedByPart,
+            MuseScoreImportMetadata metadata, int divisions, String miscXml, boolean applyImplicitBeams,
+            int initialBeats, int initialBeatType, String initialTimeSymbol, int initialFifths, String initialMode,
+            Map<Integer, ? extends Map<Integer, ? extends Map<Integer, ? extends Collection<MuseImportedVoiceEvent>>>> eventsByPartMeasureStaff) {
+        List<String> partXmlItems = new ArrayList<String>();
+        List<ParsedMuseScorePart> parts = parsedByPart == null ? Collections.<ParsedMuseScorePart>emptyList()
+                : new ArrayList<ParsedMuseScorePart>(parsedByPart);
+        for (int partIndex = 0; partIndex < parts.size(); partIndex++) {
+            Map<Integer, ? extends Map<Integer, ? extends Collection<MuseImportedVoiceEvent>>> eventsByMeasureStaff = eventsByPartMeasureStaff == null
+                    ? null
+                    : eventsByPartMeasureStaff.get(Integer.valueOf(partIndex));
+            partXmlItems.add(buildMuseImportedPartXml(parts.get(partIndex), partIndex, divisions, miscXml,
+                    applyImplicitBeams, initialBeats, initialBeatType, initialTimeSymbol, initialFifths, initialMode,
+                    eventsByMeasureStaff));
+        }
+        return buildMuseScoreImportDocumentXml(parts, metadata, partXmlItems);
     }
 
     public static String fractionFromDivisions(int durationDiv, int divisions) {
@@ -2917,6 +3645,35 @@ public final class MuseScoreIo {
             public int compare(TimedEvent left, TimedEvent right) {
                 return Integer.valueOf(Math.max(0, left.getAtDiv())).compareTo(Integer.valueOf(Math.max(0,
                         right.getAtDiv())));
+            }
+        });
+        return out;
+    }
+
+    public static MuseImportedVoiceEvent buildMuseImportedTypedRestEventFromTimedEvent(TimedEvent event,
+            int staffNo) {
+        TimedEvent safe = event == null ? new TimedEvent(0, false, false, 1, 0) : event;
+        return MuseImportedVoiceEvent.restForVoice(Integer.valueOf(safe.getAtDiv()), safe.getVoice(),
+                safe.getDurationDiv(), Integer.valueOf(safe.getDurationDiv()), Integer.valueOf(Math.max(1, staffNo)),
+                null, null, safe.getTupletStops(), null);
+    }
+
+    public static List<MuseImportedVoiceEvent> collectMuseImportedTypedRestEvents(ParsedMuseScoreMeasure measure,
+            int staffNo) {
+        List<MuseImportedVoiceEvent> out = new ArrayList<MuseImportedVoiceEvent>();
+        if (measure != null) {
+            for (TimedEvent event : measure.getEvents()) {
+                out.add(buildMuseImportedTypedRestEventFromTimedEvent(event, staffNo));
+            }
+        }
+        Collections.sort(out, new java.util.Comparator<MuseImportedVoiceEvent>() {
+            @Override
+            public int compare(MuseImportedVoiceEvent left, MuseImportedVoiceEvent right) {
+                int byVoice = Integer.valueOf(left.getVoiceNo()).compareTo(Integer.valueOf(right.getVoiceNo()));
+                if (byVoice != 0) {
+                    return byVoice;
+                }
+                return Integer.valueOf(left.getEventAtDiv(0)).compareTo(Integer.valueOf(right.getEventAtDiv(0)));
             }
         });
         return out;
@@ -5255,6 +6012,304 @@ public final class MuseScoreIo {
 
         public Integer getStringNumber() {
             return stringNumber;
+        }
+    }
+
+    public static final class MuseImportedPitchXml {
+        private final String pitchXml;
+        private final String accidentalXml;
+
+        private MuseImportedPitchXml(String pitchXml, String accidentalXml) {
+            this.pitchXml = pitchXml == null ? "" : pitchXml;
+            this.accidentalXml = accidentalXml == null ? "" : accidentalXml;
+        }
+
+        public String getPitchXml() {
+            return pitchXml;
+        }
+
+        public String getAccidentalXml() {
+            return accidentalXml;
+        }
+    }
+
+    public static final class MuseImportedVoiceEvent {
+        private final String kind;
+        private final Integer atDiv;
+        private final int voiceNo;
+        private final int durationDiv;
+        private final Integer displayDurationDiv;
+        private final Integer staffNo;
+        private final List<MuseScoreChordNote> notes;
+        private final boolean grace;
+        private final boolean graceSlash;
+        private final TimeModification timeModification;
+        private final List<TupletStart> tupletStarts;
+        private final List<Integer> tupletStops;
+        private final List<Integer> slurStarts;
+        private final List<Integer> slurStops;
+        private final List<String> trillNotationItems;
+        private final List<String> articulationTags;
+        private final List<String> technicalTags;
+        private final String explicitBeamMode;
+        private final String xml;
+        private final String dynamicMark;
+        private final Double soundDynamics;
+
+        private MuseImportedVoiceEvent(String kind, Integer atDiv, int voiceNo, int durationDiv,
+                Integer displayDurationDiv, Integer staffNo, Collection<MuseScoreChordNote> notes, boolean grace,
+                boolean graceSlash,
+                TimeModification timeModification, Collection<TupletStart> tupletStarts,
+                Collection<Integer> tupletStops, Collection<Integer> slurStarts, Collection<Integer> slurStops,
+                Collection<String> trillNotationItems, Collection<String> articulationTags,
+                Collection<String> technicalTags, String explicitBeamMode, String xml, String dynamicMark,
+                Double soundDynamics) {
+            this.kind = kind == null ? "" : kind;
+            this.atDiv = atDiv == null ? null : Integer.valueOf(Math.max(0, atDiv.intValue()));
+            this.voiceNo = Math.max(1, voiceNo);
+            this.durationDiv = Math.max(0, durationDiv);
+            this.displayDurationDiv = displayDurationDiv == null ? null
+                    : Integer.valueOf(Math.max(0, displayDurationDiv.intValue()));
+            this.staffNo = staffNo == null ? null : Integer.valueOf(Math.max(1, staffNo.intValue()));
+            this.notes = notes == null ? Collections.<MuseScoreChordNote>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<MuseScoreChordNote>(notes));
+            this.grace = grace;
+            this.graceSlash = graceSlash;
+            this.timeModification = timeModification;
+            this.tupletStarts = tupletStarts == null ? Collections.<TupletStart>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<TupletStart>(tupletStarts));
+            this.tupletStops = tupletStops == null ? Collections.<Integer>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<Integer>(tupletStops));
+            this.slurStarts = slurStarts == null ? Collections.<Integer>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<Integer>(slurStarts));
+            this.slurStops = slurStops == null ? Collections.<Integer>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<Integer>(slurStops));
+            this.trillNotationItems = trillNotationItems == null ? Collections.<String>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<String>(trillNotationItems));
+            this.articulationTags = articulationTags == null ? Collections.<String>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<String>(articulationTags));
+            this.technicalTags = technicalTags == null ? Collections.<String>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<String>(technicalTags));
+            this.explicitBeamMode = explicitBeamMode;
+            this.xml = xml == null ? "" : xml;
+            this.dynamicMark = dynamicMark;
+            this.soundDynamics = soundDynamics;
+        }
+
+        public static MuseImportedVoiceEvent rest(Integer atDiv, int durationDiv, Integer displayDurationDiv,
+                Integer staffNo, TimeModification timeModification, Collection<TupletStart> tupletStarts,
+                Collection<Integer> tupletStops, String explicitBeamMode) {
+            return restForVoice(atDiv, 1, durationDiv, displayDurationDiv, staffNo, timeModification, tupletStarts,
+                    tupletStops, explicitBeamMode);
+        }
+
+        public static MuseImportedVoiceEvent restForVoice(Integer atDiv, int voiceNo, int durationDiv,
+                Integer displayDurationDiv, Integer staffNo, TimeModification timeModification,
+                Collection<TupletStart> tupletStarts, Collection<Integer> tupletStops, String explicitBeamMode) {
+            return new MuseImportedVoiceEvent("rest", atDiv, voiceNo, durationDiv, displayDurationDiv, staffNo, null,
+                    false,
+                    false, timeModification, tupletStarts, tupletStops, null, null, null, null, null,
+                    explicitBeamMode, null, null, null);
+        }
+
+        public static MuseImportedVoiceEvent chord(Integer atDiv, int durationDiv, Integer displayDurationDiv,
+                Integer staffNo, Collection<MuseScoreChordNote> notes, boolean grace, boolean graceSlash,
+                TimeModification timeModification, Collection<TupletStart> tupletStarts,
+                Collection<Integer> tupletStops, Collection<Integer> slurStarts, Collection<Integer> slurStops,
+                Collection<String> trillNotationItems, Collection<String> articulationTags,
+                Collection<String> technicalTags, String explicitBeamMode) {
+            return chordForVoice(atDiv, 1, durationDiv, displayDurationDiv, staffNo, notes, grace, graceSlash,
+                    timeModification, tupletStarts, tupletStops, slurStarts, slurStops, trillNotationItems,
+                    articulationTags, technicalTags, explicitBeamMode);
+        }
+
+        public static MuseImportedVoiceEvent chordForVoice(Integer atDiv, int voiceNo, int durationDiv,
+                Integer displayDurationDiv, Integer staffNo, Collection<MuseScoreChordNote> notes, boolean grace,
+                boolean graceSlash, TimeModification timeModification, Collection<TupletStart> tupletStarts,
+                Collection<Integer> tupletStops, Collection<Integer> slurStarts, Collection<Integer> slurStops,
+                Collection<String> trillNotationItems, Collection<String> articulationTags,
+                Collection<String> technicalTags, String explicitBeamMode) {
+            return new MuseImportedVoiceEvent("chord", atDiv, voiceNo, durationDiv, displayDurationDiv, staffNo, notes,
+                    grace, graceSlash, timeModification, tupletStarts, tupletStops, slurStarts, slurStops,
+                    trillNotationItems, articulationTags, technicalTags, explicitBeamMode, null, null, null);
+        }
+
+        public static MuseImportedVoiceEvent dynamic(Integer atDiv, Integer staffNo, String mark,
+                Double soundDynamics) {
+            return dynamicForVoice(atDiv, 1, staffNo, mark, soundDynamics);
+        }
+
+        public static MuseImportedVoiceEvent dynamicForVoice(Integer atDiv, int voiceNo, Integer staffNo, String mark,
+                Double soundDynamics) {
+            return new MuseImportedVoiceEvent("dynamic", atDiv, voiceNo, 0, null, staffNo, null, false, false, null, null,
+                    null, null, null, null, null, null, null, null, mark, soundDynamics);
+        }
+
+        public static MuseImportedVoiceEvent directionXml(Integer atDiv, Integer staffNo, String xml) {
+            return directionXmlForVoice(atDiv, 1, staffNo, xml);
+        }
+
+        public static MuseImportedVoiceEvent directionXmlForVoice(Integer atDiv, int voiceNo, Integer staffNo, String xml) {
+            return new MuseImportedVoiceEvent("directionXml", atDiv, voiceNo, 0, null, staffNo, null, false, false, null,
+                    null, null, null, null, null, null, null, null, xml, null, null);
+        }
+
+        public static MuseImportedVoiceEvent barlineXml(Integer atDiv, Integer staffNo, String xml) {
+            return barlineXmlForVoice(atDiv, 1, staffNo, xml);
+        }
+
+        public static MuseImportedVoiceEvent barlineXmlForVoice(Integer atDiv, int voiceNo, Integer staffNo, String xml) {
+            return new MuseImportedVoiceEvent("barlineXml", atDiv, voiceNo, 0, null, staffNo, null, false, false, null, null,
+                    null, null, null, null, null, null, null, xml, null, null);
+        }
+
+        public String getKind() {
+            return kind;
+        }
+
+        public boolean isTimed() {
+            return isRest() || isChord();
+        }
+
+        public boolean isRest() {
+            return "rest".equals(kind);
+        }
+
+        public boolean isChord() {
+            return "chord".equals(kind);
+        }
+
+        public boolean isDynamic() {
+            return "dynamic".equals(kind);
+        }
+
+        public boolean isDirectionXml() {
+            return "directionXml".equals(kind);
+        }
+
+        public boolean isBarlineXml() {
+            return "barlineXml".equals(kind);
+        }
+
+        public Integer getAtDiv() {
+            return atDiv;
+        }
+
+        public int getVoiceNo() {
+            return voiceNo;
+        }
+
+        public int getEventAtDiv(int occupiedDiv) {
+            return atDiv == null ? Math.max(0, occupiedDiv) : Math.max(0, atDiv.intValue());
+        }
+
+        public int getDurationDiv() {
+            return durationDiv;
+        }
+
+        public Integer getDisplayDurationDiv() {
+            return displayDurationDiv;
+        }
+
+        public Integer getStaffNo() {
+            return staffNo;
+        }
+
+        public List<MuseScoreChordNote> getNotes() {
+            return notes;
+        }
+
+        public boolean isGrace() {
+            return grace;
+        }
+
+        public boolean isGraceSlash() {
+            return graceSlash;
+        }
+
+        public TimeModification getTimeModification() {
+            return timeModification;
+        }
+
+        public List<TupletStart> getTupletStarts() {
+            return tupletStarts;
+        }
+
+        public List<Integer> getTupletStops() {
+            return tupletStops;
+        }
+
+        public List<Integer> getSlurStarts() {
+            return slurStarts;
+        }
+
+        public List<Integer> getSlurStops() {
+            return slurStops;
+        }
+
+        public List<String> getTrillNotationItems() {
+            return trillNotationItems;
+        }
+
+        public List<String> getArticulationTags() {
+            return articulationTags;
+        }
+
+        public List<String> getTechnicalTags() {
+            return technicalTags;
+        }
+
+        public String getExplicitBeamMode() {
+            return explicitBeamMode;
+        }
+
+        public String getXml() {
+            return xml;
+        }
+
+        public String getDynamicMark() {
+            return dynamicMark;
+        }
+
+        public Double getSoundDynamics() {
+            return soundDynamics;
+        }
+    }
+
+    public static final class MuseImportedVoiceCursorStep {
+        private final int eventAtDiv;
+        private final String forwardXml;
+        private final int occupiedAfterLead;
+        private final int occupiedAfterTimed;
+        private final boolean clamped;
+
+        private MuseImportedVoiceCursorStep(int eventAtDiv, String forwardXml, int occupiedAfterLead,
+                int occupiedAfterTimed, boolean clamped) {
+            this.eventAtDiv = Math.max(0, eventAtDiv);
+            this.forwardXml = forwardXml == null ? "" : forwardXml;
+            this.occupiedAfterLead = Math.max(0, occupiedAfterLead);
+            this.occupiedAfterTimed = Math.max(0, occupiedAfterTimed);
+            this.clamped = clamped;
+        }
+
+        public int getEventAtDiv() {
+            return eventAtDiv;
+        }
+
+        public String getForwardXml() {
+            return forwardXml;
+        }
+
+        public int getOccupiedAfterLead() {
+            return occupiedAfterLead;
+        }
+
+        public int getOccupiedAfterTimed() {
+            return occupiedAfterTimed;
+        }
+
+        public boolean isClamped() {
+            return clamped;
         }
     }
 

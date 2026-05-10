@@ -12,11 +12,14 @@ completed slice history remains below.
 
 ### Pause / Resume Note
 
-- 2026-05-10 pause point: `mvn test` passed with 352 tests / 0 failures / 0 errors.
-- Latest completed MuseScore slice: fifty-second focused helper regression slice, covering Slur spanner and legacy chord-level Slur id import transitions.
+- 2026-05-10 latest focused slice: upstream `src/ts/musicxml-io.ts` render / measure-editor helper slice migrated to `MusicXmlIo`, covering render-doc node-id cloning, effective measure attribute extraction, measure-editor document creation, and main-document measure replacement.
+- 2026-05-10 latest MIDI slice: upstream `src/ts/midi-io.ts` first utility slices migrated to `MidiIo`, covering tempo / velocity clamps, program presets, pickup time-signature helpers, key pitch-class helpers, imported-note key inference, drum name hints, dynamics velocity mapping, standard meta text helpers, metric accents, tick splitting, pitch helpers, quantize normalization, triplet-like timing detection, import quantize tick / grid scoring, imported note quantization, controller velocity scaling, auto voice allocation, imported voice cluster measure segmentation, duration notation / tie / rest XML helpers, XML pretty print, MIDI hex formatting, measure / source / SysEx / diagnostic MIDI metadata miscellaneous XML helpers, measure voice MusicXML helper, part lane definition / active lane selection helpers, tempo / dynamics direction XML helpers, initial measure attributes XML helper, part measure layout / pickup measure numbering helpers, part segment layout / grand-staff fallback / measure grouping helpers, tempo event measure / offset grouping helpers, part definition / part-list XML helpers, import skeleton document XML wrapper helper, MIDI import skeleton MusicXML assembly helper, MIDI import public conversion facade, MusicXML playback event extraction facade, MusicXML playback direction dynamics velocity helper, MusicXML playback grace note timing helper, MusicXML playback articulation nuance helper, MusicXML playback temporal expression helper, MusicXML playback metric accent option helper, MusicXML playback tie processing helper, MusicXML playback tenuto legato overlap helper, MusicXML playback default detache helper, MusicXML playback slur processing helper, MusicXML playback direction wedge dynamics helper, MusicXML playback ornament expansion helper, MusicXML playback-like nuance option flags helper, MIDI variable-length / SysEx / text meta event byte writing helpers, MKS SysEx chunk text / FNV-1a fingerprint helpers, tempo / time-signature / key-signature meta event byte writing helpers, unsigned big-endian / MIDI writer velocity / raw track chunk encoding helpers, raw MIDI tempo / note / control track chunk assembly helpers, SMF header assembly helper, SMF byte readers, MKS MIDI text / SysEx metadata helpers, SMF header parsing diagnostics, SMF track summary parsing, playback event parity normalization, drum part map / MIDI unpitched note parsing, MusicXML MIDI program override collection, measure advance / capacity div helpers, measure content span estimation, first-underfull pickup / implicit measure helpers, MusicXML MIDI control event collection, MusicXML MIDI tempo event collection, MusicXML leading pickup ticks collection, MusicXML MIDI time-signature event collection, MusicXML MIDI key-signature event collection, MIDI export tempo / time-signature / key-signature event normalization, MIDI export default meta-event diagnostics, MIDI export text metadata line helper, MIDI export playback event track grouping helper, MIDI export channel count / MKS SysEx chunk params / program preset fallback helpers, MIDI export tempo / time-signature / key-signature meta timeline helper, MIDI export playback track plan helper, MIDI export program-change / note event field helpers, MIDI export control track plan / controller-change field helpers, MIDI export writer track plan helper, MIDI export playback preparation helper, raw MIDI playback bytes assembly helper, and MIDI export playback build facade helper.
+- 2026-05-10 pause point: `mvn test` passed with 484 tests / 0 failures / 0 errors.
+- Latest completed MIDI slice: MusicXML playback-like nuance option flags, covering explicit playback-mode grace/ornament/tie processing opt-in behavior.
+- 2026-05-11 end-of-day resume point: continue from `src/ts/midi-io.ts` around `buildPlaybackEventsFromMusicXmlDoc`; Java-side focus is `MidiIo` / `MidiIoTest`. Latest focused verification is `mvn test -Dtest=MidiIoTest` with 103 tests / 0 failures / 0 errors, and latest full verification is `mvn test` with 484 tests / 0 failures / 0 errors.
 - Resume with `igapyon-miku-soft-developer` and continue straight-conversion slices from upstream `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`.
-- Suggested next upstream intent: `tests/unit/musescore-io.spec.ts` immediately after the Slur import cases, starting with `imports MuseScore note tie markers into MusicXML tie/tied`, then chord articulation subtype import if still uncovered.
-- Prefer existing Java helper boundaries first: `parseMuseTieFlags`, `summarizeMuseChordNotations`, `parseMuseChordNotes`, and related `MuseScoreIoTest` focused coverage. Avoid broad pipeline rewrites unless a slice explicitly requires it.
+- Suggested next step: continue MIDI playback nuance or export/import parity in small pieces where it fits the existing helper boundary. Do not duplicate pedal controller extraction; it is already covered by `collectMidiControlEventsFromMusicXmlDoc`.
+- Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 
 ### Highest Priority Format Work
 
@@ -25,7 +28,7 @@ completed slice history remains below.
   - first MusicXML-to-MEI CoreApi / CLI bridge is migrated
   - remaining work is broader export body / control-event parity and golden-style coverage
 - [ ] Continue broader MuseScore conversion semantics
-  - fifty-second focused MuseScore helper slice is migrated through Slur spanner / legacy Slur import state transitions
+  - seventy-first focused MuseScore helper slice is migrated through imported voice XML carrier / facade / voice collection / staff voice loop / typed measure / typed part / typed document helpers plus TimedEvent rest bridge
   - many import/export helpers and `.mscz` / `.mscx` CLI facade slices are migrated
   - remaining work is broader end-to-end conversion parity against upstream behavior
 - [ ] Continue broader ABC body import parity
@@ -37,6 +40,7 @@ completed slice history remains below.
 - [ ] MIDI I/O
   - upstream `src/ts/midi-io.ts`
   - upstream `tests/unit/midi-io.spec.ts`
+  - first utility / quantize / controller velocity / auto voice / measure segmentation / duration notation / metadata misc XML / source / SysEx / diagnostic misc XML / measure voice XML / part lane / tempo-dynamics direction / initial attributes XML / part measure layout / part segment layout / tempo event grouping / part definition / part-list / import skeleton document / import skeleton MusicXML assembly / import public conversion facade / MusicXML playback event extraction / playback direction dynamics velocity / playback grace note timing / playback articulation nuance / playback temporal expression / playback metric accent option / playback tie processing / playback tenuto legato overlap / playback default detache / playback slur processing / playback direction wedge dynamics / playback ornament expansion / playback-like nuance option flags / MIDI byte writing / MKS SysEx chunk text / tempo-time-key meta event byte writing / raw track chunk / tempo-note-control track chunk / SMF header assembly / SMF header / track summary / playback parity normalization / drum part map / MIDI program override / measure advance / measure content span / first-underfull pickup / MIDI control-tempo-timesig-key / export tempo-time-key normalization / export diagnostics / export text metadata / export playback track grouping / export SysEx params / export meta timeline / export playback track plan / export program-change-note fields / export control track fields / export writer track plan / export playback preparation / raw playback bytes assembly / export playback build facade / leading pickup ticks helper slices migrated; richer playback nuance extraction and full MIDI-to-MusicXML parity remain pending
 - [ ] LilyPond I/O
   - upstream `src/ts/lilypond-io.ts`
   - upstream `tests/unit/lilypond-io.spec.ts`
@@ -79,7 +83,7 @@ completed slice history remains below.
 - Distribution zip: configured as an initial Maven assembly
 - CLI: foundation entrypoint plus first `convert --from musicxml --to musicxml` slice, first `convert --from abc --to musicxml` slice, first `convert --from musicxml --to abc` slice, constrained `render svg` unsupported recognition, `state summarize`, `state inspect-measure`, `state validate-command`, `state apply-command`, and `state diff`
 - Core conversion: partial basic command catalog and state inspection migration exists
-- Format I/O: MusicXML / MXL / ZIP helper subset migrated; MuseScore MSCZ/MSCX file I/O facade, MuseScore helper slices, and MEI helper slices migrated; broader ABC / MuseScore conversion semantics / MIDI / MEI / LilyPond conversion remains pending
+- Format I/O: MusicXML / MXL / ZIP helper subset migrated, including MusicXML render-doc and measure-editor helpers; first MIDI utility / quantize / controller velocity / auto voice / measure segmentation / duration notation / metadata misc XML / source / SysEx / diagnostic misc XML / measure voice XML / part lane / tempo-dynamics direction / initial attributes XML / part measure layout / part segment layout / tempo event grouping / part definition / part-list / import skeleton document / import skeleton MusicXML assembly / import public conversion facade / MusicXML playback event extraction / playback direction dynamics velocity / playback grace note timing / playback articulation nuance / playback temporal expression / playback metric accent option / playback tie processing / playback tenuto legato overlap / playback default detache / playback slur processing / playback direction wedge dynamics / playback ornament expansion / playback-like nuance option flags / MIDI byte writing / MKS SysEx chunk text / tempo-time-key meta event byte writing / raw track chunk / tempo-note-control track chunk / SMF header assembly / SMF header / track summary / playback parity normalization / drum part map / MIDI program override / measure advance / measure content span / first-underfull pickup / MIDI control-tempo-timesig-key / export tempo-time-key normalization / export diagnostics / export text metadata / export playback track grouping / export SysEx params / export meta timeline / export playback track plan / export program-change-note fields / export control track fields / export writer track plan / export playback preparation / raw playback bytes assembly / export playback build facade / leading pickup ticks helper slices migrated; MuseScore MSCZ/MSCX file I/O facade, MuseScore helper slices, and MEI helper slices migrated; broader ABC / MuseScore conversion semantics / MIDI / MEI / LilyPond conversion remains pending
 - ABC lexer: first low-level `abc-lexer.ts` helper slice migrated
 - ABC parser: playable-event, structural token, body dispatcher, and grace group helper slices migrated
 - ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, measure beam XML, note notations decoration XML, body import voice stores helper, body lyric application, body field state update, body barline processing, non-playable body entry dispatch, simple body token dispatch, bracket / grace / fallback body dispatch, pending note state helper, ABC chord harmony XML helper, MusicXML to ABC harmony / lyric helper, MusicXML to ABC DOM utility helper, MusicXML to ABC lane definition helper, MusicXML to ABC meta line helper, MusicXML to ABC measure meta helper, MusicXML to ABC measure state helper, MusicXML to ABC direction token helper, MusicXML to ABC note lane / timing helper, MusicXML to ABC note ornament helper, MusicXML to ABC pitch token helper, MusicXML to ABC note ornament prefix helper, MusicXML to ABC note articulation prefix helper, MusicXML to ABC note technical prefix helper, first ABC body import to MusicXML integration, initial MusicXML to ABC public integration, initial ABC golden fixture roundtrip, ABC body tuplet timing, ABC body grace group import, ABC overlay import integration, basic / standard-shorthand / prefixed ABC body decoration pending state, ABC body navigation / wedge / dynamics decoration import, ABC richer decoration aliases, ABC overfull compatibility diagnostics, ABC body repeat / ending metadata, ABC body tie handoff, ABC chord tie handoff, missing voice measure rest fallback, grace-note occupancy exclusion, slur warning, and ABC body broken rhythm / slur handoff slices migrated
@@ -264,6 +268,42 @@ Out of scope for the initial Java conversion:
   - focused JUnit test added for upstream helper behavior
 - [x] Add fifty-second `src/ts/musescore-io.ts` helper regression slice
   - MuseScore import Slur spanner and legacy chord-level Slur id transition helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-third `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore import note tie/tied and articulation/technical notation XML helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-fourth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore import Trill spanner, chord Ornament trill, and accidental-mark notation XML helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-fifth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore import Ottava spanner state transition and display pitch shift helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-sixth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore import pitch spelling and accidental state helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-seventh `src/ts/musescore-io.ts` helper regression slice
+  - MusicXML transpose / MuseScore Instrument transpose / transposed KeySig helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-eighth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore imported voice accidental state by staff/pitch helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add fifty-ninth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore imported rest / pitched note XML composition helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixtieth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore imported voice cursor forward / clamp / tail rest helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixty-first `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore imported dynamic / direction / barline placement helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixty-second `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore imported event loop cursor step helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixty-third `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore imported beam lookup handoff helper subset
+  - focused JUnit tests added for upstream helper behavior
+- [x] Add sixty-fourth `src/ts/musescore-io.ts` helper regression slice
+  - MuseScore imported rest / chord event dispatch helper subset
   - focused JUnit tests added for upstream helper behavior
 - [x] Add first `src/ts/mei-io.ts` helper slice
   - XML escaping, safe integer parsing, MusicXML note type to MEI duration, alter / accidental to MEI accid, key signature, pname, lyric wordpos / syllabic, mks duration metadata, tie marker, and articulation token/XML helpers

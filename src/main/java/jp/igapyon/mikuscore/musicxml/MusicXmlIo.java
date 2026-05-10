@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -32,6 +33,30 @@ import org.xml.sax.SAXParseException;
 
 public final class MusicXmlIo {
     private MusicXmlIo() {
+    }
+
+    public static final class RenderDocBundle {
+        private final Document renderDoc;
+        private final Map<String, String> svgIdToNodeId;
+        private final int noteCount;
+
+        private RenderDocBundle(Document renderDoc, Map<String, String> svgIdToNodeId, int noteCount) {
+            this.renderDoc = renderDoc;
+            this.svgIdToNodeId = svgIdToNodeId;
+            this.noteCount = noteCount;
+        }
+
+        public Document getRenderDoc() {
+            return renderDoc;
+        }
+
+        public Map<String, String> getSvgIdToNodeId() {
+            return svgIdToNodeId;
+        }
+
+        public int getNoteCount() {
+            return noteCount;
+        }
     }
 
     public static Document parseMusicXmlDocument(String xmlText) {
@@ -126,6 +151,112 @@ public final class MusicXmlIo {
     public static Document applyImplicitBeamsToMusicXmlDocument(Document doc) {
         enrichImplicitBeamsInDocument(doc);
         return doc;
+    }
+
+    public static RenderDocBundle buildRenderDocWithNodeIds(Document sourceDoc, List<String> nodeIds, String idPrefix) {
+        Map<String, String> map = new HashMap<String, String>();
+        if (nodeIds == null || nodeIds.isEmpty()) {
+            return new RenderDocBundle(sourceDoc, map, 0);
+        }
+        Document doc = cloneXmlDocument(sourceDoc);
+        List<Element> notes = elementsByTagName(doc, "note");
+        int count = Math.min(notes.size(), nodeIds.size());
+        for (int index = 0; index < count; index++) {
+            String nodeId = nodeIds.get(index);
+            String svgId = String.valueOf(idPrefix == null ? "" : idPrefix) + "-" + nodeId;
+            Element note = notes.get(index);
+            note.setAttribute("xml:id", svgId);
+            note.setAttribute("id", svgId);
+            map.put(svgId, nodeId);
+        }
+        return new RenderDocBundle(doc, map, count);
+    }
+
+    public static Document extractMeasureEditorDocument(Document sourceDoc, String partId, String measureNumber) {
+        Element srcRoot = scorePartwiseRoot(sourceDoc);
+        Element srcPart = findPartById(sourceDoc, partId);
+        if (srcRoot == null || srcPart == null) {
+            return null;
+        }
+        Element srcMeasure = findMeasureByNumber(srcPart, measureNumber);
+        if (srcMeasure == null) {
+            return null;
+        }
+
+        Element patchedMeasure = (Element) srcMeasure.cloneNode(true);
+        Element effectiveAttrs = collectEffectiveMeasureAttributes(srcPart, srcMeasure);
+        if (effectiveAttrs != null) {
+            Element existing = directChild(patchedMeasure, "attributes");
+            if (existing == null) {
+                patchedMeasure.insertBefore(effectiveAttrs, patchedMeasure.getFirstChild());
+            } else {
+                mergeMissingEffectiveAttributes(existing, effectiveAttrs);
+            }
+        }
+
+        Document dst = createDocumentWithRoot("score-partwise");
+        Element dstRoot = dst.getDocumentElement();
+        String version = trimToEmpty(srcRoot.getAttribute("version"));
+        if (!version.isEmpty()) {
+            dstRoot.setAttribute("version", version);
+        }
+
+        Element srcPartList = directChild(srcRoot, "part-list");
+        Element srcScorePart = findScorePartById(sourceDoc, partId);
+        if (srcPartList != null && srcScorePart != null) {
+            Element dstPartList = (Element) dst.importNode(srcPartList, false);
+            Element dstScorePart = (Element) dst.importNode(srcScorePart, true);
+            Element dstPartName = directChild(dstScorePart, "part-name");
+            if (dstPartName != null) {
+                dstPartName.setTextContent("");
+            }
+            Element dstPartAbbreviation = directChild(dstScorePart, "part-abbreviation");
+            if (dstPartAbbreviation != null) {
+                dstPartAbbreviation.setTextContent("");
+            }
+            dstPartList.appendChild(dstScorePart);
+            dstRoot.appendChild(dstPartList);
+        }
+
+        Element dstPart = (Element) dst.importNode(srcPart, false);
+        dstPart.appendChild(dst.importNode(patchedMeasure, true));
+        dstRoot.appendChild(dstPart);
+        return dst;
+    }
+
+    public static Document replaceMeasureInMainDocument(Document mainDoc, String partId, String measureNumber,
+            Document measureDoc) {
+        Element replacementMeasure = firstPartMeasure(measureDoc);
+        if (replacementMeasure == null) {
+            return null;
+        }
+        Element targetPart = findPartById(mainDoc, partId);
+        if (targetPart == null) {
+            return null;
+        }
+        Element targetMeasure = findMeasureByNumber(targetPart, measureNumber);
+        if (targetMeasure == null) {
+            return null;
+        }
+
+        Element replacementForMain = (Element) replacementMeasure.cloneNode(true);
+        Element replacementAttrs = directChild(replacementForMain, "attributes");
+        Element targetAttrs = directChild(targetMeasure, "attributes");
+        if (replacementAttrs != null && targetAttrs == null) {
+            replacementForMain.removeChild(replacementAttrs);
+        }
+
+        Document next = cloneXmlDocument(mainDoc);
+        Element nextPart = findPartById(next, partId);
+        if (nextPart == null) {
+            return null;
+        }
+        Element nextTargetMeasure = findMeasureByNumber(nextPart, measureNumber);
+        if (nextTargetMeasure == null || nextTargetMeasure.getParentNode() == null) {
+            return null;
+        }
+        nextTargetMeasure.getParentNode().replaceChild(next.importNode(replacementForMain, true), nextTargetMeasure);
+        return next;
     }
 
     private static void enrichImplicitBeamsInDocument(Document doc) {
@@ -556,6 +687,183 @@ public final class MusicXmlIo {
             return null;
         }
         return root;
+    }
+
+    private static Document cloneXmlDocument(Document doc) {
+        Document cloned = createEmptyDocument();
+        if (doc != null && doc.getDocumentElement() != null) {
+            cloned.appendChild(cloned.importNode(doc.getDocumentElement(), true));
+        }
+        return cloned;
+    }
+
+    private static Document createEmptyDocument() {
+        try {
+            return DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Failed to create MusicXML document.", ex);
+        }
+    }
+
+    private static Document createDocumentWithRoot(String rootName) {
+        Document doc = createEmptyDocument();
+        doc.appendChild(doc.createElement(rootName));
+        return doc;
+    }
+
+    private static Element findPartById(Document doc, String partId) {
+        Element root = scorePartwiseRoot(doc);
+        if (root == null) {
+            return null;
+        }
+        for (Element part : directChildren(root, "part")) {
+            if (trimToEmpty(part.getAttribute("id")).equals(String.valueOf(partId == null ? "" : partId))) {
+                return part;
+            }
+        }
+        return null;
+    }
+
+    private static Element findScorePartById(Document doc, String partId) {
+        Element root = scorePartwiseRoot(doc);
+        Element partList = directChild(root, "part-list");
+        if (partList == null) {
+            return null;
+        }
+        for (Element scorePart : directChildren(partList, "score-part")) {
+            if (trimToEmpty(scorePart.getAttribute("id")).equals(String.valueOf(partId == null ? "" : partId))) {
+                return scorePart;
+            }
+        }
+        return null;
+    }
+
+    private static Element findMeasureByNumber(Element part, String measureNumber) {
+        for (Element measure : directChildren(part, "measure")) {
+            if (trimToEmpty(measure.getAttribute("number")).equals(String.valueOf(measureNumber == null ? "" : measureNumber))) {
+                return measure;
+            }
+        }
+        return null;
+    }
+
+    private static Element firstPartMeasure(Document doc) {
+        Element root = scorePartwiseRoot(doc);
+        if (root == null) {
+            return null;
+        }
+        for (Element part : directChildren(root, "part")) {
+            Element measure = directChild(part, "measure");
+            if (measure != null) {
+                return measure;
+            }
+        }
+        return null;
+    }
+
+    private static Element collectEffectiveMeasureAttributes(Element part, Element targetMeasure) {
+        Element divisions = null;
+        Element key = null;
+        Element time = null;
+        Element staves = null;
+        Map<String, Element> clefByNo = new HashMap<String, Element>();
+
+        for (Element measure : directChildren(part, "measure")) {
+            Element attrs = directChild(measure, "attributes");
+            if (attrs != null) {
+                Element nextDivisions = directChild(attrs, "divisions");
+                if (nextDivisions != null) {
+                    divisions = (Element) nextDivisions.cloneNode(true);
+                }
+                Element nextKey = directChild(attrs, "key");
+                if (nextKey != null) {
+                    key = (Element) nextKey.cloneNode(true);
+                }
+                Element nextTime = directChild(attrs, "time");
+                if (nextTime != null) {
+                    time = (Element) nextTime.cloneNode(true);
+                }
+                Element nextStaves = directChild(attrs, "staves");
+                if (nextStaves != null) {
+                    staves = (Element) nextStaves.cloneNode(true);
+                }
+                for (Element clef : directChildren(attrs, "clef")) {
+                    String no = trimToEmpty(clef.getAttribute("number"));
+                    clefByNo.put(no.isEmpty() ? "1" : no, (Element) clef.cloneNode(true));
+                }
+            }
+            if (measure == targetMeasure) {
+                break;
+            }
+        }
+
+        Document doc = targetMeasure.getOwnerDocument();
+        Element effective = doc.createElement("attributes");
+        if (divisions != null) {
+            effective.appendChild(divisions);
+        }
+        if (key != null) {
+            effective.appendChild(key);
+        }
+        if (time != null) {
+            effective.appendChild(time);
+        }
+        if (staves != null) {
+            effective.appendChild(staves);
+        }
+        List<String> clefNos = new ArrayList<String>(clefByNo.keySet());
+        Collections.sort(clefNos);
+        for (String no : clefNos) {
+            effective.appendChild(clefByNo.get(no));
+        }
+        return directElementChildren(effective).isEmpty() ? null : effective;
+    }
+
+    private static void mergeMissingEffectiveAttributes(Element targetAttributes, Element effectiveAttributes) {
+        ensureSingleEffectiveAttribute(targetAttributes, effectiveAttributes, "divisions");
+        ensureSingleEffectiveAttribute(targetAttributes, effectiveAttributes, "key");
+        ensureSingleEffectiveAttribute(targetAttributes, effectiveAttributes, "time");
+        ensureSingleEffectiveAttribute(targetAttributes, effectiveAttributes, "staves");
+
+        Set<String> existingClefNos = new HashSet<String>();
+        for (Element clef : directChildren(targetAttributes, "clef")) {
+            String no = trimToEmpty(clef.getAttribute("number"));
+            existingClefNos.add(no.isEmpty() ? "1" : no);
+        }
+        for (Element clef : directChildren(effectiveAttributes, "clef")) {
+            String no = trimToEmpty(clef.getAttribute("number"));
+            no = no.isEmpty() ? "1" : no;
+            if (existingClefNos.contains(no)) {
+                continue;
+            }
+            targetAttributes.appendChild(clef.cloneNode(true));
+            existingClefNos.add(no);
+        }
+    }
+
+    private static void ensureSingleEffectiveAttribute(Element targetAttributes, Element effectiveAttributes,
+            String tagName) {
+        if (directChild(targetAttributes, tagName) != null) {
+            return;
+        }
+        Element src = directChild(effectiveAttributes, tagName);
+        if (src != null) {
+            targetAttributes.appendChild(src.cloneNode(true));
+        }
+    }
+
+    private static List<Element> elementsByTagName(Document doc, String tagName) {
+        List<Element> result = new ArrayList<Element>();
+        if (doc == null) {
+            return result;
+        }
+        org.w3c.dom.NodeList nodes = doc.getElementsByTagName(tagName);
+        for (int index = 0; index < nodes.getLength(); index++) {
+            if (nodes.item(index) instanceof Element) {
+                result.add((Element) nodes.item(index));
+            }
+        }
+        return result;
     }
 
     private static Element directChild(Element parent, String tagName) {

@@ -12,20 +12,112 @@
 
 ### 2026-05-10 一時停止メモ
 
-- [x] ここまでの最新検証: `mvn test` 成功、352 tests / 0 failures / 0 errors
-- [x] 直近完了 slice: upstream `tests/unit/musescore-io.spec.ts` の MuseScore Slur spanner / legacy chord-level Slur id transition intent を `MuseScoreIo` / `MuseScoreIoTest` へ focused coverage として移植
+- [x] 追加完了 slice: upstream `src/ts/musicxml-io.ts` の Render / measure-editor helper 群を Java `MusicXmlIo` に移植
+  - `RenderDocBundle` / `buildRenderDocWithNodeIds`
+  - `extractMeasureEditorDocument`
+  - effective attributes collection / missing attributes merge
+  - `replaceMeasureInMainDocument`
+  - focused coverage: `MusicXmlIoTest` 15 tests 成功
+- [x] 追加完了 slice: upstream `src/ts/midi-io.ts` の first utility helper 群を Java `MidiIo` に移植
+  - `clampTempo` / `clampVelocity`
+  - MIDI program preset mapping
+  - leading pickup time-signature normalization
+  - MuseScore-style pickup time-signature prelude helper
+  - key pitch-class helpers
+  - imported-note key signature inference
+  - drum name hint mapping / dynamics velocity mapping
+  - generic track-name detection / standard title・composer meta text helpers
+  - metric accent profile / pattern / velocity delta helpers
+  - tick splitting / weighted tick splitting helpers
+  - pitch-to-MIDI / MIDI pitch text / key-signature accidental helpers
+  - ticks-per-quarter / program / quantize-grid normalization
+  - gcd / near-multiple / triplet-like timing helpers
+  - import quantize tick / grid scoring helpers
+  - imported note quantization / controller velocity scale helpers
+  - auto voice allocation helper
+  - imported voice cluster measure segmentation helper
+  - duration notation / tie / rest XML helpers
+  - XML pretty print / MIDI hex / measure MIDI metadata misc XML helpers
+  - SMF byte reader / variable-length value / meta text decode helpers
+  - SMF header parser / import diagnostic carrier
+  - SMF track summary parser / note pairing / running-status diagnostics
+  - `mks:` MIDI text metadata / MKS SysEx payload chunk helpers
+  - source / SysEx / diagnostic MIDI metadata misc XML helpers
+  - measure voice MusicXML helper
+  - part lane definition / active lane selection helpers
+  - tempo / dynamics direction XML helpers
+  - initial measure attributes XML helper
+  - part measure layout / pickup measure numbering helpers
+  - part segment layout / grand-staff fallback / measure grouping helpers
+  - tempo event measure / offset grouping helpers
+  - part definition / part-list XML helpers
+  - import skeleton document XML wrapper helper
+  - MIDI variable-length / SysEx / text meta event byte writing helpers
+  - MKS SysEx chunk text / FNV-1a fingerprint helpers
+  - tempo / time-signature / key-signature meta event byte writing helpers
+  - unsigned big-endian / MIDI writer velocity / raw track chunk encoding helpers
+  - raw MIDI tempo track chunk assembly helper
+  - raw MIDI note track chunk assembly helper
+  - raw MIDI control track chunk / SMF header assembly helpers
+  - playback event parity normalization helper
+  - drum part map / MIDI unpitched note parsing helpers
+  - MusicXML MIDI program override collection helper
+  - measure advance / capacity div helpers
+  - measure content span estimation helper
+  - first-underfull pickup / implicit measure helpers
+  - MusicXML MIDI control event collection helper
+  - MusicXML MIDI tempo event collection helper
+  - MusicXML leading pickup ticks collection helper
+  - MusicXML MIDI time-signature event collection helper
+  - MusicXML MIDI key-signature event collection helper
+  - MIDI export key-signature event normalization helper
+  - MIDI export tempo / time-signature event normalization helpers
+  - MIDI export default meta-event diagnostics helper
+  - MIDI export text metadata line helper
+  - MIDI export playback event track grouping helper
+  - MIDI export channel count / MKS SysEx chunk params / program preset fallback helpers
+  - MIDI export tempo / time-signature / key-signature meta timeline helper
+  - MIDI export playback track plan helper
+  - MIDI export program-change / note event field helpers
+  - MIDI export control track plan / controller-change field helpers
+  - MIDI export writer track plan helper
+  - MIDI export playback preparation helper
+  - raw MIDI playback bytes assembly helper
+  - MIDI export playback build facade helper
+  - MIDI import skeleton MusicXML assembly helper
+  - MIDI import public conversion facade
+  - MusicXML playback event extraction facade
+  - MusicXML playback direction dynamics velocity helper
+  - MusicXML playback grace note timing helper
+  - MusicXML playback articulation nuance helper
+  - MusicXML playback temporal expression helper
+  - MusicXML playback metric accent option helper
+  - MusicXML playback tie processing helper
+  - MusicXML playback tenuto legato overlap helper
+  - MusicXML playback default detache helper
+  - MusicXML playback slur processing helper
+  - MusicXML playback direction wedge dynamics helper
+  - MusicXML playback ornament expansion helper
+  - MusicXML playback-like nuance option flags helper
+  - focused coverage: `MidiIoTest` 103 tests 成功
+- [x] ここまでの最新検証: `mvn test` 成功、484 tests / 0 failures / 0 errors
+- [x] 直近完了 slice: upstream `src/ts/midi-io.ts` の MusicXML playback-like nuance option flags を `MidiIo` / `MidiIoTest` へ focused coverage として移植
 - [x] 直近の upstream 基準 checkout: `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`
+- [x] 2026-05-11 終了時点の再開ポイント
+  - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
+  - 対応テスト: `src/test/java/jp/igapyon/mikuscore/midi/MidiIoTest.java`
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+  - 最新 focused 検証: `mvn test -Dtest=MidiIoTest` 成功、103 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、484 tests / 0 failures / 0 errors
 - [ ] 再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
-- [ ] 再開時の第一候補は `workplace/mikuscore/tests/unit/musescore-io.spec.ts` の Slur import 直後の intent
-  - 目安: `imports MuseScore note tie markers into MusicXML tie/tied`
-  - 既存 Java 側には `parseMuseTieFlags` と note/chord helper coverage があるため、まず不足が helper regression で足りるか確認する
-  - full MuseScore import pipeline へ無理に拡張せず、既存の public helper 境界で upstream semantics を固定する
-- [ ] 次点候補は同じ upstream file の chord articulation subtype import intent
-  - 既存 Java 側には `summarizeMuseChordNotations` があるため、focused coverage の不足を先に確認する
+- [ ] 再開時の第一候補は `src/ts/midi-io.ts` の MusicXML playback nuance 残りを小さく切り出せるか確認する
+  - 目安: MIDI playback nuance の残り、または export/import parity の小片を既存 `MidiIo` helper 境界で確認する
+  - pedal controller event extraction は `collectMidiControlEventsFromMusicXmlDoc` / `MidiIoTest.collectsMidiControlEventsFromMusicXmlDoc` 側で既に移植済みのため、再開時は重複実装しない
+  - 小さく切れない場合は `emitMuseImportedVoiceXml` の parser-produced chord / direction event 接続、または `tests/unit/lilypond-io.spec.ts` の未着手 I/O へ移る
 - [ ] 再開時の確認コマンド
   - `git status --short`
-  - `rg -n "imports MuseScore note tie markers|imports MuseScore chord articulation|Slur spanner" workplace/mikuscore/tests/unit/musescore-io.spec.ts`
-  - `mvn test -Dtest=MuseScoreIoTest`
+  - `sed -n '4417,4945p' workplace/mikuscore/src/ts/midi-io.ts`
+  - `mvn test -Dtest=MidiIoTest`
   - 最後に `mvn test`
 - [ ] 再開時に更新する tracking files
   - `TODO.md`
@@ -619,8 +711,9 @@
 - [ ] `src/ts/musescore-io.ts`
   - MuseScore 本体変換は未移植
   - `.mscz` / `.mscx` file I/O facade は `src/ts/cli-api.ts` 経由の範囲として `CoreApi` / `MxlIo` に partial 移植済み
-  - duration type / dots、default title / composer 判定、repeat / dynamics / articulation / ornament / key mode / direction XML / clef / transpose / measure length、direction staff / voice placement、tuplet XML / import state / voice utilities、tuplet id reference numbering、tuplet written duration type、beam level / explicit BeamMode XML assignment / implicit beam XML assignment、MuseScore Slur spanner / legacy Slur id transition、ottava、import option、tick relative div / event routing、tie / trill transition、chord notation summary、chord note parse、ignored import tag、measure overflow warning、parsed / fallback measure carrier、part-list / identification / misc / document XML、voice event collection / chord follow merge / backup-forward cursor / by-staff push / direction routing / rest-chord construction / note cursor advance、attribute判定、measure header / finalization、part voice id resolver、accidental subtype / TPC accidental helper、MusicXML pitch / accidental / octave-shift / direction mark payload / mid-barline repeat / notation number / tuplet time-modification / articulation / technical / clef / direction tempo export helper、direction seed XML / collection、explicit clef scan、export metadata value / document body / final fallback / empty score / measure context / measure header / key signature helper、export source analysis / staff count / part identity / scaffold / instrument helper、export slur id / fraction state helper、export tuplet ref state helper、export voice / measure voice / staff XML helper、export staff state helper、export chord / rest XML helper、pending / trailing direction mark helper は `MuseScoreIo` に partial 移植済み
+  - duration type / dots、default title / composer 判定、repeat / dynamics / articulation / ornament / key mode / direction XML / clef / transpose / measure length、direction staff / voice placement、tuplet XML / import state / voice utilities、tuplet id reference numbering、tuplet written duration type、beam level / explicit BeamMode XML assignment / implicit beam XML assignment、MuseScore Slur spanner / legacy Slur id transition、MuseScore imported note tie/tied / articulation / technical notation XML、MuseScore Trill spanner / chord Ornament trill / accidental-mark notation XML、MuseScore Ottava spanner / display pitch shift state helper、MuseScore import pitch spelling / accidental state helper、MuseScore imported voice accidental state helper、MuseScore imported rest / pitched note XML composition helper、MuseScore imported voice cursor forward / clamp / tail rest helper、MuseScore imported dynamic / direction / barline placement helper、MuseScore imported event loop cursor step helper、MuseScore imported beam lookup handoff helper、MuseScore imported rest / chord event dispatch helper、ottava、import option、tick relative div / event routing、tie / trill transition、chord notation summary、chord note parse、ignored import tag、measure overflow warning、parsed / fallback measure carrier、part-list / identification / misc / document XML、voice event collection / chord follow merge / backup-forward cursor / by-staff push / direction routing / rest-chord construction / note cursor advance、attribute判定、measure header / finalization、part voice id resolver、accidental subtype / TPC accidental helper、MusicXML pitch / accidental / octave-shift / direction mark payload / mid-barline repeat / notation number / tuplet time-modification / articulation / technical / clef / direction tempo export helper、direction seed XML / collection、explicit clef scan、export metadata value / document body / final fallback / empty score / measure context / measure header / key signature helper、export source analysis / staff count / part identity / scaffold / instrument helper、export slur id / fraction state helper、export tuplet ref state helper、export voice / measure voice / staff XML helper、export staff state helper、export chord / rest XML helper、pending / trailing direction mark helper は `MuseScoreIo` に partial 移植済み
 - [ ] `src/ts/midi-io.ts`
+  - tempo / velocity clamp、program preset mapping、leading pickup time-signature normalization、MuseScore-style pickup time-signature prelude、key pitch-class helper、imported-note key signature inference、drum name hint mapping、dynamics velocity mapping、generic track-name detection、standard title / composer meta text helper、metric accent helper、tick splitting helper、pitch helper、quantize normalization、triplet-like timing helper、import quantize tick / grid scoring、imported note quantization、controller velocity scale、auto voice allocation、measure segmentation、duration notation / tie / rest XML helper、XML pretty print / MIDI hex / measure MIDI metadata misc XML helper、source / SysEx / diagnostic metadata misc XML helper、measure voice MusicXML helper、part lane definition / active lane selection helper、tempo / dynamics direction XML helper、initial measure attributes XML helper、part measure layout / pickup measure numbering helper、part segment layout / grand-staff fallback / measure grouping helper、tempo event measure / offset grouping helper、part definition / part-list XML helper、import skeleton document XML wrapper helper、MIDI import skeleton MusicXML assembly helper、MIDI import public conversion facade、MusicXML playback event extraction facade、MusicXML playback direction dynamics velocity helper、MusicXML playback grace note timing helper、MusicXML playback articulation nuance helper、MusicXML playback temporal expression helper、MusicXML playback metric accent option helper、MusicXML playback tie processing helper、MusicXML playback tenuto legato overlap helper、MusicXML playback default detache helper、MusicXML playback slur processing helper、MusicXML playback direction wedge dynamics helper、MusicXML playback ornament expansion helper、MusicXML playback-like nuance option flags helper、MIDI variable-length / SysEx / text meta event byte writing helper、MKS SysEx chunk text / FNV-1a fingerprint helper、tempo / time-signature / key-signature meta event byte writing helper、unsigned big-endian / MIDI writer velocity / raw track chunk encoding helper、raw MIDI tempo / note / control track chunk assembly helper、SMF header assembly helper、SMF byte reader、SMF header parser、SMF track summary parser、MKS metadata helper、playback event parity normalization helper、drum part map / MIDI unpitched note parsing helper、MusicXML MIDI program override collection helper、measure advance / capacity div helper、measure content span estimation helper、first-underfull pickup / implicit measure helper、MusicXML MIDI control event collection helper、MusicXML MIDI tempo event collection helper、MusicXML leading pickup ticks collection helper、MusicXML MIDI time-signature event collection helper、MusicXML MIDI key-signature event collection helper、MIDI export tempo / time-signature / key-signature event normalization helpers、MIDI export default meta-event diagnostics helper、MIDI export text metadata line helper、MIDI export playback event track grouping helper、MIDI export channel count / MKS SysEx chunk params / program preset fallback helpers、MIDI export tempo / time-signature / key-signature meta timeline helper、MIDI export playback track plan helper、MIDI export program-change / note event field helpers、MIDI export control track plan / controller-change field helpers、MIDI export writer track plan helper、MIDI export playback preparation helper、raw MIDI playback bytes assembly helper、MIDI export playback build facade helper は `MidiIo` に first utility slices として移植済み
 - [ ] `src/ts/mei-io.ts`
   - note type -> MEI dur、alter / MusicXML accidental -> MEI accid、key signature、pname、lyric wordpos / syllabic、mks duration metadata、tie / articulation helper first slice は `MeiIo` に partial 移植済み
   - harmony kind / degree suffix、offset tick -> tstamp、MusicXML harmony values -> MEI harm XML helper は `MeiIo` に partial 移植済み
@@ -727,7 +820,19 @@
   - explicit BeamMode beam XML assignment helper regression は `MuseScoreIoTest` で focused coverage 済み
   - implicit beam XML assignment helper regression は `MuseScoreIoTest` で focused coverage 済み
   - MuseScore Slur spanner / legacy Slur id transition helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore note tie/tied / articulation / technical notation XML helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore Trill spanner / chord Ornament trill / accidental-mark notation XML helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore Ottava spanner / display pitch shift helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore import pitch spelling / accidental state helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore imported voice accidental state by staff/pitch helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore imported rest / pitched note XML composition helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore imported voice cursor forward / clamp / tail rest helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore imported dynamic / direction / barline placement helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore imported event loop cursor step helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore imported beam lookup handoff helper regression は `MuseScoreIoTest` で focused coverage 済み
+  - MuseScore imported rest / chord event dispatch helper regression は `MuseScoreIoTest` で focused coverage 済み
 - [ ] `tests/unit/midi-io.spec.ts`
+  - first MIDI utility / quantize / controller velocity / auto voice / measure segmentation / duration notation / metadata misc XML / source / SysEx / diagnostic misc XML / measure voice XML / part lane / tempo-dynamics direction / initial attributes XML / part measure layout / part segment layout / tempo event grouping / part definition / part-list / import skeleton document / import skeleton MusicXML assembly / import public conversion facade / MusicXML playback event extraction / playback direction dynamics velocity / playback grace note timing / playback articulation nuance / playback temporal expression / playback metric accent option / playback tie processing / playback tenuto legato overlap / playback default detache / playback slur processing / playback direction wedge dynamics / playback ornament expansion / playback-like nuance option flags / MIDI byte writing / MKS SysEx chunk text / tempo-time-key meta event byte writing / raw track chunk / tempo-note-control track chunk / SMF header assembly / SMF header / track summary / playback parity normalization / drum part map / MIDI program override / measure advance / capacity div / measure content span / first-underfull pickup / MIDI control-tempo / leading pickup ticks / time-signature event / key-signature event / export tempo-time-key event normalization / export diagnostics / export text metadata / export playback track grouping / export SysEx params / export meta timeline / export playback track plan / export program-change-note field / export control track field / export writer track plan / export playback preparation / raw playback bytes assembly / export playback build facade helper regressions は `MidiIoTest` で focused coverage 済み
 - [ ] `tests/unit/mei-io.spec.ts`
   - first through sixty-eighth MEI helper / facade / regression slices は `MeiIoTest` で focused coverage 済み
 - [ ] `tests/unit/lilypond-io.spec.ts`
