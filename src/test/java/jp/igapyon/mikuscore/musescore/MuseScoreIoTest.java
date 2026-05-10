@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -626,6 +627,16 @@ public class MuseScoreIoTest {
                 MuseScoreIo.buildMuseScoreExportPartDefBodyXml("Piano & Keys", "Pno",
                         Arrays.asList(Integer.valueOf(5), Integer.valueOf(6)), clefs, null));
 
+        MuseScoreIo.Transpose bFlatInstrumentTranspose = new MuseScoreIo.Transpose(Integer.valueOf(-2),
+                Integer.valueOf(-3));
+        assertEquals("<Instrument><trackName>Clarinet</trackName><longName>Clarinet</longName><shortName>Cl.</shortName><clef>G</clef><transposeDiatonic>-2</transposeDiatonic><transposeChromatic>-3</transposeChromatic></Instrument>",
+                MuseScoreIo.buildMuseScoreExportInstrumentXml("Clarinet", "Cl.", Collections.singletonMap(
+                        Integer.valueOf(1), "G"), bFlatInstrumentTranspose));
+        assertEquals("<KeySig><accidental>0</accidental><concertKey>3</concertKey><transposeKey>0</transposeKey></KeySig>",
+                MuseScoreIo.resolveMuseExportKeySigXml(0, bFlatInstrumentTranspose));
+        assertEquals("<transpose><diatonic>-2</diatonic><chromatic>-3</chromatic></transpose>",
+                MuseScoreIo.buildTransposeXml(MuseScoreIo.readPartTransposeFromValues("-2", "-3")));
+
         MuseScoreIo.MuseScoreExportMeasureContext context = new MuseScoreIo.MuseScoreExportMeasureContext(480, 4, 4,
                 null, 0, "G", null, false, false, false, false, null, false, false);
         MuseScoreIo.MuseScoreExportStaffMeasure measure = new MuseScoreIo.MuseScoreExportStaffMeasure(context, null,
@@ -767,6 +778,14 @@ public class MuseScoreIoTest {
         assertEquals("<transpose><diatonic>-1</diatonic><chromatic>-2</chromatic></transpose>",
                 MuseScoreIo.buildTransposeXml(new MuseScoreIo.Transpose(Integer.valueOf(-1), Integer.valueOf(-2))));
 
+        MuseScoreIo.Transpose parsedTranspose = MuseScoreIo.readPartTransposeFromValues(" -2.2 ", " -3 ");
+        assertEquals(Integer.valueOf(-2), parsedTranspose.getDiatonic());
+        assertEquals(Integer.valueOf(-3), parsedTranspose.getChromatic());
+        assertNull(MuseScoreIo.readPartTransposeFromValues("", "bad"));
+        assertEquals(Integer.valueOf(0), MuseScoreIo.readMuseKeyFifthsFromValues("0", "4", "3", true));
+        assertEquals(Integer.valueOf(4), MuseScoreIo.readMuseKeyFifthsFromValues("0", "4", "3", false));
+        assertEquals(Integer.valueOf(7), MuseScoreIo.readMuseKeyFifthsFromValues("9", null, null, true));
+
         MuseScoreIo.Clef tenor = MuseScoreIo.parseMuseClefText("tenor");
         assertEquals("C", tenor.getSign());
         assertEquals(4, tenor.getLine());
@@ -872,6 +891,26 @@ public class MuseScoreIoTest {
     }
 
     @Test
+    public void buildsMuseImportedBeamInfoAndReadsByEventIndex() {
+        List<MuseScoreIo.MuseBeamEvent> events = Arrays.asList(
+                MuseScoreIo.buildMuseImportedBeamEventInfo(true, true, false, 120, Integer.valueOf(120), 480,
+                        "begin"),
+                MuseScoreIo.buildMuseImportedBeamEventInfo(true, false, false, 120, Integer.valueOf(120), 480,
+                        "mid"),
+                MuseScoreIo.buildMuseImportedBeamEventInfo(true, true, false, 120, Integer.valueOf(120), 480, null),
+                MuseScoreIo.buildMuseImportedBeamEventInfo(false, false, false, 0, null, 480, null));
+
+        Map<Integer, String> beams = MuseScoreIo.buildMuseBeamXmlByEventInfo(events, 480, false);
+
+        assertEquals("<beam number=\"1\">begin</beam><beam number=\"2\">begin</beam>",
+                MuseScoreIo.readMuseImportedBeamXmlByEventIndex(beams, 0));
+        assertEquals("", MuseScoreIo.readMuseImportedBeamXmlByEventIndex(beams, 1));
+        assertEquals("<beam number=\"1\">end</beam><beam number=\"2\">end</beam>",
+                MuseScoreIo.readMuseImportedBeamXmlByEventIndex(beams, 2));
+        assertEquals("", MuseScoreIo.readMuseImportedBeamXmlByEventIndex(beams, 99));
+    }
+
+    @Test
     public void parsesOttavaHelpers() {
         MuseScoreIo.OttavaShift down = MuseScoreIo.parseOttavaSubtype("15mb");
         assertEquals(15, down.getSize());
@@ -888,6 +927,48 @@ public class MuseScoreIoTest {
         assertEquals("15ma", MuseScoreIo.parseMusicXmlOctaveShiftSubtype("up", "16"));
         assertNull(MuseScoreIo.parseMusicXmlOctaveShiftSubtype("stop", "8"));
         assertNull(MuseScoreIo.parseMusicXmlOctaveShiftSubtype("continue", "8"));
+    }
+
+    @Test
+    public void appliesMuseOttavaSpannerStartStopWithSharedNumber() {
+        List<MuseScoreIo.OttavaState> active = new ArrayList<MuseScoreIo.OttavaState>();
+        MuseScoreIo.MutableInt next = new MuseScoreIo.MutableInt(1);
+
+        List<String> start = MuseScoreIo.applyMuseOttavaSpannerTransition("8va", true, false, active, next);
+        List<String> stop = MuseScoreIo.applyMuseOttavaSpannerTransition(null, false, true, active, next);
+
+        assertEquals("<direction placement=\"above\"><direction-type><octave-shift type=\"start\" size=\"8\" number=\"1\"/></direction-type></direction>",
+                start.get(0));
+        assertEquals("<direction placement=\"above\"><direction-type><octave-shift type=\"stop\" size=\"8\" number=\"1\"/></direction-type></direction>",
+                stop.get(0));
+        assertEquals(2, next.getCurrent());
+        assertEquals(0, active.size());
+    }
+
+    @Test
+    public void appliesMuseOttavaDisplayShiftToMidi() {
+        List<MuseScoreIo.OttavaState> active = new ArrayList<MuseScoreIo.OttavaState>();
+        MuseScoreIo.applyMuseOttavaSpannerTransition("8va", true, false, active, new MuseScoreIo.MutableInt(1));
+
+        assertEquals(93, MuseScoreIo.applyActiveOttavaDisplayShiftToMidi(81, active));
+        assertEquals(12, MuseScoreIo.semitoneShiftForActiveOttavaDisplay(active));
+    }
+
+    @Test
+    public void keepsMuseOttavaDisplayShiftAcrossMeasureBoundary() {
+        List<MuseScoreIo.OttavaState> active = new ArrayList<MuseScoreIo.OttavaState>();
+        MuseScoreIo.MutableInt next = new MuseScoreIo.MutableInt(1);
+
+        MuseScoreIo.applyMuseOttavaSpannerTransition("8va", true, false, active, next);
+        int firstMeasure = MuseScoreIo.applyActiveOttavaDisplayShiftToMidi(60, active);
+        int secondMeasure = MuseScoreIo.applyActiveOttavaDisplayShiftToMidi(62, active);
+        List<String> stop = MuseScoreIo.applyMuseOttavaSpannerTransition(null, false, true, active, next);
+
+        assertEquals(72, firstMeasure);
+        assertEquals(74, secondMeasure);
+        assertEquals("<direction placement=\"above\"><direction-type><octave-shift type=\"stop\" size=\"8\" number=\"1\"/></direction-type></direction>",
+                stop.get(0));
+        assertEquals(0, active.size());
     }
 
     @Test
@@ -1084,6 +1165,88 @@ public class MuseScoreIoTest {
     }
 
     @Test
+    public void buildsMuseImportedTieAndTiedXml() {
+        MuseScoreIo.TieFlags start = MuseScoreIo.parseMuseTieFlags(true, false, false, false);
+        MuseScoreIo.TieFlags stop = MuseScoreIo.parseMuseTieFlags(false, false, false, true);
+
+        assertEquals("<tie type=\"start\"/>", MuseScoreIo.buildMuseImportedNoteTieXml(start));
+        assertEquals("<notations><tied type=\"start\"/></notations>",
+                MuseScoreIo.buildMuseImportedNoteNotationsXml(null, null, null, null, null, null, start, null, null));
+        assertEquals("<tie type=\"stop\"/>", MuseScoreIo.buildMuseImportedNoteTieXml(stop));
+        assertEquals("<notations><tied type=\"stop\"/></notations>",
+                MuseScoreIo.buildMuseImportedNoteNotationsXml(null, null, null, null, null, null, stop, null, null));
+    }
+
+    @Test
+    public void buildsMuseImportedArticulationNotationsXml() {
+        MuseScoreIo.MuseScoreChordNotationSummary summary = MuseScoreIo.summarizeMuseChordNotations(
+                Arrays.asList("articStaccatoBelow", "articTenutoAbove"), null);
+
+        assertEquals("<notations><articulations><staccato/><tenuto/></articulations></notations>",
+                MuseScoreIo.buildMuseImportedNoteNotationsXml(null, null, null, null, summary.getArticulationTags(),
+                        null, null, null, null));
+    }
+
+    @Test
+    public void buildsMuseImportedTechnicalNotationsXml() {
+        MuseScoreIo.MuseScoreChordNotationSummary summary = MuseScoreIo.summarizeMuseChordNotations(
+                Arrays.asList("articLhPizzicatoAbove", "articUpBowAbove", "articDownBowAbove",
+                        "articOpenStringAbove", "articHarmonicAbove"),
+                Arrays.asList("brassMuteClosed"));
+
+        assertEquals(
+                "<notations><technical><stopped/><up-bow/><down-bow/><open-string/><harmonic/><stopped/><fingering>1</fingering><string>3</string></technical></notations>",
+                MuseScoreIo.buildMuseImportedNoteNotationsXml(null, null, null, null, null,
+                        summary.getTechnicalTags(), null, "1", Integer.valueOf(3)));
+    }
+
+    @Test
+    public void buildsMuseImportedTrillSpannerNotationsXml() {
+        List<Integer> active = new ArrayList<Integer>();
+        List<Integer> pendingStarts = new ArrayList<Integer>();
+        List<Integer> pendingStops = new ArrayList<Integer>();
+        MuseScoreIo.MutableInt next = new MuseScoreIo.MutableInt(1);
+
+        MuseScoreIo.applyMuseTrillSpannerTransition(MuseScoreIo.parseTrillSpannerTransition("Trill", true, false),
+                active, next, pendingStarts, pendingStops);
+        List<String> startItems = MuseScoreIo.buildMuseImportedTrillNotationItems(
+                MuseScoreIo.consumePendingTrillNumbers(pendingStarts), null, false, null);
+        MuseScoreIo.applyMuseTrillSpannerTransition(MuseScoreIo.parseTrillSpannerTransition("Trill", false, true),
+                active, next, pendingStarts, pendingStops);
+        List<String> stopItems = MuseScoreIo.buildMuseImportedTrillNotationItems(null,
+                MuseScoreIo.consumePendingTrillNumbers(pendingStops), false, null);
+
+        assertEquals(
+                "<notations><ornaments><trill-mark/><wavy-line type=\"start\" number=\"1\"/></ornaments></notations>",
+                MuseScoreIo.buildMuseImportedNoteNotationsXml(null, null, null, startItems, null, null, null, null,
+                        null));
+        assertEquals("<notations><ornaments><wavy-line type=\"stop\" number=\"1\"/></ornaments></notations>",
+                MuseScoreIo.buildMuseImportedNoteNotationsXml(null, null, null, stopItems, null, null, null, null,
+                        null));
+        assertEquals(2, next.getCurrent());
+        assertEquals(0, active.size());
+    }
+
+    @Test
+    public void buildsMuseImportedChordTrillMarkNotationsXml() {
+        MuseScoreIo.MuseScoreChordNotationSummary summary = MuseScoreIo.summarizeMuseChordNotations(
+                null, Arrays.asList("ornamentTrill"));
+        List<String> items = MuseScoreIo.buildMuseImportedTrillNotationItems(null, null,
+                summary.hasChordLocalTrillMark(), null);
+
+        assertEquals("<notations><ornaments><trill-mark/></ornaments></notations>",
+                MuseScoreIo.buildMuseImportedNoteNotationsXml(null, null, null, items, null, null, null, null, null));
+    }
+
+    @Test
+    public void buildsMuseImportedTrillAccidentalMarkNotationsXml() {
+        List<String> items = MuseScoreIo.buildMuseImportedTrillNotationItems(null, null, true, "flat");
+
+        assertEquals("<notations><ornaments><trill-mark/><accidental-mark>flat</accidental-mark></ornaments></notations>",
+                MuseScoreIo.buildMuseImportedNoteNotationsXml(null, null, null, items, null, null, null, null, null));
+    }
+
+    @Test
     public void importsMuseSlurSpannerAsMusicXmlStartStop() {
         MuseScoreIo.MuseImportSlurState state = new MuseScoreIo.MuseImportSlurState();
         MuseScoreIo.MuseSlurTransitions start = MuseScoreIo.parseMuseChordSlurTransitions(
@@ -1153,6 +1316,381 @@ public class MuseScoreIoTest {
         assertEquals(false, note.isTieStop());
         assertEquals("2", note.getFingeringText());
         assertEquals(Integer.valueOf(4), note.getStringNumber());
+    }
+
+    @Test
+    public void buildsMuseImportedPitchXmlWithPreferredAccidentalSpelling() {
+        List<MuseScoreIo.MuseScoreChordNote> notes = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(61), "accidentalFlat", null, null, null,
+                        null)), 0);
+        MuseScoreIo.MuseImportedPitchXml pitch = MuseScoreIo.buildMuseImportedPitchXml(notes.get(0), 0, 1,
+                new HashMap<String, Integer>());
+
+        assertEquals("<pitch><step>D</step><alter>-1</alter><octave>4</octave></pitch>", pitch.getPitchXml());
+        assertEquals("<accidental>flat</accidental>", pitch.getAccidentalXml());
+    }
+
+    @Test
+    public void keepsMuseImportedNaturalAccidentalOnSeparateStaff() {
+        Map<String, Integer> state = new HashMap<String, Integer>();
+        state.put("3:3:B", Integer.valueOf(0));
+        List<MuseScoreIo.MuseScoreChordNote> notes = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(59), "accidentalNatural", null, null, null,
+                        null)), 0);
+
+        MuseScoreIo.MuseImportedPitchXml pitch = MuseScoreIo.buildMuseImportedPitchXml(notes.get(0), -1, 4, state);
+
+        assertEquals("<pitch><step>B</step><octave>3</octave></pitch>", pitch.getPitchXml());
+        assertEquals("<accidental>natural</accidental>", pitch.getAccidentalXml());
+        assertEquals(Integer.valueOf(0), state.get("4:3:B"));
+    }
+
+    @Test
+    public void keepsMuseImportedVoiceAccidentalStateByStaffPitchKey() {
+        Map<String, Integer> state = new HashMap<String, Integer>();
+        List<MuseScoreIo.MuseScoreChordNote> notes = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(62), null, null, null, null, null),
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(63), null, null, null, null, null),
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(62), null, null, null, null, null),
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(59), null, null, null, null, null)), 0);
+
+        List<MuseScoreIo.MuseImportedPitchXml> pitches = MuseScoreIo.buildMuseImportedVoicePitchXmlItems(notes, 4, 4,
+                state);
+
+        assertEquals("<pitch><step>D</step><octave>4</octave></pitch>", pitches.get(0).getPitchXml());
+        assertEquals("<accidental>natural</accidental>", pitches.get(0).getAccidentalXml());
+        assertEquals("<pitch><step>D</step><alter>1</alter><octave>4</octave></pitch>",
+                pitches.get(1).getPitchXml());
+        assertEquals("<accidental>sharp</accidental>", pitches.get(1).getAccidentalXml());
+        assertEquals("<pitch><step>D</step><octave>4</octave></pitch>", pitches.get(2).getPitchXml());
+        assertEquals("<accidental>natural</accidental>", pitches.get(2).getAccidentalXml());
+        assertEquals("<pitch><step>B</step><octave>3</octave></pitch>", pitches.get(3).getPitchXml());
+        assertEquals("", pitches.get(3).getAccidentalXml());
+        assertEquals(Integer.valueOf(0), state.get("4:4:D"));
+        assertEquals(Integer.valueOf(0), state.get("4:3:B"));
+        assertNull(state.get("1:4:D"));
+    }
+
+    @Test
+    public void buildsMuseImportedRestAndPitchedNoteXml() {
+        String timeModificationXml = "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>";
+        assertEquals(
+                "<note><rest/><duration>160</duration><voice>2</voice><type>eighth</type><dot/>"
+                        + timeModificationXml
+                        + "<beam number=\"1\">begin</beam><staff>3</staff><notations><tuplet type=\"start\" number=\"1\"/></notations></note>",
+                MuseScoreIo.buildMuseImportedRestNoteXml(160, 2, "eighth", 1, timeModificationXml,
+                        "<beam number=\"1\">begin</beam>", 3, Arrays.asList("<tuplet type=\"start\" number=\"1\"/>")));
+
+        List<MuseScoreIo.MuseScoreChordNote> notes = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(61), "accidentalSharp", null,
+                        MuseScoreIo.parseMuseTieFlags(true, false, true, false), null, null)), 0);
+        MuseScoreIo.MuseImportedPitchXml pitch = MuseScoreIo.buildMuseImportedPitchXml(notes.get(0), 0, 1,
+                new HashMap<String, Integer>());
+        assertEquals(
+                "<note><chord/><grace slash=\"yes\"/><pitch><step>C</step><alter>1</alter><octave>4</octave></pitch><tie type=\"start\"/><voice>4</voice><type>16th</type><accidental>sharp</accidental><staff>1</staff><notations><tied type=\"start\"/></notations></note>",
+                MuseScoreIo.buildMuseImportedPitchedNoteXml(true, true, true, pitch,
+                        MuseScoreIo.parseMuseTieFlags(true, false, true, false), 120, 4, "16th", 0, "", "", 1,
+                        Arrays.asList("<tied type=\"start\"/>")));
+    }
+
+    @Test
+    public void buildsMuseImportedRestAndChordEventXml() {
+        MuseScoreIo.TupletMusicXml tuplet = MuseScoreIo.buildTupletMusicXml(new MuseScoreIo.TimeModification(3, 2),
+                Arrays.asList(new MuseScoreIo.TupletStart(1, "actual", "yes")), null);
+        assertEquals(
+                "<note><rest/><duration>240</duration><voice>2</voice><type>eighth</type>"
+                        + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>"
+                        + "<beam number=\"1\">begin</beam><staff>1</staff><notations><tuplet type=\"start\" number=\"1\" bracket=\"yes\" show-number=\"actual\"/></notations></note>",
+                MuseScoreIo.buildMuseImportedRestEventXml(240, Integer.valueOf(240), 480, 2, 1, tuplet,
+                        "<beam number=\"1\">begin</beam>"));
+
+        List<MuseScoreIo.MuseScoreChordNote> notes = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(61), "accidentalSharp", null,
+                        MuseScoreIo.parseMuseTieFlags(true, false, true, false), "1", "2"),
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(64), null, null, null, null, null)), 0);
+        String xml = MuseScoreIo.buildMuseImportedChordEventXml(notes, 0, 1, new HashMap<String, Integer>(), 240,
+                Integer.valueOf(240), 480, 2, false, false, null, "<beam number=\"1\">begin</beam>",
+                Arrays.asList(Integer.valueOf(2)), null, Arrays.asList("<ornaments><trill-mark/></ornaments>"),
+                Arrays.asList("staccato"), Arrays.asList("up-bow"));
+
+        assertEquals(
+                "<note><pitch><step>C</step><alter>1</alter><octave>4</octave></pitch><tie type=\"start\"/><duration>240</duration><voice>2</voice><type>eighth</type><accidental>sharp</accidental><beam number=\"1\">begin</beam><staff>1</staff><notations><slur type=\"start\" number=\"2\"/><ornaments><trill-mark/></ornaments><articulations><staccato/></articulations><technical><up-bow/><fingering>1</fingering><string>2</string></technical><tied type=\"start\"/></notations></note>"
+                        + "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type><staff>1</staff></note>",
+                xml);
+
+        String graceXml = MuseScoreIo.buildMuseImportedChordEventXml(notes, 0, 1, new HashMap<String, Integer>(),
+                240, Integer.valueOf(240), 480, 2, true, true, null, "", null, null, null, null, null);
+        assertEquals(
+                "<note><grace slash=\"yes\"/><pitch><step>C</step><alter>1</alter><octave>4</octave></pitch><tie type=\"start\"/><voice>2</voice><type>eighth</type><accidental>sharp</accidental><staff>1</staff><notations><technical><fingering>1</fingering><string>2</string></technical><tied type=\"start\"/></notations></note>"
+                        + "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><voice>2</voice><type>eighth</type><staff>1</staff></note>",
+                graceXml);
+    }
+
+    @Test
+    public void buildsMuseImportedVoiceCursorXmlHelpers() {
+        assertEquals("<forward><duration>120</duration><voice>2</voice><staff>3</staff></forward>",
+                MuseScoreIo.buildMuseImportedForwardXml(120, 2, 3));
+        assertEquals("", MuseScoreIo.buildMuseImportedForwardXml(0, 2, 3));
+        assertEquals(false, MuseScoreIo.shouldClampMuseImportedTimedEvent(360, 120, 480, 0));
+        assertEquals(true, MuseScoreIo.shouldClampMuseImportedTimedEvent(361, 120, 480, 0));
+        assertEquals(false, MuseScoreIo.shouldClampMuseImportedTimedEvent(361, 120, 480, 1));
+
+        assertEquals("<note><rest/><duration>120</duration><voice>2</voice><type>16th</type><staff>3</staff></note>",
+                MuseScoreIo.buildMuseImportedTailRestNoteXml(360, 480, 0, 480, 2, 3));
+        assertEquals("", MuseScoreIo.buildMuseImportedTailRestNoteXml(470, 480, 10, 480, 2, 3));
+        assertEquals("", MuseScoreIo.buildMuseImportedTailRestNoteXml(480, 480, 0, 480, 2, 3));
+    }
+
+    @Test
+    public void buildsMuseImportedPlacedUntimedEventXml() {
+        assertEquals(
+                "<forward><duration>120</duration><voice>2</voice><staff>3</staff></forward><direction><direction-type><dynamics><mf/></dynamics></direction-type><sound dynamics=\"90.00\"/><staff>3</staff><voice>2</voice></direction>",
+                MuseScoreIo.buildMuseImportedPlacedDynamicXml(240, 120, 2, 3, "mf", Double.valueOf(90.0d)));
+        assertEquals(
+                "<direction><direction-type><words>dolce</words></direction-type><staff>4</staff><voice>1</voice></direction>",
+                MuseScoreIo.buildMuseImportedPlacedDirectionXml(100, 120, 1, 4,
+                        "<direction><direction-type><words>dolce</words></direction-type></direction>"));
+        assertEquals(
+                "<forward><duration>60</duration><voice>2</voice><staff>3</staff></forward><barline location=\"middle\"><bar-style>light-light</bar-style></barline>",
+                MuseScoreIo.buildMuseImportedPlacedBarlineXml(180, 120, 2, 3,
+                        "<barline location=\"middle\"><bar-style>light-light</bar-style></barline>"));
+    }
+
+    @Test
+    public void buildsMuseImportedVoiceXmlFromTypedEvents() {
+        List<MuseScoreIo.MuseScoreChordNote> notes = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(60), null, null, null, null, null)), 0);
+        List<MuseScoreIo.MuseImportedVoiceEvent> events = Arrays.asList(
+                MuseScoreIo.MuseImportedVoiceEvent.dynamic(Integer.valueOf(120), Integer.valueOf(1), "mf",
+                        Double.valueOf(90.0d)),
+                MuseScoreIo.MuseImportedVoiceEvent.chord(Integer.valueOf(240), 120, null, Integer.valueOf(1), notes,
+                        false, false, null, null, null, null, null, null, null, null, null),
+                MuseScoreIo.MuseImportedVoiceEvent.rest(Integer.valueOf(360), 120, null, Integer.valueOf(1), null,
+                        null, null, null));
+
+        assertEquals(
+                "<forward><duration>120</duration><voice>2</voice><staff>1</staff></forward><direction><direction-type><dynamics><mf/></dynamics></direction-type><sound dynamics=\"90.00\"/><staff>1</staff><voice>2</voice></direction>"
+                        + "<forward><duration>120</duration><voice>2</voice><staff>1</staff></forward><note><pitch><step>C</step><octave>4</octave></pitch><duration>120</duration><voice>2</voice><type>16th</type><staff>1</staff></note>"
+                        + "<note><rest/><duration>120</duration><voice>2</voice><type>16th</type><staff>1</staff></note>"
+                        + "<note><rest/><duration>120</duration><voice>2</voice><type>16th</type><staff>1</staff></note>",
+                MuseScoreIo.buildMuseImportedVoiceXml(4, 4, 0, 1, 2, 600, 480, false, events));
+    }
+
+    @Test
+    public void buildsMuseImportedVoiceXmlWithImplicitBeamsTupletsAndClamp() {
+        List<MuseScoreIo.MuseScoreChordNote> first = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(60), null, null, null, null, null)), 0);
+        List<MuseScoreIo.MuseScoreChordNote> second = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(62), null, null, null, null, null)), 0);
+        List<MuseScoreIo.MuseImportedVoiceEvent> beamedEvents = Arrays.asList(
+                MuseScoreIo.MuseImportedVoiceEvent.chord(Integer.valueOf(0), 240, null, Integer.valueOf(1), first,
+                        false, false, null, null, null, null, null, null, null, null, null),
+                MuseScoreIo.MuseImportedVoiceEvent.chord(Integer.valueOf(240), 240, null, Integer.valueOf(1), second,
+                        false, false, null, null, null, null, null, null, null, null, null));
+
+        assertEquals(
+                "<note><pitch><step>C</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type><beam number=\"1\">begin</beam><staff>1</staff></note>"
+                        + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type><beam number=\"1\">end</beam><staff>1</staff></note>",
+                MuseScoreIo.buildMuseImportedVoiceXml(4, 4, 0, 1, 1, 480, 480, true, beamedEvents));
+
+        List<MuseScoreIo.MuseImportedVoiceEvent> tupletEvents = Arrays.asList(
+                MuseScoreIo.MuseImportedVoiceEvent.rest(Integer.valueOf(0), 160, Integer.valueOf(240),
+                        Integer.valueOf(1), new MuseScoreIo.TimeModification(3, 2),
+                        Arrays.asList(new MuseScoreIo.TupletStart(1, "actual", "yes")), null, null),
+                MuseScoreIo.MuseImportedVoiceEvent.chord(Integer.valueOf(160), 160, Integer.valueOf(240),
+                        Integer.valueOf(1), first, false, false, new MuseScoreIo.TimeModification(3, 2), null,
+                        Arrays.asList(Integer.valueOf(1)), null, null, null, null, null, null));
+
+        assertEquals(
+                "<note><rest/><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><staff>1</staff><notations><tuplet type=\"start\" number=\"1\" bracket=\"yes\" show-number=\"actual\"/></notations></note>"
+                        + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><staff>1</staff><notations><tuplet type=\"stop\" number=\"1\"/></notations></note>",
+                MuseScoreIo.buildMuseImportedVoiceXml(4, 4, 0, 1, 1, 320, 480, false, tupletEvents));
+
+        List<MuseScoreIo.MuseImportedVoiceEvent> clampedEvents = Arrays.asList(
+                MuseScoreIo.MuseImportedVoiceEvent.rest(Integer.valueOf(0), 240, null, Integer.valueOf(1), null,
+                        null, null, null),
+                MuseScoreIo.MuseImportedVoiceEvent.rest(Integer.valueOf(240), 240, null, Integer.valueOf(1), null,
+                        null, null, null));
+
+        assertEquals("<note><rest/><duration>240</duration><voice>1</voice><type>eighth</type><staff>1</staff></note>",
+                MuseScoreIo.buildMuseImportedVoiceXml(4, 4, 0, 1, 1, 240, 480, false, clampedEvents));
+    }
+
+    @Test
+    public void collectsMuseImportedTypedVoiceEventsByVoice() {
+        List<MuseScoreIo.MuseScoreChordNote> notes = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(60), null, null, null, null, null)), 0);
+        List<MuseScoreIo.MuseImportedVoiceEvent> events = Arrays.asList(
+                MuseScoreIo.MuseImportedVoiceEvent.restForVoice(Integer.valueOf(360), 2, 120, null, Integer.valueOf(1),
+                        null, null, null, null),
+                MuseScoreIo.MuseImportedVoiceEvent.chordForVoice(Integer.valueOf(120), 1, 120, null, Integer.valueOf(1),
+                        notes, false, false, null, null, null, null, null, null, null, null, null),
+                MuseScoreIo.MuseImportedVoiceEvent.dynamicForVoice(Integer.valueOf(240), 2, Integer.valueOf(1), "p",
+                        null));
+
+        List<Integer> voiceNos = MuseScoreIo.resolveMuseImportedTypedVoiceNos(events);
+        assertEquals(Arrays.asList(Integer.valueOf(1), Integer.valueOf(2)), voiceNos);
+
+        List<MuseScoreIo.MuseImportedVoiceEvent> voiceTwo = MuseScoreIo.collectMuseImportedTypedVoiceEvents(events,
+                2);
+        assertEquals(2, voiceTwo.size());
+        assertEquals("dynamic", voiceTwo.get(0).getKind());
+        assertEquals("rest", voiceTwo.get(1).getKind());
+        assertEquals(2, voiceTwo.get(0).getVoiceNo());
+        assertEquals(Arrays.asList(Integer.valueOf(1)), MuseScoreIo.resolveMuseImportedTypedVoiceNos(null));
+    }
+
+    @Test
+    public void buildsMuseImportedStaffVoicesXmlWithBackups() {
+        List<MuseScoreIo.MuseScoreChordNote> c4 = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(60), null, null, null, null, null)), 0);
+        List<MuseScoreIo.MuseScoreChordNote> e4 = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(64), null, null, null, null, null)), 0);
+        MuseScoreIo.MuseScoreImportMeasureContext context = new MuseScoreIo.MuseScoreImportMeasureContext(4, 4,
+                null, false, 480, false, 0, "major", null, null, false, false, false);
+        MuseScoreIo.ParsedMuseScoreMeasure measure = MuseScoreIo.buildParsedMuseScoreMeasure(1, context,
+                Arrays.<MuseScoreIo.TimedEvent>asList(new MuseScoreIo.TimedEvent(120, false, false, 1),
+                        new MuseScoreIo.TimedEvent(120, false, false, 2)));
+        MuseScoreIo.ParsedMuseScorePart part = new MuseScoreIo.ParsedMuseScorePart("P1", "Piano", null,
+                Arrays.asList(new MuseScoreIo.ParsedMuseScoreStaff("1", "G", 2, Arrays.asList(measure))));
+        MuseScoreIo.MuseImportedPartVoiceIdResolver resolver = MuseScoreIo.buildMuseImportedPartVoiceIdResolver(part);
+        List<MuseScoreIo.MuseImportedVoiceEvent> events = Arrays.asList(
+                MuseScoreIo.MuseImportedVoiceEvent.chordForVoice(Integer.valueOf(0), 2, 120, null, Integer.valueOf(1),
+                        e4, false, false, null, null, null, null, null, null, null, null, null),
+                MuseScoreIo.MuseImportedVoiceEvent.chordForVoice(Integer.valueOf(0), 1, 120, null, Integer.valueOf(1),
+                        c4, false, false, null, null, null, null, null, null, null, null, null));
+
+        assertEquals("<backup><duration>480</duration></backup>", MuseScoreIo.buildMuseImportedBackupXml(480));
+        assertEquals(
+                "<note><pitch><step>C</step><octave>4</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type><staff>1</staff></note><note><rest/><duration>360</duration><voice>1</voice><type>eighth</type><dot/><staff>1</staff></note>"
+                        + "<backup><duration>480</duration></backup>"
+                        + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>120</duration><voice>2</voice><type>16th</type><staff>1</staff></note><note><rest/><duration>360</duration><voice>2</voice><type>eighth</type><dot/><staff>1</staff></note>",
+                MuseScoreIo.buildMuseImportedStaffVoicesXml(4, 4, 0, 1, 480, 480, false, resolver, events));
+    }
+
+    @Test
+    public void buildsMuseImportedMeasureXmlFromTypedStaffEvents() {
+        List<MuseScoreIo.MuseScoreChordNote> c4 = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(60), null, null, null, null, null)), 0);
+        List<MuseScoreIo.MuseScoreChordNote> c3 = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(48), null, null, null, null, null)), 0);
+        MuseScoreIo.MuseScoreImportMeasureContext context = new MuseScoreIo.MuseScoreImportMeasureContext(4, 4,
+                null, false, 480, false, 0, "major", null, null, false, false, false);
+        MuseScoreIo.ParsedMuseScoreMeasure measure = MuseScoreIo.buildParsedMuseScoreMeasure(1, context,
+                Arrays.<MuseScoreIo.TimedEvent>asList(new MuseScoreIo.TimedEvent(120, false, false, 1)));
+        MuseScoreIo.ParsedMuseScorePart part = new MuseScoreIo.ParsedMuseScorePart("P1", "Piano", null,
+                Arrays.asList(new MuseScoreIo.ParsedMuseScoreStaff("1", "G", 2, Arrays.asList(measure)),
+                        new MuseScoreIo.ParsedMuseScoreStaff("2", "F", 4, Arrays.asList(measure))));
+        Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>> eventsByStaff = new HashMap<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>();
+        eventsByStaff.put(Integer.valueOf(1),
+                Arrays.asList(MuseScoreIo.MuseImportedVoiceEvent.chordForVoice(Integer.valueOf(0), 1, 120, null,
+                        Integer.valueOf(1), c4, false, false, null, null, null, null, null, null, null, null,
+                        null)));
+        eventsByStaff.put(Integer.valueOf(2),
+                Arrays.asList(MuseScoreIo.MuseImportedVoiceEvent.chordForVoice(Integer.valueOf(0), 1, 120, null,
+                        Integer.valueOf(2), c3, false, false, null, null, null, null, null, null, null, null,
+                        null)));
+
+        assertEquals(
+                "<measure number=\"1\"><attributes><divisions>480</divisions><key><fifths>0</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time><staves>2</staves><clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign><line>4</line></clef><miscellaneous><m/></miscellaneous></attributes>"
+                        + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type><staff>1</staff></note><note><rest/><duration>360</duration><voice>1</voice><type>eighth</type><dot/><staff>1</staff></note>"
+                        + "<backup><duration>480</duration></backup>"
+                        + "<note><pitch><step>C</step><octave>3</octave></pitch><duration>120</duration><voice>2</voice><type>16th</type><staff>2</staff></note><note><rest/><duration>360</duration><voice>2</voice><type>eighth</type><dot/><staff>2</staff></note>"
+                        + "<barline location=\"right\"><bar-style>light-heavy</bar-style></barline></measure>",
+                MuseScoreIo.buildMuseImportedMeasureXml(part, measure, 0, 0, 1, false, 480, "<m/>", true, false,
+                        MuseScoreIo.buildMuseImportedPartVoiceIdResolver(part), eventsByStaff));
+    }
+
+    @Test
+    public void buildsMuseImportedPartXmlFromTypedMeasureEvents() {
+        List<MuseScoreIo.MuseScoreChordNote> c4 = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(60), null, null, null, null, null)), 0);
+        MuseScoreIo.MuseScoreImportMeasureContext firstContext = new MuseScoreIo.MuseScoreImportMeasureContext(4, 4,
+                null, false, 480, false, 0, "major", null, null, false, false, false);
+        MuseScoreIo.MuseScoreImportMeasureContext secondContext = new MuseScoreIo.MuseScoreImportMeasureContext(3, 4,
+                null, true, 360, false, 1, "minor", null, null, false, true, false);
+        MuseScoreIo.ParsedMuseScoreMeasure firstMeasure = MuseScoreIo.buildParsedMuseScoreMeasure(1, firstContext,
+                Arrays.<MuseScoreIo.TimedEvent>asList(new MuseScoreIo.TimedEvent(120, false, false, 1)));
+        MuseScoreIo.ParsedMuseScoreMeasure secondMeasure = MuseScoreIo.buildParsedMuseScoreMeasure(2, secondContext,
+                Arrays.<MuseScoreIo.TimedEvent>asList(new MuseScoreIo.TimedEvent(120, false, false, 1)));
+        MuseScoreIo.ParsedMuseScorePart part = new MuseScoreIo.ParsedMuseScorePart("P1", "Piano", null,
+                Arrays.asList(new MuseScoreIo.ParsedMuseScoreStaff("1", "G", 2,
+                        Arrays.asList(firstMeasure, secondMeasure))));
+        Map<Integer, Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>> eventsByMeasureStaff = new HashMap<Integer, Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>>();
+        Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>> firstEvents = new HashMap<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>();
+        firstEvents.put(Integer.valueOf(1),
+                Arrays.asList(MuseScoreIo.MuseImportedVoiceEvent.chordForVoice(Integer.valueOf(0), 1, 120, null,
+                        Integer.valueOf(1), c4, false, false, null, null, null, null, null, null, null, null,
+                        null)));
+        eventsByMeasureStaff.put(Integer.valueOf(0), firstEvents);
+
+        assertEquals(
+                "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions><key><fifths>0</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef><miscellaneous><m/></miscellaneous></attributes>"
+                        + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type><staff>1</staff></note><note><rest/><duration>360</duration><voice>1</voice><type>eighth</type><dot/><staff>1</staff></note></measure>"
+                        + "<measure number=\"2\"><attributes><divisions>480</divisions><key><fifths>1</fifths><mode>minor</mode></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>"
+                        + "<note><rest/><duration>360</duration><voice>1</voice><type>eighth</type><dot/><staff>1</staff></note><barline location=\"right\"><bar-style>light-heavy</bar-style><repeat direction=\"backward\"/></barline></measure></part>",
+                MuseScoreIo.buildMuseImportedPartXml(part, 0, 480, "<m/>", false, 4, 4, null, 0, "major",
+                        eventsByMeasureStaff));
+    }
+
+    @Test
+    public void bridgesTimedEventsToTypedRestImportEvents() {
+        MuseScoreIo.MuseScoreImportMeasureContext context = new MuseScoreIo.MuseScoreImportMeasureContext(4, 4,
+                null, false, 480, false, 0, "major", null, null, false, false, false);
+        MuseScoreIo.ParsedMuseScoreMeasure staffOneMeasure = MuseScoreIo.buildParsedMuseScoreMeasure(1, context,
+                Arrays.asList(new MuseScoreIo.TimedEvent(120, false, false, 2, 240)));
+        MuseScoreIo.ParsedMuseScoreMeasure staffTwoMeasure = MuseScoreIo.buildParsedMuseScoreMeasure(1, context,
+                Arrays.asList(new MuseScoreIo.TimedEvent(480, false, false, 1, 0)));
+        MuseScoreIo.ParsedMuseScorePart part = new MuseScoreIo.ParsedMuseScorePart("P1", "Piano", null,
+                Arrays.asList(new MuseScoreIo.ParsedMuseScoreStaff("1", "G", 2, Arrays.asList(staffOneMeasure)),
+                        new MuseScoreIo.ParsedMuseScoreStaff("2", "F", 4, Arrays.asList(staffTwoMeasure))));
+
+        List<MuseScoreIo.MuseImportedVoiceEvent> staffOneEvents = MuseScoreIo.buildMuseImportedRestVoiceEvents(
+                staffOneMeasure.getEvents(), 1);
+        assertEquals(1, staffOneEvents.size());
+        assertEquals("rest", staffOneEvents.get(0).getKind());
+        assertEquals(2, staffOneEvents.get(0).getVoiceNo());
+        assertEquals(240, staffOneEvents.get(0).getEventAtDiv(0));
+        assertEquals(Integer.valueOf(1), staffOneEvents.get(0).getStaffNo());
+
+        Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>> byStaff = MuseScoreIo
+                .buildMuseImportedRestStaffEventsByStaffNo(part, 0, staffOneMeasure);
+        assertEquals(2, byStaff.size());
+        assertEquals(1, byStaff.get(Integer.valueOf(1)).iterator().next().getStaffNo().intValue());
+        assertEquals(2, byStaff.get(Integer.valueOf(2)).iterator().next().getStaffNo().intValue());
+
+        assertEquals(
+                "<measure number=\"1\"><attributes><divisions>480</divisions><key><fifths>0</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time><staves>2</staves><clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign><line>4</line></clef></attributes>"
+                        + "<forward><duration>240</duration><voice>1</voice><staff>1</staff></forward><note><rest/><duration>120</duration><voice>1</voice><type>16th</type><staff>1</staff></note><note><rest/><duration>120</duration><voice>1</voice><type>16th</type><staff>1</staff></note>"
+                        + "<backup><duration>480</duration></backup><note><rest/><duration>480</duration><voice>2</voice><type>quarter</type><staff>2</staff></note>"
+                        + "<barline location=\"right\"><bar-style>light-heavy</bar-style></barline></measure>",
+                MuseScoreIo.buildMuseImportedMeasureXml(part, staffOneMeasure, 0, 0, 1, false, 480, "", true, false,
+                        MuseScoreIo.buildMuseImportedPartVoiceIdResolver(part), byStaff));
+    }
+
+    @Test
+    public void advancesMuseImportedVoiceCursorForEventLoop() {
+        MuseScoreIo.MuseImportedVoiceCursorStep lead = MuseScoreIo.advanceMuseImportedVoiceCursorForEvent(
+                Integer.valueOf(240), 120, 120, 480, 0, 2, 3);
+
+        assertEquals(240, lead.getEventAtDiv());
+        assertEquals("<forward><duration>120</duration><voice>2</voice><staff>3</staff></forward>",
+                lead.getForwardXml());
+        assertEquals(240, lead.getOccupiedAfterLead());
+        assertEquals(360, lead.getOccupiedAfterTimed());
+        assertEquals(false, lead.isClamped());
+
+        MuseScoreIo.MuseImportedVoiceCursorStep sameCursor = MuseScoreIo.advanceMuseImportedVoiceCursorForEvent(null,
+                360, 0, 480, 0, 2, 3);
+        assertEquals(360, sameCursor.getEventAtDiv());
+        assertEquals("", sameCursor.getForwardXml());
+        assertEquals(360, sameCursor.getOccupiedAfterTimed());
+
+        MuseScoreIo.MuseImportedVoiceCursorStep clamped = MuseScoreIo.advanceMuseImportedVoiceCursorForEvent(
+                Integer.valueOf(420), 360, 120, 480, 0, 2, 3);
+        assertEquals(true, clamped.isClamped());
+        assertEquals(420, clamped.getOccupiedAfterLead());
+        assertEquals(420, clamped.getOccupiedAfterTimed());
     }
 
     @Test
@@ -1234,6 +1772,34 @@ public class MuseScoreIoTest {
         assertEquals(2, events.size());
         assertEquals(120, events.get(0).getAtDiv());
         assertEquals(480, events.get(1).getAtDiv());
+    }
+
+    @Test
+    public void convertsTimedEventsToTypedRestEvents() {
+        MuseScoreIo.MuseScoreImportMeasureContext context = new MuseScoreIo.MuseScoreImportMeasureContext(4, 4,
+                null, false, 480, false, 0, "major", null, null, false, false, false);
+        MuseScoreIo.TimedEvent later = new MuseScoreIo.TimedEvent(120, false, false, 2, 240);
+        MuseScoreIo.TimedEvent earlier = new MuseScoreIo.TimedEvent(120, false, false, 1, 0);
+        later.getTupletStops().add(Integer.valueOf(3));
+        MuseScoreIo.ParsedMuseScoreMeasure measure = MuseScoreIo.buildParsedMuseScoreMeasure(1, context,
+                Arrays.asList(later, earlier));
+
+        List<MuseScoreIo.MuseImportedVoiceEvent> events = MuseScoreIo.collectMuseImportedTypedRestEvents(measure, 4);
+
+        assertEquals(2, events.size());
+        assertEquals("rest", events.get(0).getKind());
+        assertEquals(1, events.get(0).getVoiceNo());
+        assertEquals(0, events.get(0).getEventAtDiv(-1));
+        assertEquals(Integer.valueOf(4), events.get(0).getStaffNo());
+        assertEquals(2, events.get(1).getVoiceNo());
+        assertEquals(240, events.get(1).getEventAtDiv(-1));
+        assertEquals(Arrays.asList(Integer.valueOf(3)), events.get(1).getTupletStops());
+
+        assertEquals(
+                "<note><rest/><duration>120</duration><voice>1</voice><type>16th</type><staff>4</staff></note><note><rest/><duration>360</duration><voice>1</voice><type>eighth</type><dot/><staff>4</staff></note>"
+                        + "<backup><duration>480</duration></backup>"
+                        + "<forward><duration>240</duration><voice>2</voice><staff>4</staff></forward><note><rest/><duration>120</duration><voice>2</voice><type>16th</type><staff>4</staff><notations><tuplet type=\"stop\" number=\"3\"/></notations></note><note><rest/><duration>120</duration><voice>2</voice><type>16th</type><staff>4</staff></note>",
+                MuseScoreIo.buildMuseImportedStaffVoicesXml(4, 4, 0, 4, 480, 480, false, null, events));
     }
 
     @Test
@@ -1353,6 +1919,28 @@ public class MuseScoreIoTest {
         assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><score-partwise version=\"4.0\"><work><work-title>Work &amp; Title</work-title><work-number>Op.1</work-number></work><movement-title>Movement</movement-title><movement-number>1</movement-number><credit page=\"1\"><credit-type>subtitle</credit-type><credit-words>Subtitle</credit-words></credit><identification><creator type=\"composer\">Composer</creator></identification><part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list><part id=\"P1\"></part></score-partwise>",
                 MuseScoreIo.buildMuseScoreImportDocumentXml(Arrays.asList(part), metadata,
                         Arrays.asList("<part id=\"P1\"></part>")));
+
+        List<MuseScoreIo.MuseScoreChordNote> c4 = MuseScoreIo.parseMuseChordNotes(Arrays.asList(
+                new MuseScoreIo.MuseScoreChordNoteInput(Integer.valueOf(60), null, null, null, null, null)), 0);
+        MuseScoreIo.MuseScoreImportMeasureContext context = new MuseScoreIo.MuseScoreImportMeasureContext(4, 4,
+                null, false, 480, false, 0, "major", null, null, false, false, false);
+        MuseScoreIo.ParsedMuseScoreMeasure measure = MuseScoreIo.buildParsedMuseScoreMeasure(1, context,
+                Arrays.<MuseScoreIo.TimedEvent>asList(new MuseScoreIo.TimedEvent(120, false, false, 1)));
+        MuseScoreIo.ParsedMuseScorePart typedPart = new MuseScoreIo.ParsedMuseScorePart("P1", "Piano", null,
+                Arrays.asList(new MuseScoreIo.ParsedMuseScoreStaff("1", "G", 2, Arrays.asList(measure))));
+        Map<Integer, Map<Integer, Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>>> eventsByPart = new HashMap<Integer, Map<Integer, Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>>>();
+        Map<Integer, Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>> eventsByMeasure = new HashMap<Integer, Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>>();
+        Map<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>> eventsByStaff = new HashMap<Integer, Collection<MuseScoreIo.MuseImportedVoiceEvent>>();
+        eventsByStaff.put(Integer.valueOf(1),
+                Arrays.asList(MuseScoreIo.MuseImportedVoiceEvent.chordForVoice(Integer.valueOf(0), 1, 120, null,
+                        Integer.valueOf(1), c4, false, false, null, null, null, null, null, null, null, null,
+                        null)));
+        eventsByMeasure.put(Integer.valueOf(0), eventsByStaff);
+        eventsByPart.put(Integer.valueOf(0), eventsByMeasure);
+
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><score-partwise version=\"4.0\"><work><work-title>Work &amp; Title</work-title><work-number>Op.1</work-number></work><movement-title>Movement</movement-title><movement-number>1</movement-number><credit page=\"1\"><credit-type>subtitle</credit-type><credit-words>Subtitle</credit-words></credit><identification><creator type=\"composer\">Composer</creator></identification><part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions><key><fifths>0</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type><staff>1</staff></note><note><rest/><duration>360</duration><voice>1</voice><type>eighth</type><dot/><staff>1</staff></note><barline location=\"right\"><bar-style>light-heavy</bar-style></barline></measure></part></score-partwise>",
+                MuseScoreIo.buildMuseScoreImportDocumentXml(Arrays.asList(typedPart), metadata, 480, "", false, 4,
+                        4, null, 0, "major", eventsByPart));
     }
 
     @Test
