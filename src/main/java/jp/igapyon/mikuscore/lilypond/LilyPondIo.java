@@ -270,7 +270,91 @@ public final class LilyPondIo {
         abc.append(abcBody).append('\n');
         String xml = MusicXmlIo.normalizeImportedMusicXmlText(
                 AbcIo.musicXmlFromAbc(abc.toString(), new AbcIo.AbcImportOptions()));
+        xml = addNativePedalCommandsToMusicXml(xml, body);
         return composer.isEmpty() ? xml : addComposerToMusicXml(xml, composer);
+    }
+
+    private static String addNativePedalCommandsToMusicXml(String xml, String body) {
+        Matcher matcher = Pattern.compile("\\\\(?:sustainOn|sustainOff|sostenutoOn|sostenutoOff|unaCorda|treCorde)")
+                .matcher(stripLilyComments(String.valueOf(body == null ? "" : body)));
+        if (!matcher.find()) {
+            return xml;
+        }
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        if (doc == null || doc.getDocumentElement() == null) {
+            return xml;
+        }
+        Element firstMeasure = firstMusicXmlMeasure(doc);
+        if (firstMeasure == null) {
+            return xml;
+        }
+        Node insertBefore = firstDirectChild(firstMeasure, "note");
+        matcher.reset();
+        while (matcher.find()) {
+            Element direction = buildLilyPedalDirection(doc, matcher.group().substring(1));
+            if (direction == null) {
+                continue;
+            }
+            if (insertBefore == null) {
+                firstMeasure.appendChild(direction);
+            } else {
+                firstMeasure.insertBefore(direction, insertBefore);
+            }
+        }
+        return MusicXmlIo.prettyPrintMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc));
+    }
+
+    private static Element firstMusicXmlMeasure(Document doc) {
+        if (doc == null || doc.getDocumentElement() == null) {
+            return null;
+        }
+        Element part = firstDirectChild(doc.getDocumentElement(), "part");
+        return firstDirectChild(part, "measure");
+    }
+
+    private static Element buildLilyPedalDirection(Document doc, String command) {
+        String type = "";
+        String number = "";
+        String words = "";
+        if ("sustainOn".equals(command)) {
+            type = "start";
+            number = "1";
+        } else if ("sustainOff".equals(command)) {
+            type = "stop";
+            number = "1";
+        } else if ("sostenutoOn".equals(command)) {
+            type = "start";
+            number = "2";
+            words = "sost. ped.";
+        } else if ("sostenutoOff".equals(command)) {
+            type = "stop";
+            number = "2";
+        } else if ("unaCorda".equals(command)) {
+            type = "start";
+            number = "3";
+            words = "una corda";
+        } else if ("treCorde".equals(command)) {
+            type = "stop";
+            number = "3";
+            words = "tre corde";
+        } else {
+            return null;
+        }
+        Element direction = doc.createElement("direction");
+        Element directionType = doc.createElement("direction-type");
+        Element pedal = doc.createElement("pedal");
+        pedal.setAttribute("type", type);
+        pedal.setAttribute("number", number);
+        directionType.appendChild(pedal);
+        direction.appendChild(directionType);
+        if (!words.isEmpty()) {
+            Element wordsType = doc.createElement("direction-type");
+            Element wordsElement = doc.createElement("words");
+            wordsElement.setTextContent(words);
+            wordsType.appendChild(wordsElement);
+            direction.appendChild(wordsType);
+        }
+        return direction;
     }
 
     private static String parseHeaderField(String source, String field) {
@@ -399,7 +483,7 @@ public final class LilyPondIo {
                 highest = Math.max(highest, midiKey.intValue());
             }
         }
-        return count > 0 && highest < 60 ? "bass" : "";
+        return count > 0 ? (highest < 60 ? "bass" : "treble") : "";
     }
 
     private static Integer lilyPitchTokenToMidiKey(String token) {
@@ -549,12 +633,13 @@ public final class LilyPondIo {
     private static String parseLilyBodyToAbc(String body) {
         LilyRelativeBlock relative = unwrapRelativeBlock(body);
         Matcher matcher = Pattern.compile(
-                "<[^>]+>\\d*\\.{0,3}(?:\\*\\d+)?~?|[a-grs](?:isis|eses|is|es)?[,']*\\d*\\.{0,3}(?:\\*\\d+)?~?|[|:]+")
+                "\\\\(?:startTrillSpan|stopTrillSpan|snappizzicato|sostenutoOff|sostenutoOn|sustainOff|sustainOn|glissando|flageolet|harmonic|treCorde|unaCorda|downbow|upbow|trill|[()<>!]|pppp|ffff|ppp|fff|sfp|sfz|rfz|pp|mp|mf|ff|fp|fz|sf|p|f)|[()]|<[^>]+>\\d*\\.{0,3}(?:\\*\\d+)?~?|[a-grs](?:isis|eses|is|es)?[,']*\\d*\\.{0,3}(?:\\*\\d+)?~?|\\d+\\.{0,3}(?:\\*\\d+)?~?|[|:]+")
                 .matcher(stripUnsupportedLilyCommands(stripLilyComments(relative.getBody())));
         StringBuilder out = new StringBuilder();
         int currentDuration = 4;
         LilyRelativeState relativeState = relative.isRelativeMode() ? new LilyRelativeState(relative.getRelativeRoot())
                 : null;
+        LilyAbcTokenState tokenState = new LilyAbcTokenState();
         while (matcher.find()) {
             String token = matcher.group();
             if (token == null || token.isEmpty()) {
@@ -564,16 +649,117 @@ public final class LilyPondIo {
                 appendToken(out, "|");
                 continue;
             }
-            String abcToken = lilyNoteTokenToAbc(token, currentDuration, relativeState);
+            if (token.startsWith("\\") || "(".equals(token) || ")".equals(token)) {
+                String decoration = lilyCommandToAbcDecoration(token);
+                if (isBetweenLilyNotesCommand(token)) {
+                    tokenState.insertPrefixBeforePreviousAbcToken(out, decoration);
+                    tokenState.appendPendingAbcPrefix(lilyCommandToNextAbcDecoration(token));
+                } else if (isPreviousLilyNoteCommand(token)) {
+                    tokenState.insertPrefixBeforePreviousAbcToken(out, decoration);
+                } else if (")".equals(decoration)) {
+                    appendToken(out, decoration);
+                } else if (!decoration.isEmpty()) {
+                    tokenState.appendPendingAbcPrefix(decoration);
+                }
+                continue;
+            }
+            String abcToken = lilyNoteTokenToAbc(token, currentDuration, relativeState, tokenState);
             Integer duration = lilyTokenDuration(token);
             if (duration != null && duration.intValue() > 0) {
                 currentDuration = duration.intValue();
             }
             if (!abcToken.isEmpty()) {
-                appendToken(out, abcToken);
+                appendPlayableToken(out, abcToken, tokenState);
             }
         }
         return out.toString().replace(" | |", " |").trim();
+    }
+
+    private static String lilyCommandToAbcDecoration(String token) {
+        String command = String.valueOf(token == null ? "" : token).trim();
+        if (command.startsWith("\\")) {
+            command = command.substring(1);
+        }
+        if ("(".equals(command)) {
+            return "(";
+        }
+        if (")".equals(command)) {
+            return ")";
+        }
+        if ("<".equals(command)) {
+            return "!crescendo(!";
+        }
+        if (">".equals(command)) {
+            return "!diminuendo(!";
+        }
+        if ("!".equals(command)) {
+            return "!diminuendo)!";
+        }
+        if ("trill".equals(command)) {
+            return "!trill!";
+        }
+        if ("startTrillSpan".equals(command)) {
+            return "!trill(!";
+        }
+        if ("stopTrillSpan".equals(command)) {
+            return "!trill)!";
+        }
+        if ("glissando".equals(command)) {
+            return "!gliss-start!";
+        }
+        if ("upbow".equals(command)) {
+            return "!upbow!";
+        }
+        if ("downbow".equals(command)) {
+            return "!downbow!";
+        }
+        if ("snappizzicato".equals(command)) {
+            return "!snap!";
+        }
+        if ("flageolet".equals(command) || "harmonic".equals(command)) {
+            return "!harmonic!";
+        }
+        if (isSupportedLilyDynamic(command)) {
+            return "!" + command + "!";
+        }
+        return "";
+    }
+
+    private static String lilyCommandToNextAbcDecoration(String token) {
+        String command = String.valueOf(token == null ? "" : token).trim();
+        if (command.startsWith("\\")) {
+            command = command.substring(1);
+        }
+        if ("glissando".equals(command)) {
+            return "!gliss-stop!";
+        }
+        return "";
+    }
+
+    private static boolean isBetweenLilyNotesCommand(String token) {
+        String command = String.valueOf(token == null ? "" : token).trim();
+        if (command.startsWith("\\")) {
+            command = command.substring(1);
+        }
+        return "glissando".equals(command);
+    }
+
+    private static boolean isPreviousLilyNoteCommand(String token) {
+        String command = String.valueOf(token == null ? "" : token).trim();
+        if (command.startsWith("\\")) {
+            command = command.substring(1);
+        }
+        return "trill".equals(command) || "startTrillSpan".equals(command) || "stopTrillSpan".equals(command)
+                || "downbow".equals(command);
+    }
+
+    private static boolean isSupportedLilyDynamic(String value) {
+        String dynamic = value == null ? "" : value.trim().toLowerCase();
+        return "pppp".equals(dynamic) || "ppp".equals(dynamic) || "pp".equals(dynamic) || "p".equals(dynamic)
+                || "mp".equals(dynamic) || "mf".equals(dynamic) || "f".equals(dynamic) || "ff".equals(dynamic)
+                || "fff".equals(dynamic) || "ffff".equals(dynamic) || "fp".equals(dynamic) || "fz".equals(dynamic)
+                || "rfz".equals(dynamic) || "sf".equals(dynamic) || "sfp".equals(dynamic)
+                || "sfz".equals(dynamic);
     }
 
     private static String lilyNoteTokenToAbc(String token, int currentDuration) {
@@ -581,8 +767,17 @@ public final class LilyPondIo {
     }
 
     private static String lilyNoteTokenToAbc(String token, int currentDuration, LilyRelativeState relativeState) {
+        return lilyNoteTokenToAbc(token, currentDuration, relativeState, new LilyAbcTokenState());
+    }
+
+    private static String lilyNoteTokenToAbc(String token, int currentDuration, LilyRelativeState relativeState,
+            LilyAbcTokenState tokenState) {
         if (token.startsWith("<") && token.indexOf('>') > 0) {
-            return lilyChordTokenToAbc(token, currentDuration, relativeState);
+            return lilyChordTokenToAbc(token, currentDuration, relativeState, tokenState);
+        }
+        String durationOnly = lilyDurationOnlyTokenToAbc(token, currentDuration, tokenState);
+        if (!durationOnly.isEmpty()) {
+            return durationOnly;
         }
         Matcher matcher = Pattern.compile("^([a-grs])(isis|eses|is|es)?([,']*)(\\d+)?(\\.*)(?:\\*(\\d+))?(~?)$")
                 .matcher(token);
@@ -613,7 +808,23 @@ public final class LilyPondIo {
         } else {
             octave = 3 + countChar(octaveMarks, '\'') - countChar(octaveMarks, ',');
         }
-        return lilyAccidentalToAbc(alter) + abcPitchFromStepOctave(letter.toUpperCase(), octave) + len
+        String abcPitch = lilyAccidentalToAbc(alter) + abcPitchFromStepOctave(letter.toUpperCase(), octave);
+        tokenState.setPreviousAbcPitch(abcPitch);
+        return tokenState.consumePendingAbcPrefix() + abcPitch + len
+                + (tieStart ? "-" : "");
+    }
+
+    private static String lilyDurationOnlyTokenToAbc(String token, int currentDuration, LilyAbcTokenState tokenState) {
+        Matcher matcher = Pattern.compile("^(\\d+)(\\.*)(?:\\*(\\d+))?(~?)$").matcher(token);
+        if (!matcher.matches() || tokenState == null || tokenState.getPreviousAbcPitch().isEmpty()) {
+            return "";
+        }
+        int duration = parsePositiveInt(matcher.group(1), currentDuration);
+        String dotsText = matcher.group(2) == null ? "" : matcher.group(2);
+        int multiplier = parsePositiveInt(matcher.group(3), 1);
+        boolean tieStart = "~".equals(matcher.group(4));
+        return tokenState.consumePendingAbcPrefix() + tokenState.getPreviousAbcPitch()
+                + lilyDurationToAbcLen(duration, dotsText.length(), multiplier)
                 + (tieStart ? "-" : "");
     }
 
@@ -622,6 +833,11 @@ public final class LilyPondIo {
     }
 
     private static String lilyChordTokenToAbc(String token, int currentDuration, LilyRelativeState relativeState) {
+        return lilyChordTokenToAbc(token, currentDuration, relativeState, new LilyAbcTokenState());
+    }
+
+    private static String lilyChordTokenToAbc(String token, int currentDuration, LilyRelativeState relativeState,
+            LilyAbcTokenState tokenState) {
         Matcher matcher = Pattern.compile("^<([^>]+)>(\\d+)?(\\.*)(?:\\*(\\d+))?(~?)$").matcher(token);
         if (!matcher.matches()) {
             return "";
@@ -650,7 +866,9 @@ public final class LilyPondIo {
         if (relativeState != null && firstAnchor != null) {
             relativeState.setPreviousAnchor(firstAnchor);
         }
-        return "[" + members + "]" + lilyDurationToAbcLen(duration, dotsText.length(), multiplier)
+        String abcChord = "[" + members + "]";
+        tokenState.setPreviousAbcPitch(abcChord);
+        return tokenState.consumePendingAbcPrefix() + abcChord + lilyDurationToAbcLen(duration, dotsText.length(), multiplier)
                 + (tieStart ? "-" : "");
     }
 
@@ -684,7 +902,7 @@ public final class LilyPondIo {
     }
 
     private static Integer lilyTokenDuration(String token) {
-        Matcher matcher = Pattern.compile("^(?:<[^>]+>|[a-grs](?:isis|eses|is|es)?[,']*)(\\d+)?\\.*(?:\\*\\d+)?~?$")
+        Matcher matcher = Pattern.compile("^(?:<[^>]+>|[a-grs](?:isis|eses|is|es)?[,']*|)(\\d+)?\\.*(?:\\*\\d+)?~?$")
                 .matcher(token);
         if (!matcher.matches() || matcher.group(1) == null || matcher.group(1).isEmpty()) {
             return null;
@@ -819,6 +1037,17 @@ public final class LilyPondIo {
             out.append(' ');
         }
         out.append(token);
+    }
+
+    private static void appendPlayableToken(StringBuilder out, String token, LilyAbcTokenState tokenState) {
+        if (out.length() > 0) {
+            out.append(' ');
+        }
+        int tokenStart = out.length();
+        out.append(token);
+        if (tokenState != null) {
+            tokenState.setPreviousAbcTokenStart(tokenStart);
+        }
     }
 
     private static int countChar(String text, char ch) {
@@ -1070,6 +1299,44 @@ public final class LilyPondIo {
 
         private void setPreviousAnchor(LilyRelativeAnchor previousAnchor) {
             this.previousAnchor = previousAnchor;
+        }
+    }
+
+    private static final class LilyAbcTokenState {
+        private String previousAbcPitch = "";
+        private String pendingAbcPrefix = "";
+        private int previousAbcTokenStart = -1;
+
+        private String getPreviousAbcPitch() {
+            return previousAbcPitch;
+        }
+
+        private void setPreviousAbcPitch(String previousAbcPitch) {
+            this.previousAbcPitch = previousAbcPitch == null ? "" : previousAbcPitch;
+        }
+
+        private void appendPendingAbcPrefix(String prefix) {
+            pendingAbcPrefix += prefix == null ? "" : prefix;
+        }
+
+        private String consumePendingAbcPrefix() {
+            String consumed = pendingAbcPrefix;
+            pendingAbcPrefix = "";
+            return consumed;
+        }
+
+        private void setPreviousAbcTokenStart(int previousAbcTokenStart) {
+            this.previousAbcTokenStart = previousAbcTokenStart;
+        }
+
+        private void insertPrefixBeforePreviousAbcToken(StringBuilder out, String prefix) {
+            String actualPrefix = prefix == null ? "" : prefix;
+            if (out == null || actualPrefix.isEmpty() || previousAbcTokenStart < 0
+                    || previousAbcTokenStart > out.length()) {
+                return;
+            }
+            out.insert(previousAbcTokenStart, actualPrefix);
+            previousAbcTokenStart += actualPrefix.length();
         }
     }
 

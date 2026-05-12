@@ -7,8 +7,13 @@ package jp.igapyon.mikuscore.lilypond;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 import jp.igapyon.mikuscore.musicxml.MusicXmlIo;
 
@@ -255,6 +260,310 @@ public class LilyPondIoTest {
         assertEquals("stop", ((org.w3c.dom.Element) doc.getElementsByTagName("tie").item(1)).getAttribute("type"));
         assertEquals("start", ((org.w3c.dom.Element) doc.getElementsByTagName("tied").item(0)).getAttribute("type"));
         assertEquals("stop", ((org.w3c.dom.Element) doc.getElementsByTagName("tied").item(1)).getAttribute("type"));
+    }
+
+    @Test
+    public void importsIsolatedDurationTokensAfterTieWithoutPitchLoss() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { a'2~ 4~ 16 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(3, doc.getElementsByTagName("note").getLength());
+        assertEquals("A", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("A", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+        assertEquals("A", doc.getElementsByTagName("step").item(2).getTextContent().trim());
+        assertEquals("4", doc.getElementsByTagName("octave").item(0).getTextContent().trim());
+        assertEquals("4", doc.getElementsByTagName("octave").item(1).getTextContent().trim());
+        assertEquals("4", doc.getElementsByTagName("octave").item(2).getTextContent().trim());
+        assertEquals("1920", doc.getElementsByTagName("duration").item(0).getTextContent().trim());
+        assertEquals("960", doc.getElementsByTagName("duration").item(1).getTextContent().trim());
+        assertEquals("240", doc.getElementsByTagName("duration").item(2).getTextContent().trim());
+        assertEquals(4, doc.getElementsByTagName("tie").getLength());
+        assertEquals(4, doc.getElementsByTagName("tied").getLength());
+    }
+
+    @Test
+    public void importsNativeDynamicCommandsAsMusicXmlDirections() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { \\p c'4 \\mf d'4 \\sfz e'4 }\n"
+                + "}";
+
+        String xml = LilyPondIo.convertLilyPondToMusicXml(lily);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+
+        assertEquals(1, doc.getElementsByTagName("p").getLength());
+        assertEquals(1, doc.getElementsByTagName("mf").getLength());
+        assertEquals(1, doc.getElementsByTagName("sfz").getLength());
+        assertEquals("C", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("D", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+        assertEquals("E", doc.getElementsByTagName("step").item(2).getTextContent().trim());
+    }
+
+    @Test
+    public void importsNativeWedgeCommandsAsMusicXmlDirections() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { c'4 \\< d'4 \\> e'4 \\! f'4 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals("crescendo", ((org.w3c.dom.Element) doc.getElementsByTagName("wedge").item(0))
+                .getAttribute("type"));
+        assertEquals("diminuendo", ((org.w3c.dom.Element) doc.getElementsByTagName("wedge").item(1))
+                .getAttribute("type"));
+        assertEquals("stop", ((org.w3c.dom.Element) doc.getElementsByTagName("wedge").item(2))
+                .getAttribute("type"));
+        assertEquals("F", doc.getElementsByTagName("step").item(3).getTextContent().trim());
+    }
+
+    @Test
+    public void importsNativeSlurMarkersAsMusicXmlSlurStartStop() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { ( c'4 d'4 ) e'4 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(2, doc.getElementsByTagName("slur").getLength());
+        assertEquals("start", ((org.w3c.dom.Element) doc.getElementsByTagName("slur").item(0))
+                .getAttribute("type"));
+        assertEquals("stop", ((org.w3c.dom.Element) doc.getElementsByTagName("slur").item(1))
+                .getAttribute("type"));
+        assertEquals("C", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("D", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+    }
+
+    @Test
+    public void importsNativeSlurCommandsAsMusicXmlSlurStartStop() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { \\( c'4 d'4 \\) e'4 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(2, doc.getElementsByTagName("slur").getLength());
+        assertEquals("start", ((org.w3c.dom.Element) doc.getElementsByTagName("slur").item(0))
+                .getAttribute("type"));
+        assertEquals("stop", ((org.w3c.dom.Element) doc.getElementsByTagName("slur").item(1))
+                .getAttribute("type"));
+        assertEquals("C", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("D", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+    }
+
+    @Test
+    public void importsNativeTrillCommandAsMusicXmlTrillMark() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { c'4 \\trill d'4 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(1, doc.getElementsByTagName("trill-mark").getLength());
+        assertEquals("C", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("D", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+        assertEquals("trill-mark", doc.getElementsByTagName("trill-mark").item(0).getNodeName());
+    }
+
+    @Test
+    public void importsNativeTrillSpanCommandsAsMusicXmlWavyLineStartStop() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { c'4 \\startTrillSpan d'4 \\stopTrillSpan e'4 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(2, doc.getElementsByTagName("wavy-line").getLength());
+        assertEquals("start", ((org.w3c.dom.Element) doc.getElementsByTagName("wavy-line").item(0))
+                .getAttribute("type"));
+        assertEquals("stop", ((org.w3c.dom.Element) doc.getElementsByTagName("wavy-line").item(1))
+                .getAttribute("type"));
+        assertEquals("C", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("D", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+        assertEquals("E", doc.getElementsByTagName("step").item(2).getTextContent().trim());
+    }
+
+    @Test
+    public void importsNativeGlissandoAsMusicXmlStartStop() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { c'4 \\glissando d'4 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(2, doc.getElementsByTagName("glissando").getLength());
+        assertEquals("start", ((org.w3c.dom.Element) doc.getElementsByTagName("glissando").item(0))
+                .getAttribute("type"));
+        assertEquals("stop", ((org.w3c.dom.Element) doc.getElementsByTagName("glissando").item(1))
+                .getAttribute("type"));
+        assertEquals("C", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("D", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+    }
+
+    @Test
+    public void importsNativePedalCommandsAsMusicXmlDirections() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" {\n"
+                + "    \\sustainOn c'4 \\sustainOff\n"
+                + "    \\sostenutoOn d'4 \\sostenutoOff\n"
+                + "    \\unaCorda e'4 \\treCorde\n"
+                + "  }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(6, doc.getElementsByTagName("pedal").getLength());
+        assertPedal(doc, 0, "start", "1");
+        assertPedal(doc, 1, "stop", "1");
+        assertPedal(doc, 2, "start", "2");
+        assertPedal(doc, 3, "stop", "2");
+        assertPedal(doc, 4, "start", "3");
+        assertPedal(doc, 5, "stop", "3");
+        assertEquals(true, LilyPondIoTest.musicXmlText(doc).contains("<words>sost. ped.</words>"));
+        assertEquals(true, LilyPondIoTest.musicXmlText(doc).contains("<words>una corda</words>"));
+        assertEquals(true, LilyPondIoTest.musicXmlText(doc).contains("<words>tre corde</words>"));
+    }
+
+    private static void assertPedal(Document doc, int index, String type, String number) {
+        org.w3c.dom.Element pedal = (org.w3c.dom.Element) doc.getElementsByTagName("pedal").item(index);
+        assertEquals(type, pedal.getAttribute("type"));
+        assertEquals(number, pedal.getAttribute("number"));
+    }
+
+    private static String musicXmlText(Document doc) {
+        return MusicXmlIo.serializeMusicXmlDocument(doc);
+    }
+
+    @Test
+    public void importsNativeBowCommandsAsMusicXmlTechnicalNotations() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { \\upbow c'4 d'4 \\downbow }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(1, doc.getElementsByTagName("up-bow").getLength());
+        assertEquals(1, doc.getElementsByTagName("down-bow").getLength());
+        assertEquals("C", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("D", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+    }
+
+    @Test
+    public void importsNativeSnapPizzicatoAndHarmonicCommandsAsMusicXmlNotations() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { \\snappizzicato c'4 \\flageolet d'4 \\harmonic e'4 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(1, doc.getElementsByTagName("snap-pizzicato").getLength());
+        assertEquals(2, doc.getElementsByTagName("harmonic").getLength());
+        assertEquals("C", doc.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("D", doc.getElementsByTagName("step").item(1).getTextContent().trim());
+        assertEquals("E", doc.getElementsByTagName("step").item(2).getTextContent().trim());
+    }
+
+    @Test
+    public void keepsOmittedRootRelativePedalSampleInTrebleWithFullFirstMeasureNotes() {
+        String lily = "\\relative {\n"
+                + "  c''4\\sustainOn d e g\n"
+                + "  <c, f a>1\\sustainOff\n"
+                + "  c4\\sostenutoOn e g c,\n"
+                + "  <bes d f>1\\sostenutoOff\n"
+                + "  c4\\unaCorda d e g\n"
+                + "  <d fis a>1\\treCorde\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        Element firstMeasure = measureAt(doc, 0);
+
+        assertEquals("G", directText(directChild(directChild(directChild(firstMeasure, "attributes"), "clef"), "sign")));
+        assertEquals(4, directPitchCount(firstMeasure));
+        assertEquals("5", directText(directChild(directChild(directNoteAt(firstMeasure, 0), "pitch"), "octave")));
+        assertEquals("flat", directText(directChild(directNoteAt(measureAt(doc, 3), 0), "accidental")));
+        assertEquals("sharp", directText(directChild(directNoteAt(measureAt(doc, 5), 1), "accidental")));
+    }
+
+    private static Element measureAt(Document doc, int index) {
+        Element part = directChild(doc.getDocumentElement(), "part");
+        return directChildren(part, "measure").get(index);
+    }
+
+    private static Element directNoteAt(Element measure, int index) {
+        return directChildren(measure, "note").get(index);
+    }
+
+    private static int directPitchCount(Element measure) {
+        int count = 0;
+        for (Element note : directChildren(measure, "note")) {
+            if (directChild(note, "pitch") != null) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static Element directChild(Element parent, String name) {
+        if (parent == null) {
+            return null;
+        }
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && name.equals(((Element) child).getTagName())) {
+                return (Element) child;
+            }
+        }
+        return null;
+    }
+
+    private static List<Element> directChildren(Element parent, String name) {
+        List<Element> out = new ArrayList<Element>();
+        if (parent == null) {
+            return out;
+        }
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && name.equals(((Element) child).getTagName())) {
+                out.add((Element) child);
+            }
+        }
+        return out;
+    }
+
+    private static String directText(Element element) {
+        return element == null ? "" : element.getTextContent().trim();
     }
 
     @Test
