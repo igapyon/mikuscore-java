@@ -84,6 +84,13 @@ Current foundation commands:
 - `--version`
 - `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]`
 - `convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from abc --to midi [--in <file>|-] [--out <file>|-]`
+- `convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]`
+- `convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from musicxml --to mei [--in <file>|-] [--out <file>|-]`
+- `convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]`
 - `state summarize [--in <file>|-]`
 - `state inspect-measure --measure <number> [--in <file>|-]`
 - `state validate-command --command <json> [--in <file>|-]`
@@ -112,6 +119,8 @@ The first `convert` slice is intentionally narrow and follows the latest upstrea
 - `.mxl` file input decoded to MusicXML text
 - `.mxl` file output encoded from MusicXML text
 - first ABC text to MusicXML conversion slice for basic headers, notes, rests, chords, tuplets, grace groups, overlay voices, basic / standard-shorthand / prefixed decorations, richer decoration aliases, accidental annotations, navigation / wedge / dynamics decorations, overfull compatibility reflow diagnostics, repeat / ending metadata, tie handoff, broken rhythm / slur handoff, barline-separated measures, and initial MusicXML -> ABC -> MusicXML fixture roundtrip coverage
+- first MIDI file import/export CLI bridge through the migrated Java `MidiIo` facade, including ABC -> MusicXML -> MIDI handoff
+- first LilyPond text to MusicXML CLI bridge through `CoreApi.importLilyPondToMusicXml`
 - unsupported conversion pairs return usage error status `2`
 
 Planned upstream command families:

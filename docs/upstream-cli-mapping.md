@@ -10,7 +10,11 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | `--version` | implemented | Returns Java package version fallback |
 | `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]` | implemented | First Java convert slice; supports text MusicXML and `.mxl` decode / encode by file extension |
 | `convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First ABC import/export bridge; supports basic ABC text headers, notes, rests, chords, tuplets, grace groups, basic decorations, repeat / ending metadata, tie handoff, and barline-separated measures |
+| `convert --from abc --to midi [--in <file>|-] [--out <file>|-]` | partial | First ABC-to-MIDI bridge; imports ABC to MusicXML, then delegates to `CoreApi.exportMusicXmlToMidi` |
 | `convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]` | partial | First ABC export CLI bridge; supports MusicXML text and `.mxl` input through the migrated `musicXmlToAbc` path |
+| `convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First LilyPond import CLI bridge; supports UTF-8 LilyPond text input and MusicXML/MXL output through `CoreApi.importLilyPondToMusicXml` |
+| `convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First MIDI import CLI bridge; supports MIDI byte input and MusicXML/MXL output through `CoreApi.importMidiToMusicXml` |
+| `convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]` | partial | First MIDI export CLI bridge; supports MusicXML/MXL input and MIDI byte output through `CoreApi.exportMusicXmlToMidi` |
 | `render svg [--from musicxml\|abc] [--in <file>\|-] [--out <file>\|-]` | unsupported | Command family is recognized, but SVG output remains blocked by the upstream Verovio/browser runtime dependency |
 | `state summarize [--in <file>|-]` | implemented | Emits upstream-shaped JSON summary for MusicXML text input |
 | `state inspect-measure --measure <number> [--in <file>|-]` | implemented | Emits upstream-shaped note selectors for one MusicXML measure |
@@ -24,12 +28,13 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | --- | --- | --- | --- |
 | `convert --from musicxml --to musicxml` | `convert --from musicxml --to musicxml` | implemented | Java-side bridge command for text MusicXML and MXL file-path handling while broader conversion pairs are pending |
 | `convert --from abc --to musicxml` | `convert --from abc --to musicxml` | partial | First Java slice covers basic ABC text, tuplet timing, grace groups, basic decorations, repeat / ending metadata, and tie handoff to MusicXML; broader decorations, overlays, diagnostics parity, and golden fixtures remain pending |
+| `convert --from abc --to midi` | `convert --from abc --to midi` | partial | First Java CLI bridge imports ABC to MusicXML and exports MIDI bytes through the migrated MIDI facade; broader ABC/MIDI parity remains pending |
 | `convert --from musicxml --to abc` | `convert --from musicxml --to abc` | partial | Java CLI bridge covers stdin/file input and `.mxl` decode, then delegates to the migrated `AbcIo.musicXmlToAbc` exporter |
-| `convert --from midi --to musicxml` | pending | not started | |
-| `convert --from musicxml --to midi` | pending | not started | |
-| `convert --from mei --to musicxml` | pending | not started | |
+| `convert --from midi --to musicxml` | `convert --from midi --to musicxml` | partial | First Java CLI bridge reads MIDI bytes from stdin/file and delegates to `CoreApi.importMidiToMusicXml` / `MidiIo.convertMidiToMusicXml`; broader MIDI import parity remains pending |
+| `convert --from musicxml --to midi` | `convert --from musicxml --to midi` | partial | First Java CLI bridge reads MusicXML text/MXL, delegates to `CoreApi.exportMusicXmlToMidi`, and writes SMF bytes; broader MIDI export parity remains pending |
+| `convert --from mei --to musicxml` | `convert --from mei --to musicxml` | partial | First Java CLI bridge covers stdin/file MEI text input and delegates to the migrated MEI importer through `CoreApi.importMeiToMusicXml`; broader MEI import parity remains pending |
 | `convert --from musicxml --to mei` | `convert --from musicxml --to mei` | partial | First Java CLI bridge covers stdin/file MusicXML input and delegates to the migrated MEI exporter through `CoreApi.exportMusicXmlToMei`; broader MEI export parity remains pending |
-| `convert --from lilypond --to musicxml` | pending | not started | |
+| `convert --from lilypond --to musicxml` | `convert --from lilypond --to musicxml` | partial | First Java CLI bridge delegates to `CoreApi.importLilyPondToMusicXml`; broader LilyPond import parity remains pending |
 | `convert --from musicxml --to lilypond` | pending | not started | |
 | `convert --from musescore --to musicxml` | pending | not started | |
 | `convert --from musicxml --to musescore` | pending | not started | |
