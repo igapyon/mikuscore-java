@@ -12,6 +12,7 @@ import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
 
+import jp.igapyon.mikuscore.coreapi.CoreApi;
 import jp.igapyon.mikuscore.musicxml.MusicXmlStateTest;
 import jp.igapyon.mikuscore.musicxml.MxlIo;
 
@@ -222,6 +223,33 @@ public class MikuscoreCliTest {
     }
 
     @Test
+    public void convertAbcToMidiWritesMidiFile() throws Exception {
+        Path output = Files.createTempFile("mikuscore-convert-abc-midi-out", ".mid");
+        try {
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+            ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                    "X:1\nT:CLI ABC to MIDI\nM:4/4\nL:1/4\nK:C\nC D E F|]\n".getBytes(StandardCharsets.UTF_8));
+
+            int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "abc", "--to", "midi",
+                    "--out", output.toString() }, inBytes,
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            byte[] midi = Files.readAllBytes(output);
+            assertEquals(0, exitCode);
+            assertEquals("", outBytes.toString("UTF-8"));
+            assertEquals('M', midi[0]);
+            assertEquals('T', midi[1]);
+            assertEquals('h', midi[2]);
+            assertEquals('d', midi[3]);
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(output);
+        }
+    }
+
+    @Test
     public void convertMeiToMusicXmlReadsStdinAndWritesStdout() throws Exception {
         ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
@@ -240,6 +268,28 @@ public class MikuscoreCliTest {
         assertTrue(outBytes.toString("UTF-8").contains("<work-title>CLI MEI</work-title>"));
         assertTrue(outBytes.toString("UTF-8").contains("<part-name>Voice</part-name>"));
         assertTrue(outBytes.toString("UTF-8").contains("<step>F</step>"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertLilyPondToMusicXmlReadsStdinAndWritesStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\header { title = \"CLI LilyPond\" }\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score { \\new Staff = \"P1\" { c'4 d'4 e'4 f'4 } }";
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(lily.getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "lilypond", "--to", "musicxml" },
+                inBytes,
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(0, exitCode);
+        assertTrue(outBytes.toString("UTF-8").contains("<work-title>CLI LilyPond</work-title>"));
+        assertTrue(outBytes.toString("UTF-8").contains("<step>C</step>"));
         assertEquals("", errBytes.toString("UTF-8"));
     }
 
@@ -309,6 +359,58 @@ public class MikuscoreCliTest {
         assertTrue(out.contains("<title>CLI MusicXML to MEI</title>"));
         assertTrue(out.contains("<scoreDef"));
         assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertMusicXmlToMidiWritesMidiFile() throws Exception {
+        Path output = Files.createTempFile("mikuscore-convert-midi-out", ".mid");
+        try {
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+            ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                    MusicXmlStateTest.sampleMusicXml("CLI MusicXML to MIDI").getBytes(StandardCharsets.UTF_8));
+
+            int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musicxml", "--to", "midi",
+                    "--out", output.toString() }, inBytes,
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            byte[] midi = Files.readAllBytes(output);
+            assertEquals(0, exitCode);
+            assertEquals("", outBytes.toString("UTF-8"));
+            assertEquals('M', midi[0]);
+            assertEquals('T', midi[1]);
+            assertEquals('h', midi[2]);
+            assertEquals('d', midi[3]);
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(output);
+        }
+    }
+
+    @Test
+    public void convertMidiToMusicXmlReadsMidiFileAndWritesStdout() throws Exception {
+        Path input = Files.createTempFile("mikuscore-convert-midi-in", ".mid");
+        try {
+            CoreApi.CliResult midi = CoreApi.exportMusicXmlToMidi(
+                    MusicXmlStateTest.sampleMusicXml("CLI MIDI to MusicXML"));
+            Files.write(input, midi.getOutputBytes());
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+            int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "midi", "--to", "musicxml",
+                    "--in", input.toString() }, new ByteArrayInputStream(new byte[0]),
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            String out = outBytes.toString("UTF-8");
+            assertEquals(0, exitCode);
+            assertTrue(out.contains("<score-partwise"));
+            assertTrue(out.contains("<pitch>"));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(input);
+        }
     }
 
     @Test

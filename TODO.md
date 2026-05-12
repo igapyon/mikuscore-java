@@ -102,6 +102,83 @@
   - focused coverage: `MidiIoTest` 103 tests 成功
 - [x] ここまでの最新検証: `mvn test` 成功、484 tests / 0 failures / 0 errors
 - [x] 直近完了 slice: upstream `src/ts/midi-io.ts` の MusicXML playback-like nuance option flags を `MidiIo` / `MidiIoTest` へ focused coverage として移植
+- [x] 直近完了 slice: migrated MIDI `convert` CLI bridge through `CoreApi` / `MikuscoreCli`
+  - `CoreApi.importMidiToMusicXml`
+  - `CoreApi.exportMusicXmlToMidi`
+  - `convert --from midi --to musicxml`
+  - `convert --from musicxml --to midi`
+  - focused coverage: `CoreApiTest` / `MikuscoreCliTest`
+- [x] 追加完了 slice: upstream CLI `convert --from abc --to midi` handoff を Java CLI に接続
+  - ABC import result を `CoreApi.exportMusicXmlToMidi` へ接続
+  - MusicXML -> MIDI export の no playable note failure と basic metadata handoff を upstream `cli-api.ts` に寄せる
+  - focused coverage: `CoreApiTest` / `MikuscoreCliTest`
+- [x] 追加完了 slice: upstream `src/ts/lilypond-io.ts` の first utility helper 群を Java `LilyPondIo` に移植
+  - XML escape / gcd / fraction reduction
+  - LilyPond duration -> ABC length token
+  - ABC length token -> LilyPond duration fallback behavior
+  - pitch text / MIDI key helper
+  - LilyPond duration <-> MusicXML type helper
+  - focused coverage: `LilyPondIoTest` 6 tests 成功
+- [x] 追加完了 slice: upstream `src/ts/lilypond-io.ts` の basic import facade を Java `LilyPondIo` に追加
+  - `convertLilyPondToMusicXml`
+  - single `\new Staff` body extraction
+  - bare top-level music block extraction
+  - simple note/rest/barline token handoff through existing `AbcIo`
+  - focused coverage: `LilyPondIoTest` 8 tests 成功
+- [x] 追加完了 slice: upstream CLI `convert --from lilypond --to musicxml` を Java CLI に接続
+  - `CoreApi.importLilyPondToMusicXml`
+  - `MikuscoreCli` convert branch
+  - focused coverage: `CoreApiTest` / `MikuscoreCliTest`
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の absolute octave import regression を Java `LilyPondIoTest` に追加
+  - `c'` -> C4
+  - unmarked `c d e f` -> base octave 3
+  - focused coverage: `LilyPondIoTest` 10 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の basic chord token import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `<c' e' g'>4` style chord token を ABC chord token に変換
+  - focused coverage: `LilyPondIoTest` 11 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の integer duration multiplier import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `r4*3` style multiplier を ABC length token に反映
+  - focused coverage: `LilyPondIoTest` 12 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の implicit beam import regression を Java `LilyPondIoTest` に追加
+  - `c'8 d'8 e'8 f'8` import が implicit beam を持つことを確認
+  - focused coverage: `LilyPondIoTest` 13 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の staff clef import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\clef bass` を ABC voice clef 経由で MusicXML F clef に反映
+  - focused coverage: `LilyPondIoTest` 14 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の low-range omitted-clef import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - 低音域だけの `\new Staff` body では bass clef を推定
+  - focused coverage: `LilyPondIoTest` 15 tests 成功
+- [x] 追加完了 slice: upstream `src/ts/lilypond-io.ts` の header composer import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\header { composer = "..." }` を MusicXML `creator type="composer"` に反映
+  - focused coverage: `LilyPondIoTest` 16 tests 成功
+- [x] 追加完了 slice: upstream `src/ts/lilypond-io.ts` の single staff name handoff を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\new Staff = "Bass"` を ABC voice name 経由で MusicXML `part-name` に反映
+  - focused coverage: `LilyPondIoTest` 16 tests 成功
+- [x] 追加完了 slice: upstream `src/ts/lilypond-io.ts` の single staff `\with` metadata handoff を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\with { instrumentName = "Fl." }` を MusicXML `part-name` に反映
+  - focused coverage: `LilyPondIoTest` 17 tests 成功
+- [x] 追加完了 slice: upstream `src/ts/lilypond-io.ts` の single staff body `instrumentName` handoff を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\set Staff.instrumentName = "Cello"` を MusicXML `part-name` に反映
+  - focused coverage: `LilyPondIoTest` 18 tests 成功
+- [x] 追加完了 slice: upstream `src/ts/lilypond-io.ts` の single staff `\transposition` handoff を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\transposition a` を ABC `@mks transpose` 経由で MusicXML `transpose` に反映
+  - focused coverage: `LilyPondIoTest` 19 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の basic `\relative` import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\relative c' { c4 d e f | g a b c }` の relative octave 解決を ABC handoff に反映
+  - focused coverage: `LilyPondIoTest` 20 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の explicit octave marks inside `\relative` regression を Java `LilyPondIoTest` に追加
+  - `\relative c' { d'4 d4 }` が D5 / D5 として import されることを確認
+  - focused coverage: `LilyPondIoTest` 21 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の relative letter-name distance regression を Java `LilyPondIoTest` に追加
+  - `\relative c' { f4 bis4 }` が B#4 として import されることを確認
+  - focused coverage: `LilyPondIoTest` 22 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の post-chord `\relative` anchor regression を Java `LilyPondIoTest` に追加
+  - `\relative c' { <c e g>4 b4 }` の chord 後 anchor が first chord tone になることを確認
+  - focused coverage: `LilyPondIoTest` 23 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native tie marker import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - LilyPond `~` を ABC `-` tie handoff 経由で MusicXML `tie` / `tied` に反映
+  - focused coverage: `LilyPondIoTest` 24 tests 成功
+- [x] ここまでの最新検証: `mvn test` 成功、516 tests / 0 failures / 0 errors
 - [x] 直近の upstream 基準 checkout: `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`
 - [x] 2026-05-11 終了時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
@@ -110,14 +187,14 @@
   - 最新 focused 検証: `mvn test -Dtest=MidiIoTest` 成功、103 tests / 0 failures / 0 errors
   - 最新 full 検証: `mvn test` 成功、484 tests / 0 failures / 0 errors
 - [ ] 再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
-- [ ] 再開時の第一候補は `src/ts/midi-io.ts` の MusicXML playback nuance 残りを小さく切り出せるか確認する
+- [ ] 次回再開時の第一候補は `src/ts/midi-io.ts` の MIDI import/export parity 残りを小さく切り出せるか確認する
   - 目安: MIDI playback nuance の残り、または export/import parity の小片を既存 `MidiIo` helper 境界で確認する
   - pedal controller event extraction は `collectMidiControlEventsFromMusicXmlDoc` / `MidiIoTest.collectsMidiControlEventsFromMusicXmlDoc` 側で既に移植済みのため、再開時は重複実装しない
-  - 小さく切れない場合は `emitMuseImportedVoiceXml` の parser-produced chord / direction event 接続、または `tests/unit/lilypond-io.spec.ts` の未着手 I/O へ移る
+  - 小さく切れない場合は `emitMuseImportedVoiceXml` の parser-produced chord / direction event 接続、または `tests/unit/lilypond-io.spec.ts` の import/export 本体 slice へ移る
 - [ ] 再開時の確認コマンド
   - `git status --short`
   - `sed -n '4417,4945p' workplace/mikuscore/src/ts/midi-io.ts`
-  - `mvn test -Dtest=MidiIoTest`
+  - `mvn test -Dtest=CoreApiTest,MikuscoreCliTest,MidiIoTest`
   - 最後に `mvn test`
 - [ ] 再開時に更新する tracking files
   - `TODO.md`
@@ -786,6 +863,8 @@
   - MEI import fermata minimal public conversion regression は `MeiIoTest` に partial 移植済み
   - MEI import gliss minimal start/stop public conversion regression は `MeiIoTest` に partial 移植済み
 - [ ] `src/ts/lilypond-io.ts`
+  - XML escape / gcd / fraction reduction、LilyPond duration -> ABC length token、ABC length token -> LilyPond duration fallback、pitch text / MIDI key helper、LilyPond duration <-> MusicXML type helper は `LilyPondIo` に first utility slice として移植済み
+  - basic `convertLilyPondToMusicXml` facade、single staff / bare block extraction、simple note/rest/barline import handoff、single staff metadata / transposition handoff、basic `\relative` handoff は `LilyPondIo` に partial 移植済み
 - [x] `src/ts/vsqx-io.ts`
   - 初期 Java 移植対象外として固定する
 - [ ] `src/ts/cli-api.ts`
@@ -793,12 +872,14 @@
   - `decodeCliMuseScoreInput` / `encodeCliMuseScoreOutput` の MuseScore MSCZ/MSCX file I/O facade は `CoreApi` に partial 移植済み
   - `importAbcToMusicXml` / `exportMusicXmlToAbc` の text-result facade は `CoreApi` に partial 移植済み
   - `importMeiToMusicXml` の text-result facade は `CoreApi` に partial 移植済み
+  - `importLilyPondToMusicXml` の text-result facade は `CoreApi` に partial 移植済み
   - `exportMusicXmlToMei` の text-result facade は `CoreApi` に partial 移植済み
   - `summarizeMusicXmlState` / `inspectMusicXmlMeasure` / `validateMusicXmlCommand` / `applyMusicXmlCommand` / `diffMusicXmlState` の text-result facade は `CoreApi` に partial 移植済み
   - Java CLI は該当 convert / state path を `CoreApi` 経由で呼び出す
 - [ ] `scripts/mikuscore-cli.mjs`
   - Java CLI の `convert --from mei --to musicxml` は partial 移植済み
   - Java CLI の `convert --from musicxml --to mei` は partial 移植済み
+  - Java CLI の `convert --from lilypond --to musicxml` は partial 移植済み
   - Java CLI の `state` family subset は partial 移植済み
 - [ ] Web UI-only files are out of Java conversion scope, but their core-facing behavior should be checked where they reveal product semantics
 
@@ -813,7 +894,9 @@
   - initial Java fixture roundtrip slice は `base.musicxml` / `with_rest.musicxml` / `interleaved_voices.musicxml` / `roundtrip_piano_tempo.musicxml` / `with_backup_safe.musicxml` / `with_beam.musicxml` / `with_chord_timing.musicxml` 相当で coverage 済み
   - broader fixture expansion は継続
 - [ ] `tests/unit/cli-api.spec.ts`
+  - LilyPond import facade regression は `CoreApiTest` で focused coverage 済み
 - [ ] `tests/unit/mikuscore-cli.spec.ts`
+  - first `convert --from lilypond --to musicxml` regression は `MikuscoreCliTest` で focused coverage 済み
 - [ ] `tests/unit/musescore-io.spec.ts`
   - tuplet id reference numbering helper regression は `MuseScoreIoTest` で focused coverage 済み
   - tuplet written duration type helper regression は `MuseScoreIoTest` で focused coverage 済み
@@ -836,6 +919,24 @@
 - [ ] `tests/unit/mei-io.spec.ts`
   - first through sixty-eighth MEI helper / facade / regression slices は `MeiIoTest` で focused coverage 済み
 - [ ] `tests/unit/lilypond-io.spec.ts`
+  - first LilyPond utility helper regression は `LilyPondIoTest` で focused coverage 済み
+  - basic LilyPond import regression は `LilyPondIoTest` で focused coverage 済み
+  - absolute octave import regression は `LilyPondIoTest` で focused coverage 済み
+  - basic chord token import regression は `LilyPondIoTest` で focused coverage 済み
+  - integer duration multiplier import regression は `LilyPondIoTest` で focused coverage 済み
+  - implicit beam import regression は `LilyPondIoTest` で focused coverage 済み
+  - staff clef import regression は `LilyPondIoTest` で focused coverage 済み
+  - low-range omitted-clef import regression は `LilyPondIoTest` で focused coverage 済み
+  - header composer import regression は `LilyPondIoTest` で focused coverage 済み
+  - single staff name handoff regression は `LilyPondIoTest` で focused coverage 済み
+  - single staff `\with` instrumentName handoff regression は `LilyPondIoTest` で focused coverage 済み
+  - single staff body `\set Staff.instrumentName` handoff regression は `LilyPondIoTest` で focused coverage 済み
+  - single staff `\transposition` handoff regression は `LilyPondIoTest` で focused coverage 済み
+  - basic `\relative` import regression は `LilyPondIoTest` で focused coverage 済み
+  - explicit octave marks inside `\relative` regression は `LilyPondIoTest` で focused coverage 済み
+  - relative letter-name distance regression は `LilyPondIoTest` で focused coverage 済み
+  - post-chord `\relative` anchor regression は `LilyPondIoTest` で focused coverage 済み
+  - native tie marker import regression は `LilyPondIoTest` で focused coverage 済み
 - [ ] `tests/property/core.property.spec.ts`
 - [ ] `tests/fixtures/*.musicxml`
 - [ ] `src/samples/**`

@@ -1,10 +1,16 @@
 package jp.igapyon.mikuscore.coreapi;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.Map;
+
+import org.w3c.dom.Document;
 
 import jp.igapyon.mikuscore.abc.AbcIo;
+import jp.igapyon.mikuscore.lilypond.LilyPondIo;
 import jp.igapyon.mikuscore.mei.MeiIo;
+import jp.igapyon.mikuscore.midi.MidiIo;
 import jp.igapyon.mikuscore.musicxml.MusicXmlIo;
 import jp.igapyon.mikuscore.musicxml.MusicXmlState;
 import jp.igapyon.mikuscore.musicxml.MxlIo;
@@ -35,6 +41,26 @@ public final class CoreApi {
             return textResult(MusicXmlIo.normalizeImportedMusicXmlText(MeiIo.convertMeiToMusicXml(meiText)));
         } catch (Exception ex) {
             return failureResult("Failed to parse MEI: " + ex.getMessage());
+        }
+    }
+
+    public static CliResult importLilyPondToMusicXml(String lilyPondText) {
+        try {
+            return textResult(LilyPondIo.convertLilyPondToMusicXml(lilyPondText));
+        } catch (Exception ex) {
+            return failureResult("Failed to parse LilyPond: " + ex.getMessage());
+        }
+    }
+
+    public static CliResult importMidiToMusicXml(byte[] midiBytes) {
+        try {
+            MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midiBytes, new MidiIo.MidiImportOptions());
+            if (!result.isOk()) {
+                return failureResult("Failed to parse MIDI: " + midiDiagnosticsText(result));
+            }
+            return textResult(MusicXmlIo.normalizeImportedMusicXmlText(result.getXml()));
+        } catch (Exception ex) {
+            return failureResult("Failed to parse MIDI: " + ex.getMessage());
         }
     }
 
@@ -98,6 +124,35 @@ public final class CoreApi {
         }
     }
 
+    public static CliResult exportMusicXmlToMidi(String xmlText) {
+        try {
+            Document doc = MusicXmlIo.parseMusicXmlDocument(xmlText);
+            if (doc == null || doc.getDocumentElement() == null) {
+                return failureResult("Failed to export MIDI: invalid MusicXML input.");
+            }
+            int ticksPerQuarter = 480;
+            MidiIo.MidiPlaybackExtractionOptions options = new MidiIo.MidiPlaybackExtractionOptions("midi");
+            MidiIo.MidiPlaybackEventsResult playback =
+                    MidiIo.buildPlaybackEventsFromMusicXmlDoc(doc, ticksPerQuarter, options);
+            if (playback.getEvents().isEmpty()) {
+                return failureResult("Failed to export MIDI: no playable note events found.");
+            }
+            Map<String, Integer> programOverrides = MidiIo.collectMidiProgramOverridesFromMusicXmlDoc(doc);
+            MidiIo.MidiExportPlaybackBuildResult result = MidiIo.buildMidiPlaybackExport(playback.getEvents(),
+                    playback.getTempo(), "electric_piano_2", programOverrides,
+                    MidiIo.collectMidiControlEventsFromMusicXmlDoc(doc, ticksPerQuarter),
+                    MidiIo.collectMidiTempoEventsFromMusicXmlDoc(doc, ticksPerQuarter),
+                    MidiIo.collectMidiTimeSignatureEventsFromMusicXmlDoc(doc, ticksPerQuarter),
+                    MidiIo.collectMidiKeySignatureEventsFromMusicXmlDoc(doc, ticksPerQuarter),
+                    true, true, true, ticksPerQuarter, Collections.<String>emptyList(), false,
+                    "off_before_on", musicXmlTitle(doc), musicXmlMovementTitle(doc), musicXmlComposer(doc),
+                    MidiIo.collectLeadingPickupTicksFromMusicXmlDoc(doc, ticksPerQuarter));
+            return bytesResult(result.getRawBytes());
+        } catch (Exception ex) {
+            return failureResult("Failed to export MIDI: " + ex.getMessage());
+        }
+    }
+
     public static CliResult summarizeMusicXmlState(String xmlText) {
         try {
             return textResult(MusicXmlState.summarizeMusicXmlState(xmlText).toJson());
@@ -150,11 +205,66 @@ public final class CoreApi {
         return new CliResult(false, "", null, diagnostic);
     }
 
+    private static String midiDiagnosticsText(MidiIo.MidiImportResult result) {
+        if (result == null || result.getDiagnostics().isEmpty()) {
+            return "unknown MIDI import failure.";
+        }
+        StringBuilder out = new StringBuilder();
+        for (MidiIo.MidiImportDiagnostic diagnostic : result.getDiagnostics()) {
+            if (out.length() > 0) {
+                out.append("; ");
+            }
+            out.append(diagnostic.getCode()).append(": ").append(diagnostic.getMessage());
+        }
+        return out.toString();
+    }
+
     private static boolean hasExtension(String path, String extension) {
         if (path == null) {
             return false;
         }
         return path.trim().toLowerCase(Locale.ROOT).endsWith(extension);
+    }
+
+    private static String musicXmlTitle(Document doc) {
+        String workTitle = firstElementText(doc, "work-title");
+        if (!workTitle.isEmpty()) {
+            return workTitle;
+        }
+        return musicXmlMovementTitle(doc);
+    }
+
+    private static String musicXmlMovementTitle(Document doc) {
+        return firstElementText(doc, "movement-title");
+    }
+
+    private static String musicXmlComposer(Document doc) {
+        if (doc == null) {
+            return "";
+        }
+        org.w3c.dom.NodeList creators = doc.getElementsByTagName("creator");
+        for (int index = 0; index < creators.getLength(); index++) {
+            org.w3c.dom.Node node = creators.item(index);
+            if (node instanceof org.w3c.dom.Element) {
+                org.w3c.dom.Element element = (org.w3c.dom.Element) node;
+                if ("composer".equals(element.getAttribute("type"))) {
+                    return element.getTextContent() == null ? "" : element.getTextContent().trim();
+                }
+            }
+        }
+        return firstElementText(doc, "creator");
+    }
+
+    private static String firstElementText(Document doc, String tagName) {
+        if (doc == null || tagName == null) {
+            return "";
+        }
+        org.w3c.dom.NodeList nodes = doc.getElementsByTagName(tagName);
+        if (nodes.getLength() == 0 || nodes.item(0) == null) {
+            return "";
+        }
+        String text = nodes.item(0).getTextContent();
+        return text == null ? "" : text.trim();
     }
 
     public static final class CliResult {

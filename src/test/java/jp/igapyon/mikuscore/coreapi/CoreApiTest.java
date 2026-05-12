@@ -35,6 +35,22 @@ public class CoreApiTest {
     }
 
     @Test
+    public void importsLilyPondToMusicXmlAsCliResult() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\header { title = \"Core API LilyPond\" }\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score { \\new Staff = \"P1\" { c'4 d'4 e'4 f'4 } }";
+
+        CoreApi.CliResult result = CoreApi.importLilyPondToMusicXml(lily);
+
+        assertEquals(true, result.isOk());
+        assertTrue(result.getOutput().contains("<work-title>Core API LilyPond</work-title>"));
+        assertTrue(result.getOutput().contains("<step>C</step>"));
+        assertEquals("", result.getDiagnostic());
+    }
+
+    @Test
     public void decodesMusicXmlTextInputAsCliResult() {
         String xml = MusicXmlStateTest.sampleMusicXml("Core API decode text");
         CoreApi.CliResult result = CoreApi.decodeCliMusicXmlInput(xml.getBytes(java.nio.charset.StandardCharsets.UTF_8),
@@ -103,6 +119,45 @@ public class CoreApiTest {
         assertTrue(result.getOutput().contains("<mei"));
         assertTrue(result.getOutput().contains("<title>Core API MEI export</title>"));
         assertTrue(result.getOutput().contains("<scoreDef"));
+        assertEquals("", result.getDiagnostic());
+    }
+
+    @Test
+    public void exportsMusicXmlToMidiAsCliResult() {
+        CoreApi.CliResult result =
+                CoreApi.exportMusicXmlToMidi(MusicXmlStateTest.sampleMusicXml("Core API MIDI export"));
+
+        assertEquals(true, result.isOk());
+        byte[] bytes = result.getOutputBytes();
+        assertEquals('M', bytes[0]);
+        assertEquals('T', bytes[1]);
+        assertEquals('h', bytes[2]);
+        assertEquals('d', bytes[3]);
+        assertEquals("", result.getDiagnostic());
+    }
+
+    @Test
+    public void rejectsMusicXmlToMidiWhenNoPlayableEventsExist() {
+        String xml = "<score-partwise><part-list><score-part id=\"P1\"><part-name>Empty</part-name></score-part>"
+                + "</part-list><part id=\"P1\"><measure number=\"1\"><attributes><divisions>1</divisions>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><rest/><duration>4</duration><voice>1</voice></note></measure></part></score-partwise>";
+
+        CoreApi.CliResult result = CoreApi.exportMusicXmlToMidi(xml);
+
+        assertEquals(false, result.isOk());
+        assertTrue(result.getDiagnostic().contains("no playable note events found"));
+    }
+
+    @Test
+    public void importsMidiToMusicXmlAsCliResult() {
+        CoreApi.CliResult midi = CoreApi.exportMusicXmlToMidi(MusicXmlStateTest.sampleMusicXml("Core API MIDI import"));
+
+        CoreApi.CliResult result = CoreApi.importMidiToMusicXml(midi.getOutputBytes());
+
+        assertEquals(true, result.isOk());
+        assertTrue(result.getOutput().contains("<score-partwise"));
+        assertTrue(result.getOutput().contains("<pitch>"));
         assertEquals("", result.getDiagnostic());
     }
 
