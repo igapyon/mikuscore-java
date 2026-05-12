@@ -36,7 +36,17 @@ completed slice history remains below.
 - Latest completed LilyPond relative distance slice: relative octave resolution by letter-name distance is covered with focused regression.
 - Latest completed LilyPond relative chord-anchor slice: post-chord relative anchoring uses the first chord tone and is covered with focused regression.
 - Latest completed LilyPond tie slice: native `~` tie markers are handed off to MusicXML tie/tied through ABC and covered with focused regression.
-- Latest full verification: `mvn test` passed with 516 tests / 0 failures / 0 errors.
+- Latest completed LilyPond tie-duration slice: isolated duration tokens after a tied note reuse the previous pitch and are covered with focused regression.
+- Latest completed LilyPond dynamics slice: native dynamic commands are handed off to MusicXML dynamics through ABC and covered with focused regression.
+- Latest completed LilyPond wedge slice: native wedge commands are handed off to MusicXML wedge directions through ABC and covered with focused regression.
+- Latest completed LilyPond slur slice: native slur markers and commands are handed off to MusicXML slur start/stop through ABC and covered with focused regressions.
+- Latest completed LilyPond trill slice: native `\trill` and trill span commands are handed off to MusicXML trill-mark / wavy-line through ABC and covered with focused regressions.
+- Latest completed LilyPond glissando slice: native `\glissando` is handed off to MusicXML glissando start/stop through ABC and covered with focused regression.
+- Latest completed LilyPond pedal slice: native sustain, sostenuto, and una corda pedal commands are handed off to MusicXML pedal directions and covered with focused regression.
+- Latest completed LilyPond bow slice: native `\upbow` / `\downbow` commands are handed off to MusicXML technical notation through ABC and covered with focused regression.
+- Latest completed LilyPond technical notation slice: native `\snappizzicato`, `\flageolet`, and `\harmonic` commands are handed off to MusicXML snap-pizzicato / harmonic notation through ABC and covered with focused regression.
+- Latest completed LilyPond omitted-root relative pedal sample regression: treble clef inference and pedal command token isolation are covered with focused regression.
+- Latest full verification: `mvn test` passed with 528 tests / 0 failures / 0 errors.
 - 2026-05-11 end-of-day resume point: continue from `src/ts/midi-io.ts` around `buildPlaybackEventsFromMusicXmlDoc`; Java-side focus is `MidiIo` / `MidiIoTest`. Latest focused verification is `mvn test -Dtest=MidiIoTest` with 103 tests / 0 failures / 0 errors, and latest full verification is `mvn test` with 484 tests / 0 failures / 0 errors.
 - Resume with `igapyon-miku-soft-developer` and continue straight-conversion slices from upstream `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`.
 - Suggested next step: continue MIDI export/import parity in small pieces where it fits the existing helper boundary. Do not duplicate pedal controller extraction; it is already covered by `collectMidiControlEventsFromMusicXmlDoc`.

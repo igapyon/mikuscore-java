@@ -178,8 +178,67 @@
 - [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native tie marker import を Java `LilyPondIo` / `LilyPondIoTest` に追加
   - LilyPond `~` を ABC `-` tie handoff 経由で MusicXML `tie` / `tied` に反映
   - focused coverage: `LilyPondIoTest` 24 tests 成功
-- [x] ここまでの最新検証: `mvn test` 成功、516 tests / 0 failures / 0 errors
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の isolated duration tokens after tie import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `a'2~ 4~ 16` の pitch loss を避け、直前 pitch を duration-only token に引き継ぐ
+  - focused coverage: `LilyPondIoTest` 25 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native dynamic commands import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\p` / `\mf` / `\sfz` を ABC dynamics decoration 経由で MusicXML directions に反映
+  - focused coverage: `LilyPondIoTest` 26 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native wedge commands import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\<` / `\>` / `\!` を ABC wedge decoration 経由で MusicXML `wedge` directions に反映
+  - focused coverage: `LilyPondIoTest` 27 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native slur markers import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `(` / `)` を ABC slur marker 経由で MusicXML `slur` start/stop に反映
+  - focused coverage: `LilyPondIoTest` 28 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native slur commands import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\(` / `\)` を ABC slur marker 経由で MusicXML `slur` start/stop に反映
+  - focused coverage: `LilyPondIoTest` 29 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native `\trill` command import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - postfix `\trill` を直前 ABC token の `!trill!` decoration として MusicXML `trill-mark` に反映
+  - focused coverage: `LilyPondIoTest` 30 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native trill span commands import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\startTrillSpan` / `\stopTrillSpan` を直前 ABC token の `!trill(!` / `!trill)!` decoration として MusicXML `wavy-line` start/stop に反映
+  - focused coverage: `LilyPondIoTest` 31 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native `\glissando` command import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\glissando` を直前 ABC token の `!gliss-start!` と次 token の `!gliss-stop!` decoration として MusicXML `glissando` start/stop に反映
+  - focused coverage: `LilyPondIoTest` 32 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native pedal commands import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\sustainOn` / `\sustainOff` / `\sostenutoOn` / `\sostenutoOff` / `\unaCorda` / `\treCorde` を MusicXML `pedal` directions に反映
+  - focused coverage: `LilyPondIoTest` 33 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native bow commands import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\upbow` / `\downbow` を ABC technical decoration 経由で MusicXML `up-bow` / `down-bow` に反映
+  - focused coverage: `LilyPondIoTest` 34 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native snap pizzicato / harmonic commands import を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\snappizzicato` / `\flageolet` / `\harmonic` を ABC decoration 経由で MusicXML `snap-pizzicato` / `harmonic` に反映
+  - focused coverage: `LilyPondIoTest` 35 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の omitted-root relative pedal sample regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - omitted-root `\relative` の treble clef inference と pedal command token 誤読防止を確認
+  - focused coverage: `LilyPondIoTest` 36 tests 成功
+- [x] ここまでの最新検証: `mvn test` 成功、528 tests / 0 failures / 0 errors
 - [x] 直近の upstream 基準 checkout: `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`
+- [x] 2026-05-13 一時停止時点の再開ポイント
+  - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/lilypond/LilyPondIo.java`
+  - 対応テスト: `src/test/java/jp/igapyon/mikuscore/lilypond/LilyPondIoTest.java`
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+  - 現在の未コミット差分: 上記 6 files が `MM` 状態。staged 済み差分に加えて、今回の omitted-root relative pedal sample slice の unstaged 差分も同じ files に乗っている
+  - 最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、36 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、528 tests / 0 failures / 0 errors
+  - 最新 diff 検証: `git diff --check` 問題なし
+- [ ] 次回再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
+- [ ] 次回再開時の第一候補は upstream `tests/unit/lilypond-io.spec.ts` の native `\repeat volta` import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports native \repeat volta into MusicXML repeat barlines`
+  - 期待値: MusicXML `barline[location="left"] > repeat[direction="forward"]`、右 barline の `repeat[direction="backward"]`、`ending[type="stop"][number="2"]`
+  - 既存 LilyPond tokenizer / ABC handoff で小さく切れるか確認し、難しければ MusicXML DOM post-process の小 slice として扱う
+- [ ] 次回再開時の確認コマンド
+  - `git status --short`
+  - `sed -n '420,440p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
+  - `mvn test -Dtest=LilyPondIoTest`
+  - 最後に `mvn test`
+- [ ] 次回再開時に更新する tracking files
+  - `TODO.md`
+  - `docs/remaining-migration-items.md`
+  - `docs/upstream-class-mapping.md`
+  - `docs/upstream-test-mapping.md`
 - [x] 2026-05-11 終了時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/midi/MidiIoTest.java`
@@ -937,6 +996,18 @@
   - relative letter-name distance regression は `LilyPondIoTest` で focused coverage 済み
   - post-chord `\relative` anchor regression は `LilyPondIoTest` で focused coverage 済み
   - native tie marker import regression は `LilyPondIoTest` で focused coverage 済み
+  - isolated duration tokens after tie regression は `LilyPondIoTest` で focused coverage 済み
+  - native dynamic commands import regression は `LilyPondIoTest` で focused coverage 済み
+  - native wedge commands import regression は `LilyPondIoTest` で focused coverage 済み
+  - native slur markers import regression は `LilyPondIoTest` で focused coverage 済み
+  - native slur commands import regression は `LilyPondIoTest` で focused coverage 済み
+  - native `\trill` command import regression は `LilyPondIoTest` で focused coverage 済み
+  - native trill span commands import regression は `LilyPondIoTest` で focused coverage 済み
+  - native `\glissando` command import regression は `LilyPondIoTest` で focused coverage 済み
+  - native pedal commands import regression は `LilyPondIoTest` で focused coverage 済み
+  - native bow commands import regression は `LilyPondIoTest` で focused coverage 済み
+  - native snap pizzicato / harmonic commands import regression は `LilyPondIoTest` で focused coverage 済み
+  - omitted-root relative pedal sample regression は `LilyPondIoTest` で focused coverage 済み
 - [ ] `tests/property/core.property.spec.ts`
 - [ ] `tests/fixtures/*.musicxml`
 - [ ] `src/samples/**`
