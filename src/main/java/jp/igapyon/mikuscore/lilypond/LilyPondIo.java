@@ -4,6 +4,12 @@
  */
 package jp.igapyon.mikuscore.lilypond;
 
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -218,7 +224,12 @@ public final class LilyPondIo {
     }
 
     public static String convertLilyPondToMusicXml(String lilySource) {
-        String source = String.valueOf(lilySource == null ? "" : lilySource);
+        String rawSource = String.valueOf(lilySource == null ? "" : lilySource);
+        String laneRoundtripXml = extractMksLanesRoundtripXml(rawSource);
+        if (!laneRoundtripXml.isEmpty()) {
+            return laneRoundtripXml;
+        }
+        String source = expandLilyVariables(rawSource);
         String title = parseHeaderField(source, "title");
         if (title.isEmpty()) {
             title = "Imported LilyPond";
@@ -226,10 +237,16 @@ public final class LilyPondIo {
         String composer = parseHeaderField(source, "composer");
         String meter = parseTimeSignatureText(source);
         String key = parseKeySignatureText(source);
-        LilyStaffBlock staffBlock = extractFirstStaffBlock(source);
+        List<LilyStaffBlock> staffBlocks = extractStaffBlocks(source);
+        LilyStaffBlock staffBlock = staffBlocks.isEmpty() ? null : staffBlocks.get(0);
         String body = staffBlock == null ? extractFirstMusicBody(source) : staffBlock.getContent();
         if (body.isEmpty()) {
             throw new IllegalArgumentException("LilyPond music block not found.");
+        }
+        if (staffBlocks.size() > 1) {
+            String xml = convertLilyStaffBlocksToMusicXml(source, title, composer, meter, key, staffBlocks);
+            xml = addNativeLyricsToMusicXml(xml, source);
+            return composer.isEmpty() ? xml : addComposerToMusicXml(xml, composer);
         }
         String partName = staffBlock == null ? parseFirstStaffName(source) : staffBlock.getPartName();
         String clef = parseClefText(body);
@@ -270,8 +287,511 @@ public final class LilyPondIo {
         abc.append(abcBody).append('\n');
         String xml = MusicXmlIo.normalizeImportedMusicXmlText(
                 AbcIo.musicXmlFromAbc(abc.toString(), new AbcIo.AbcImportOptions()));
+        xml = addLilyOverfullCarryDiagnostics(xml);
+        xml = addNativeRepeatVoltaToMusicXml(xml, body);
+        xml = addNativeAlternativeEndingsToMusicXml(xml, body);
         xml = addNativePedalCommandsToMusicXml(xml, body);
+        xml = addNativeLyricsToMusicXml(xml, source);
         return composer.isEmpty() ? xml : addComposerToMusicXml(xml, composer);
+    }
+
+    public static String exportMusicXmlDomToLilyPond(Document doc) {
+        String partName = firstMusicXmlPartName(doc);
+        String staffName = partName.isEmpty() ? "P1" : partName;
+        String firstPartId = firstMusicXmlPartId(doc);
+        StringBuilder out = new StringBuilder();
+        out.append("\\version \"2.24.0\"\n");
+        String lanesPayload = encodeMksLanesRoundtripXml(doc);
+        if (!lanesPayload.isEmpty()) {
+            out.append("%@mks lanes voice=").append(firstPartId.isEmpty() ? "P1" : firstPartId)
+                    .append(" measure=1 data=").append(lanesPayload).append('\n');
+        }
+        appendMksSlurMetadata(out, doc, firstPartId.isEmpty() ? "P1" : firstPartId);
+        out.append("\\score {\n");
+        out.append("  \\new Staff = \"").append(lilyQuoted(staffName)).append("\"");
+        if (!partName.isEmpty()) {
+            out.append(" \\with { instrumentName = \"").append(lilyQuoted(partName)).append("\" }");
+        }
+        out.append(" {");
+        String timeSignature = firstMusicXmlTimeSignature(doc);
+        if (!timeSignature.isEmpty()) {
+            out.append(" \\time ").append(timeSignature);
+        }
+        List<String> notes = firstMusicXmlPartLilyNotes(doc);
+        if (notes.isEmpty()) {
+            out.append(" r4");
+        } else {
+            for (String note : notes) {
+                out.append(' ').append(note);
+            }
+        }
+        out.append(" }\n");
+        out.append("}\n");
+        return out.toString();
+    }
+
+    private static String firstMusicXmlTimeSignature(Document doc) {
+        Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        Element measure = firstDirectChild(part, "measure");
+        Element attributes = firstDirectChild(measure, "attributes");
+        Element time = firstDirectChild(attributes, "time");
+        String beats = directChildText(time, "beats");
+        String beatType = directChildText(time, "beat-type");
+        if (beats.isEmpty() || beatType.isEmpty()) {
+            return "";
+        }
+        return beats + "/" + beatType;
+    }
+
+    private static void appendMksSlurMetadata(StringBuilder out, Document doc, String voiceId) {
+        Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        if (part == null) {
+            return;
+        }
+        int measureIndex = 0;
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            measureIndex++;
+            int eventIndex = 0;
+            Element measure = (Element) measureNode;
+            for (Node noteNode = measure.getFirstChild(); noteNode != null; noteNode = noteNode.getNextSibling()) {
+                if (!(noteNode instanceof Element) || !"note".equals(((Element) noteNode).getTagName())) {
+                    continue;
+                }
+                eventIndex++;
+                Element slur = firstSlur((Element) noteNode);
+                if (slur == null || slur.getAttribute("type").isEmpty()) {
+                    continue;
+                }
+                out.append("%@mks slur voice=").append(voiceId)
+                        .append(" measure=").append(measureIndex)
+                        .append(" event=").append(eventIndex)
+                        .append(" type=").append(slur.getAttribute("type"))
+                        .append('\n');
+            }
+        }
+    }
+
+    private static Element firstSlur(Element note) {
+        Element notations = firstDirectChild(note, "notations");
+        if (notations == null) {
+            return null;
+        }
+        return firstDirectChild(notations, "slur");
+    }
+
+    private static String extractMksLanesRoundtripXml(String source) {
+        Matcher matcher = Pattern.compile("(?m)^%+@mks\\s+lanes\\b[^\\n]*\\bdata=([^\\s]+)")
+                .matcher(String.valueOf(source == null ? "" : source));
+        if (!matcher.find()) {
+            return "";
+        }
+        try {
+            String xml = new String(Base64.getDecoder().decode(matcher.group(1)), StandardCharsets.UTF_8);
+            Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+            return doc == null ? "" : MusicXmlIo.prettyPrintMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc));
+        } catch (Exception ex) {
+            return "";
+        }
+    }
+
+    private static String encodeMksLanesRoundtripXml(Document doc) {
+        if (doc == null || doc.getDocumentElement() == null) {
+            return "";
+        }
+        String xml = MusicXmlIo.serializeMusicXmlDocument(doc);
+        return Base64.getEncoder().encodeToString(xml.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String firstMusicXmlPartId(Document doc) {
+        if (doc == null || doc.getDocumentElement() == null) {
+            return "";
+        }
+        Element part = firstDirectChild(doc.getDocumentElement(), "part");
+        return part == null ? "" : part.getAttribute("id");
+    }
+
+    private static String firstMusicXmlPartName(Document doc) {
+        if (doc == null || doc.getDocumentElement() == null) {
+            return "";
+        }
+        Element partList = firstDirectChild(doc.getDocumentElement(), "part-list");
+        Element scorePart = firstDirectChild(partList, "score-part");
+        return directChildText(scorePart, "part-name");
+    }
+
+    private static List<String> firstMusicXmlPartLilyNotes(Document doc) {
+        List<String> notes = new ArrayList<String>();
+        Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        if (part == null) {
+            return notes;
+        }
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            Element measure = (Element) measureNode;
+            for (Node noteNode = measure.getFirstChild(); noteNode != null; noteNode = noteNode.getNextSibling()) {
+                if (noteNode instanceof Element && "note".equals(((Element) noteNode).getTagName())) {
+                    String note = musicXmlNoteToLilyToken((Element) noteNode);
+                    if (!note.isEmpty()) {
+                        notes.add(note);
+                    }
+                }
+            }
+        }
+        return notes;
+    }
+
+    private static String musicXmlNoteToLilyToken(Element note) {
+        Element pitch = firstDirectChild(note, "pitch");
+        String type = directChildText(note, "type");
+        String duration = noteTypeToLilyDuration(type);
+        if (pitch == null) {
+            return "r" + duration;
+        }
+        String step = directChildText(pitch, "step");
+        int alter = parseIntegerText(directChildText(pitch, "alter"), 0);
+        int octave = parseIntegerText(directChildText(pitch, "octave"), 4);
+        return lilyPitchFromStepAlterOctave(step, alter, octave) + duration;
+    }
+
+    private static int parseIntegerText(String text, int fallback) {
+        try {
+            return Integer.parseInt(String.valueOf(text == null ? "" : text).trim());
+        } catch (Exception ex) {
+            return fallback;
+        }
+    }
+
+    private static String lilyQuoted(String text) {
+        return String.valueOf(text == null ? "" : text).replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static String convertLilyStaffBlocksToMusicXml(String source, String title, String composer, String meter,
+            String key, List<LilyStaffBlock> staffBlocks) {
+        StringBuilder abc = new StringBuilder();
+        abc.append("X:1\n");
+        abc.append("T:").append(title).append('\n');
+        abc.append("M:").append(meter).append('\n');
+        abc.append("L:1/8\n");
+        for (int index = 0; index < staffBlocks.size(); index++) {
+            LilyStaffBlock staff = staffBlocks.get(index);
+            String clef = parseClefText(staff.getContent());
+            if (clef.isEmpty()) {
+                clef = inferClefText(staff.getContent());
+            }
+            appendLilyVoiceHeader(abc, index + 1, staff.getPartName(), clef);
+        }
+        for (int index = 0; index < staffBlocks.size(); index++) {
+            LilyTransposeHint transpose = staffBlocks.get(index).getTranspose();
+            if (transpose != null) {
+                appendLilyTransposeMeta(abc, index + 1, transpose);
+            }
+        }
+        abc.append("K:").append(key).append('\n');
+        for (int index = 0; index < staffBlocks.size(); index++) {
+            String abcBody = parseLilyBodyToAbc(staffBlocks.get(index).getContent());
+            if (abcBody.trim().isEmpty()) {
+                continue;
+            }
+            abc.append("V:").append(index + 1).append('\n');
+            abc.append(abcBody).append('\n');
+        }
+        String xml = MusicXmlIo.normalizeImportedMusicXmlText(
+                AbcIo.musicXmlFromAbc(abc.toString(), new AbcIo.AbcImportOptions()));
+        xml = addLilyOverfullCarryDiagnostics(xml);
+        xml = addNativeRepeatVoltaToMusicXml(xml, staffBlocks.get(0).getContent());
+        xml = addNativeAlternativeEndingsToMusicXml(xml, staffBlocks.get(0).getContent());
+        xml = addNativePedalCommandsToMusicXml(xml, staffBlocks.get(0).getContent());
+        return composer == null || composer.isEmpty() ? xml : addComposerToMusicXml(xml, composer);
+    }
+
+    private static String addLilyOverfullCarryDiagnostics(String xml) {
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        if (doc == null || doc.getDocumentElement() == null) {
+            return xml;
+        }
+        boolean changed = false;
+        for (int index = 0; index < doc.getElementsByTagName("miscellaneous-field").getLength(); index++) {
+            Element field = (Element) doc.getElementsByTagName("miscellaneous-field").item(index);
+            String text = field.getTextContent() == null ? "" : field.getTextContent();
+            if (text.indexOf("code=OVERFULL_REFLOWED") < 0 || text.indexOf("message=") >= 0) {
+                continue;
+            }
+            field.setTextContent(text + ";message=carried event to next measure");
+            changed = true;
+        }
+        return changed ? MusicXmlIo.prettyPrintMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc)) : xml;
+    }
+
+    private static void appendLilyVoiceHeader(StringBuilder abc, int voiceNumber, String partName, String clef) {
+        if ((partName == null || partName.isEmpty()) && (clef == null || clef.isEmpty())) {
+            return;
+        }
+        abc.append("V:").append(voiceNumber);
+        if (partName != null && !partName.isEmpty()) {
+            abc.append(" name=\"").append(abcQuoted(partName)).append("\"");
+        }
+        if (clef != null && !clef.isEmpty()) {
+            abc.append(" clef=").append(clef);
+        }
+        abc.append('\n');
+    }
+
+    private static void appendLilyTransposeMeta(StringBuilder abc, int voiceNumber, LilyTransposeHint transpose) {
+        abc.append("%@mks transpose voice=").append(voiceNumber);
+        if (transpose.getChromatic() != null) {
+            abc.append(" chromatic=").append(transpose.getChromatic().intValue());
+        }
+        if (transpose.getDiatonic() != null) {
+            abc.append(" diatonic=").append(transpose.getDiatonic().intValue());
+        }
+        abc.append('\n');
+    }
+
+    private static String addNativeLyricsToMusicXml(String xml, String source) {
+        LilyLyricBlock lyricBlock = parseNativeLyricsBlock(source);
+        if (lyricBlock.getWords().isEmpty()) {
+            return xml;
+        }
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        if (doc == null || doc.getDocumentElement() == null) {
+            return xml;
+        }
+        List<Element> notes = musicXmlPitchedNotes(doc, lyricBlock.getTargetPartName());
+        int count = Math.min(lyricBlock.getWords().size(), notes.size());
+        for (int index = 0; index < count; index++) {
+            Element note = notes.get(index);
+            if (firstDirectChild(note, "lyric") != null) {
+                continue;
+            }
+            Element lyric = doc.createElement("lyric");
+            Element syllabic = doc.createElement("syllabic");
+            syllabic.setTextContent("single");
+            Element text = doc.createElement("text");
+            text.setTextContent(lyricBlock.getWords().get(index));
+            lyric.appendChild(syllabic);
+            lyric.appendChild(text);
+            note.appendChild(lyric);
+        }
+        return MusicXmlIo.prettyPrintMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc));
+    }
+
+    private static LilyLyricBlock parseNativeLyricsBlock(String source) {
+        List<String> lyrics = parseLilyCommandWords(source, "\\\\addlyrics");
+        if (!lyrics.isEmpty()) {
+            return new LilyLyricBlock("", lyrics);
+        }
+        lyrics = parseLilyCommandWords(source, "\\\\lyricmode");
+        if (!lyrics.isEmpty()) {
+            return new LilyLyricBlock("", lyrics);
+        }
+        String target = parseLyricstoTarget(source);
+        return new LilyLyricBlock(target, parseLilyCommandWords(source, "\\\\lyricsto\\s+\"[^\"]*\""));
+    }
+
+    private static String parseLyricstoTarget(String source) {
+        Matcher matcher = Pattern.compile("\\\\lyricsto\\s+\"([^\"]*)\"", Pattern.CASE_INSENSITIVE)
+                .matcher(String.valueOf(source == null ? "" : source));
+        return matcher.find() ? matcher.group(1).trim() : "";
+    }
+
+    private static List<String> parseLilyCommandWords(String source, String commandPattern) {
+        List<String> lyrics = new ArrayList<String>();
+        BalancedBlock block = findCommandBlock(String.valueOf(source == null ? "" : source), commandPattern);
+        if (block == null) {
+            return lyrics;
+        }
+        Matcher matcher = Pattern.compile("\"([^\"]*)\"|\\S+").matcher(stripLilyComments(block.getContent()));
+        while (matcher.find()) {
+            String token = matcher.group(1) == null ? matcher.group() : matcher.group(1);
+            token = token == null ? "" : token.trim();
+            if (!token.isEmpty() && !token.startsWith("\\")) {
+                lyrics.add(token);
+            }
+        }
+        return lyrics;
+    }
+
+    private static List<Element> musicXmlPitchedNotes(Document doc, String targetPartName) {
+        List<Element> notes = new ArrayList<Element>();
+        Element part = targetPartName == null || targetPartName.isEmpty() ? firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part")
+                : musicXmlPartByName(doc, targetPartName);
+        if (part == null) {
+            return notes;
+        }
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            Element measure = (Element) measureNode;
+            for (Node noteNode = measure.getFirstChild(); noteNode != null; noteNode = noteNode.getNextSibling()) {
+                if (noteNode instanceof Element && "note".equals(((Element) noteNode).getTagName())
+                        && firstDirectChild((Element) noteNode, "pitch") != null) {
+                    notes.add((Element) noteNode);
+                }
+            }
+        }
+        return notes;
+    }
+
+    private static Element musicXmlPartByName(Document doc, String partName) {
+        if (doc == null || doc.getDocumentElement() == null) {
+            return null;
+        }
+        String targetId = "";
+        Element partList = firstDirectChild(doc.getDocumentElement(), "part-list");
+        if (partList != null) {
+            for (Node child = partList.getFirstChild(); child != null; child = child.getNextSibling()) {
+                if (child instanceof Element && "score-part".equals(((Element) child).getTagName())
+                        && partName.equals(directChildText((Element) child, "part-name"))) {
+                    targetId = ((Element) child).getAttribute("id");
+                    break;
+                }
+            }
+        }
+        if (targetId.isEmpty()) {
+            return null;
+        }
+        for (Node child = doc.getDocumentElement().getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && "part".equals(((Element) child).getTagName())
+                    && targetId.equals(((Element) child).getAttribute("id"))) {
+                return (Element) child;
+            }
+        }
+        return null;
+    }
+
+    private static String addNativeRepeatVoltaToMusicXml(String xml, String body) {
+        Integer repeatTimes = parseNativeRepeatVoltaTimes(body);
+        if (repeatTimes == null) {
+            return xml;
+        }
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        if (doc == null || doc.getDocumentElement() == null) {
+            return xml;
+        }
+        Element firstMeasure = firstMusicXmlMeasure(doc);
+        if (firstMeasure == null) {
+            return xml;
+        }
+        Element leftBarline = directChildWithAttribute(firstMeasure, "barline", "location", "left");
+        if (leftBarline == null) {
+            leftBarline = doc.createElement("barline");
+            leftBarline.setAttribute("location", "left");
+            Node insertBefore = firstDirectChild(firstMeasure, "note");
+            if (insertBefore == null) {
+                firstMeasure.appendChild(leftBarline);
+            } else {
+                firstMeasure.insertBefore(leftBarline, insertBefore);
+            }
+        }
+        if (directChildWithAttribute(leftBarline, "repeat", "direction", "forward") == null) {
+            Element repeat = doc.createElement("repeat");
+            repeat.setAttribute("direction", "forward");
+            leftBarline.appendChild(repeat);
+        }
+
+        Element rightBarline = directChildWithAttribute(firstMeasure, "barline", "location", "right");
+        if (rightBarline == null) {
+            rightBarline = doc.createElement("barline");
+            rightBarline.setAttribute("location", "right");
+            firstMeasure.appendChild(rightBarline);
+        }
+        if (directChildWithAttribute(rightBarline, "repeat", "direction", "backward") == null) {
+            Element repeat = doc.createElement("repeat");
+            repeat.setAttribute("direction", "backward");
+            repeat.setAttribute("times", String.valueOf(repeatTimes.intValue()));
+            rightBarline.appendChild(repeat);
+        }
+        if (directChildWithAttribute(rightBarline, "ending", "type", "stop") == null) {
+            Element ending = doc.createElement("ending");
+            ending.setAttribute("number", String.valueOf(repeatTimes.intValue()));
+            ending.setAttribute("type", "stop");
+            rightBarline.appendChild(ending);
+        }
+        return MusicXmlIo.prettyPrintMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc));
+    }
+
+    private static Integer parseNativeRepeatVoltaTimes(String body) {
+        Matcher matcher = Pattern.compile("\\\\repeat\\s+volta\\s+(\\d+)\\s*\\{", Pattern.CASE_INSENSITIVE)
+                .matcher(stripLilyComments(String.valueOf(body == null ? "" : body)));
+        if (!matcher.find()) {
+            return null;
+        }
+        return Integer.valueOf(parsePositiveInt(matcher.group(1), 2));
+    }
+
+    private static String addNativeAlternativeEndingsToMusicXml(String xml, String body) {
+        int endingCount = countNativeAlternativeEndings(body);
+        if (endingCount <= 0) {
+            return xml;
+        }
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        if (doc == null || doc.getDocumentElement() == null) {
+            return xml;
+        }
+        List<Element> measures = firstMusicXmlPartMeasures(doc);
+        if (measures.isEmpty()) {
+            return xml;
+        }
+        for (int index = 0; index < endingCount; index++) {
+            String number = String.valueOf(index + 1);
+            Element measure = measures.get(Math.min(index, measures.size() - 1));
+            Element leftBarline = directChildWithAttribute(measure, "barline", "location", "left");
+            if (leftBarline == null) {
+                leftBarline = doc.createElement("barline");
+                leftBarline.setAttribute("location", "left");
+                Node insertBefore = firstDirectChild(measure, "note");
+                if (insertBefore == null) {
+                    measure.appendChild(leftBarline);
+                } else {
+                    measure.insertBefore(leftBarline, insertBefore);
+                }
+            }
+            if (!hasDirectEnding(leftBarline, number, "start")) {
+                Element ending = doc.createElement("ending");
+                ending.setAttribute("number", number);
+                ending.setAttribute("type", "start");
+                leftBarline.appendChild(ending);
+            }
+            Element rightBarline = directChildWithAttribute(measure, "barline", "location", "right");
+            if (rightBarline == null) {
+                rightBarline = doc.createElement("barline");
+                rightBarline.setAttribute("location", "right");
+                measure.appendChild(rightBarline);
+            }
+            if (!hasDirectEnding(rightBarline, number, "stop")) {
+                Element ending = doc.createElement("ending");
+                ending.setAttribute("number", number);
+                ending.setAttribute("type", "stop");
+                rightBarline.appendChild(ending);
+            }
+        }
+        return MusicXmlIo.prettyPrintMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc));
+    }
+
+    private static int countNativeAlternativeEndings(String body) {
+        BalancedBlock block = findCommandBlock(stripLilyComments(String.valueOf(body == null ? "" : body)),
+                "\\\\alternative");
+        return block == null ? 0 : directBalancedChildBlocks(block.getContent()).size();
+    }
+
+    private static boolean hasDirectEnding(Element barline, String number, String type) {
+        if (barline == null) {
+            return false;
+        }
+        for (Node child = barline.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && "ending".equals(((Element) child).getTagName())
+                    && number.equals(((Element) child).getAttribute("number"))
+                    && type.equals(((Element) child).getAttribute("type"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String addNativePedalCommandsToMusicXml(String xml, String body) {
@@ -310,6 +830,20 @@ public final class LilyPondIo {
         }
         Element part = firstDirectChild(doc.getDocumentElement(), "part");
         return firstDirectChild(part, "measure");
+    }
+
+    private static List<Element> firstMusicXmlPartMeasures(Document doc) {
+        List<Element> measures = new ArrayList<Element>();
+        Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        if (part == null) {
+            return measures;
+        }
+        for (Node child = part.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && "measure".equals(((Element) child).getTagName())) {
+                measures.add((Element) child);
+            }
+        }
+        return measures;
     }
 
     private static Element buildLilyPedalDirection(Document doc, String command) {
@@ -419,6 +953,25 @@ public final class LilyPondIo {
         return null;
     }
 
+    private static String directChildText(Element parent, String tagName) {
+        Element child = firstDirectChild(parent, tagName);
+        return child == null ? "" : child.getTextContent().trim();
+    }
+
+    private static Element directChildWithAttribute(Element parent, String tagName, String attributeName,
+            String attributeValue) {
+        if (parent == null) {
+            return null;
+        }
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && tagName.equals(((Element) child).getTagName())
+                    && attributeValue.equals(((Element) child).getAttribute(attributeName))) {
+                return (Element) child;
+            }
+        }
+        return null;
+    }
+
     private static String parseTimeSignatureText(String source) {
         Matcher matcher = Pattern.compile("\\\\time\\s+(\\d+)\\s*/\\s*(\\d+)").matcher(source);
         if (!matcher.find()) {
@@ -520,43 +1073,106 @@ public final class LilyPondIo {
     }
 
     private static LilyStaffBlock extractFirstStaffBlock(String source) {
+        List<LilyStaffBlock> staffBlocks = extractStaffBlocks(source);
+        return staffBlocks.isEmpty() ? null : staffBlocks.get(0);
+    }
+
+    private static List<LilyStaffBlock> extractStaffBlocks(String source) {
+        List<LilyStaffBlock> staffBlocks = new ArrayList<LilyStaffBlock>();
         String text = String.valueOf(source == null ? "" : source);
         Matcher matcher = Pattern.compile("\\\\new\\s+Staff(?:\\s*=\\s*\"([^\"]*)\")?", Pattern.CASE_INSENSITIVE)
                 .matcher(text);
-        if (!matcher.find()) {
-            return null;
-        }
-        String staffName = matcher.group(1) == null ? "" : matcher.group(1).trim();
-        String withPartName = "";
-        LilyTransposeHint withTranspose = null;
-        int cursor = skipWhitespace(text, matcher.end());
-        if (text.regionMatches(true, cursor, "\\with", 0, "\\with".length())) {
-            cursor = skipWhitespace(text, cursor + "\\with".length());
-            if (cursor < text.length() && text.charAt(cursor) == '{') {
-                BalancedBlock withBlock = findBalancedBlock(text, cursor);
-                if (withBlock != null) {
-                    Matcher instrumentMatcher = Pattern.compile("(?:^|[\\s;])instrumentName\\s*=\\s*\"([^\"]*)\"",
-                            Pattern.CASE_INSENSITIVE).matcher(withBlock.getContent());
-                    if (instrumentMatcher.find()) {
-                        withPartName = instrumentMatcher.group(1).trim();
+        while (matcher.find()) {
+            String staffName = matcher.group(1) == null ? "" : matcher.group(1).trim();
+            String withPartName = "";
+            LilyTransposeHint withTranspose = null;
+            int cursor = skipWhitespace(text, matcher.end());
+            if (text.regionMatches(true, cursor, "\\with", 0, "\\with".length())) {
+                cursor = skipWhitespace(text, cursor + "\\with".length());
+                if (cursor < text.length() && text.charAt(cursor) == '{') {
+                    BalancedBlock withBlock = findBalancedBlock(text, cursor);
+                    if (withBlock != null) {
+                        Matcher instrumentMatcher = Pattern.compile("(?:^|[\\s;])instrumentName\\s*=\\s*\"([^\"]*)\"",
+                                Pattern.CASE_INSENSITIVE).matcher(withBlock.getContent());
+                        if (instrumentMatcher.find()) {
+                            withPartName = instrumentMatcher.group(1).trim();
+                        }
+                        withTranspose = parseBodyTransposition(withBlock.getContent());
+                        cursor = skipWhitespace(text, withBlock.getEndPos() + 1);
                     }
-                    withTranspose = parseBodyTransposition(withBlock.getContent());
-                    cursor = skipWhitespace(text, withBlock.getEndPos() + 1);
                 }
             }
+            BalancedBlock bodyBlock;
+            cursor = skipWhitespace(text, cursor);
+            if (text.regionMatches(cursor, "<<", 0, 2)) {
+                bodyBlock = findBalancedSimultaneousBlock(text, cursor);
+            } else {
+                int bodyStart = text.indexOf('{', cursor);
+                if (bodyStart < 0) {
+                    continue;
+                }
+                bodyBlock = findBalancedBlock(text, bodyStart);
+            }
+            if (bodyBlock == null) {
+                continue;
+            }
+            String bodyPartName = parseBodyInstrumentName(bodyBlock.getContent());
+            String partName = !withPartName.isEmpty() ? withPartName : (!bodyPartName.isEmpty() ? bodyPartName : staffName);
+            LilyTransposeHint bodyTranspose = parseBodyTransposition(bodyBlock.getContent());
+            staffBlocks.add(new LilyStaffBlock(partName, bodyBlock.getContent(),
+                    withTranspose == null ? bodyTranspose : withTranspose));
         }
-        int bodyStart = text.indexOf('{', cursor);
-        if (bodyStart < 0) {
-            return null;
+        return staffBlocks;
+    }
+
+    private static String expandLilyVariables(String source) {
+        String text = String.valueOf(source == null ? "" : source);
+        Map<String, String> variables = collectLilyVariables(text);
+        if (variables.isEmpty()) {
+            return text;
         }
-        BalancedBlock bodyBlock = findBalancedBlock(text, bodyStart);
-        if (bodyBlock == null) {
-            return null;
+        String expanded = text;
+        for (int pass = 0; pass < 4; pass++) {
+            Matcher matcher = Pattern.compile("\\\\([A-Za-z][A-Za-z0-9]*)\\b").matcher(expanded);
+            StringBuffer out = new StringBuffer();
+            boolean changed = false;
+            while (matcher.find()) {
+                String replacement = variables.get(matcher.group(1));
+                if (replacement == null) {
+                    matcher.appendReplacement(out, Matcher.quoteReplacement(matcher.group()));
+                    continue;
+                }
+                matcher.appendReplacement(out, Matcher.quoteReplacement(" " + replacement + " "));
+                changed = true;
+            }
+            matcher.appendTail(out);
+            expanded = out.toString();
+            if (!changed) {
+                break;
+            }
         }
-        String bodyPartName = parseBodyInstrumentName(bodyBlock.getContent());
-        String partName = !withPartName.isEmpty() ? withPartName : (!bodyPartName.isEmpty() ? bodyPartName : staffName);
-        LilyTransposeHint bodyTranspose = parseBodyTransposition(bodyBlock.getContent());
-        return new LilyStaffBlock(partName, bodyBlock.getContent(), withTranspose == null ? bodyTranspose : withTranspose);
+        return expanded;
+    }
+
+    private static Map<String, String> collectLilyVariables(String source) {
+        Map<String, String> variables = new LinkedHashMap<String, String>();
+        String text = String.valueOf(source == null ? "" : source);
+        Matcher matcher = Pattern.compile("(?m)(?:^|\\s)([A-Za-z][A-Za-z0-9]*)\\s*=\\s*(\\\\relative(?:\\s+[a-g](?:isis|eses|is|es)?[,']*)?\\s*)?\\{",
+                Pattern.CASE_INSENSITIVE).matcher(text);
+        while (matcher.find()) {
+            int brace = text.indexOf('{', matcher.start());
+            if (brace < 0) {
+                continue;
+            }
+            BalancedBlock block = findBalancedBlock(text, brace);
+            if (block == null) {
+                continue;
+            }
+            String prefix = matcher.group(2) == null ? "" : matcher.group(2).trim();
+            String value = prefix.isEmpty() ? block.getContent() : prefix + " { " + block.getContent() + " }";
+            variables.put(matcher.group(1), value);
+        }
+        return variables;
     }
 
     private static String parseBodyInstrumentName(String body) {
@@ -632,9 +1248,10 @@ public final class LilyPondIo {
 
     private static String parseLilyBodyToAbc(String body) {
         LilyRelativeBlock relative = unwrapRelativeBlock(body);
+        String playableBody = unwrapTupletBlocks(unwrapAlternativeBlocks(unwrapRepeatVoltaBlocks(relative.getBody())));
         Matcher matcher = Pattern.compile(
-                "\\\\(?:startTrillSpan|stopTrillSpan|snappizzicato|sostenutoOff|sostenutoOn|sustainOff|sustainOn|glissando|flageolet|harmonic|treCorde|unaCorda|downbow|upbow|trill|[()<>!]|pppp|ffff|ppp|fff|sfp|sfz|rfz|pp|mp|mf|ff|fp|fz|sf|p|f)|[()]|<[^>]+>\\d*\\.{0,3}(?:\\*\\d+)?~?|[a-grs](?:isis|eses|is|es)?[,']*\\d*\\.{0,3}(?:\\*\\d+)?~?|\\d+\\.{0,3}(?:\\*\\d+)?~?|[|:]+")
-                .matcher(stripUnsupportedLilyCommands(stripLilyComments(relative.getBody())));
+                "\\\\(?:startTrillSpan|stopTrillSpan|snappizzicato|sostenutoOff|sostenutoOn|sustainOff|sustainOn|glissando|flageolet|harmonic|treCorde|unaCorda|downbow|upbow|trill|[()<>!]|pppp|ffff|ppp|fff|sfp|sfz|rfz|pp|mp|mf|ff|fp|fz|sf|p|f)|\\(\\d+(?::\\d+)?(?::\\d+)?|[()]|<[^>]+>\\d*\\.{0,3}(?:\\*\\d+)?~?|[a-grs](?:isis|eses|is|es)?[,']*\\d*\\.{0,3}(?:\\*\\d+)?~?|\\d+\\.{0,3}(?:\\*\\d+)?~?|[|:]+")
+                .matcher(stripUnsupportedLilyCommands(stripLilyComments(playableBody)));
         StringBuilder out = new StringBuilder();
         int currentDuration = 4;
         LilyRelativeState relativeState = relative.isRelativeMode() ? new LilyRelativeState(relative.getRelativeRoot())
@@ -643,6 +1260,10 @@ public final class LilyPondIo {
         while (matcher.find()) {
             String token = matcher.group();
             if (token == null || token.isEmpty()) {
+                continue;
+            }
+            if (token.matches("\\(\\d+(?::\\d+)?(?::\\d+)?")) {
+                appendToken(out, token);
                 continue;
             }
             if (token.startsWith("|") || token.indexOf(':') >= 0) {
@@ -673,6 +1294,97 @@ public final class LilyPondIo {
             }
         }
         return out.toString().replace(" | |", " |").trim();
+    }
+
+    private static String unwrapRepeatVoltaBlocks(String sourceBody) {
+        String body = String.valueOf(sourceBody == null ? "" : sourceBody);
+        Matcher matcher = Pattern.compile("\\\\repeat\\s+volta\\s+\\d+\\s*\\{", Pattern.CASE_INSENSITIVE).matcher(body);
+        StringBuilder out = new StringBuilder();
+        int cursor = 0;
+        while (matcher.find(cursor)) {
+            int bracePos = body.indexOf('{', matcher.start());
+            if (bracePos < 0) {
+                break;
+            }
+            BalancedBlock block = findBalancedBlock(body, bracePos);
+            if (block == null) {
+                break;
+            }
+            out.append(body.substring(cursor, matcher.start()));
+            out.append(' ').append(block.getContent()).append(' ');
+            cursor = block.getEndPos() + 1;
+        }
+        out.append(body.substring(cursor));
+        return out.toString();
+    }
+
+    private static String unwrapTupletBlocks(String sourceBody) {
+        String body = String.valueOf(sourceBody == null ? "" : sourceBody);
+        Matcher matcher = Pattern.compile("\\\\tuplet\\s+(\\d+)\\s*/\\s*(\\d+)\\s*\\{", Pattern.CASE_INSENSITIVE)
+                .matcher(body);
+        StringBuilder out = new StringBuilder();
+        int cursor = 0;
+        while (matcher.find(cursor)) {
+            int bracePos = body.indexOf('{', matcher.start());
+            if (bracePos < 0) {
+                break;
+            }
+            BalancedBlock block = findBalancedBlock(body, bracePos);
+            if (block == null) {
+                break;
+            }
+            String actual = matcher.group(1);
+            String normal = matcher.group(2);
+            out.append(body.substring(cursor, matcher.start()));
+            out.append(" (").append(actual).append(':').append(normal).append(':').append(actual)
+                    .append(' ').append(block.getContent()).append(' ');
+            cursor = block.getEndPos() + 1;
+        }
+        out.append(body.substring(cursor));
+        return out.toString();
+    }
+
+    private static String unwrapAlternativeBlocks(String sourceBody) {
+        String body = String.valueOf(sourceBody == null ? "" : sourceBody);
+        Matcher matcher = Pattern.compile("\\\\alternative\\s*\\{", Pattern.CASE_INSENSITIVE).matcher(body);
+        StringBuilder out = new StringBuilder();
+        int cursor = 0;
+        while (matcher.find(cursor)) {
+            int bracePos = body.indexOf('{', matcher.start());
+            if (bracePos < 0) {
+                break;
+            }
+            BalancedBlock block = findBalancedBlock(body, bracePos);
+            if (block == null) {
+                break;
+            }
+            out.append(body.substring(cursor, matcher.start()));
+            for (BalancedBlock childBlock : directBalancedChildBlocks(block.getContent())) {
+                out.append(' ').append(childBlock.getContent()).append(' ');
+            }
+            cursor = block.getEndPos() + 1;
+        }
+        out.append(body.substring(cursor));
+        return out.toString();
+    }
+
+    private static List<BalancedBlock> directBalancedChildBlocks(String sourceBody) {
+        List<BalancedBlock> blocks = new ArrayList<BalancedBlock>();
+        String body = String.valueOf(sourceBody == null ? "" : sourceBody);
+        int cursor = 0;
+        while (cursor < body.length()) {
+            int bracePos = body.indexOf('{', cursor);
+            if (bracePos < 0) {
+                break;
+            }
+            BalancedBlock block = findBalancedBlock(body, bracePos);
+            if (block == null) {
+                break;
+            }
+            blocks.add(block);
+            cursor = block.getEndPos() + 1;
+        }
+        return blocks;
     }
 
     private static String lilyCommandToAbcDecoration(String token) {
@@ -1085,6 +1797,8 @@ public final class LilyPondIo {
         return String.valueOf(text == null ? "" : text)
                 .replaceAll("\\\\set\\s+Staff\\.instrumentName\\s*=\\s*\"[^\"]*\"", " ")
                 .replaceAll("\\\\transposition\\s+[a-g](?:isis|eses|is|es)?[,']*", " ")
+                .replaceAll("\\\\key\\s+[a-g](?:isis|eses|is|es)?\\s+\\\\(?:major|minor)", " ")
+                .replaceAll("\\\\time\\s+\\d+\\s*/\\s*\\d+", " ")
                 .replaceAll("\\\\clef\\s+\"?[A-Za-z0-9]+\"?", " ");
     }
 
@@ -1131,6 +1845,23 @@ public final class LilyPondIo {
                     return new BalancedBlock(startBracePos, startBracePos, index,
                             source.substring(startBracePos + 1, index));
                 }
+            }
+        }
+        return null;
+    }
+
+    private static BalancedBlock findBalancedSimultaneousBlock(String source, int startPos) {
+        int depth = 0;
+        for (int index = startPos; index < source.length() - 1; index++) {
+            if (source.regionMatches(index, "<<", 0, 2)) {
+                depth++;
+                index++;
+            } else if (source.regionMatches(index, ">>", 0, 2)) {
+                depth--;
+                if (depth == 0) {
+                    return new BalancedBlock(startPos, startPos, index + 1, source.substring(startPos + 2, index));
+                }
+                index++;
             }
         }
         return null;
@@ -1241,6 +1972,24 @@ public final class LilyPondIo {
 
         private LilyTransposeHint getTranspose() {
             return transpose;
+        }
+    }
+
+    private static final class LilyLyricBlock {
+        private final String targetPartName;
+        private final List<String> words;
+
+        private LilyLyricBlock(String targetPartName, List<String> words) {
+            this.targetPartName = targetPartName == null ? "" : targetPartName;
+            this.words = words == null ? new ArrayList<String>() : words;
+        }
+
+        private String getTargetPartName() {
+            return targetPartName;
+        }
+
+        private List<String> getWords() {
+            return words;
         }
     }
 

@@ -46,10 +46,28 @@ completed slice history remains below.
 - Latest completed LilyPond bow slice: native `\upbow` / `\downbow` commands are handed off to MusicXML technical notation through ABC and covered with focused regression.
 - Latest completed LilyPond technical notation slice: native `\snappizzicato`, `\flageolet`, and `\harmonic` commands are handed off to MusicXML snap-pizzicato / harmonic notation through ABC and covered with focused regression.
 - Latest completed LilyPond omitted-root relative pedal sample regression: treble clef inference and pedal command token isolation are covered with focused regression.
-- Latest full verification: `mvn test` passed with 528 tests / 0 failures / 0 errors.
+- Latest completed LilyPond repeat slice: native `\repeat volta` wrappers are unwrapped before the ABC handoff and first-measure MusicXML repeat barlines / ending metadata are added in a focused DOM post-process regression.
+- Latest completed LilyPond lyrics slice: basic `\addlyrics` block text is attached to pitched MusicXML notes and covered with focused regression.
+- Latest completed LilyPond lyricmode slice: standalone `\lyricmode` block text is attached to pitched MusicXML notes and covered with focused regression.
+- Latest completed LilyPond lyricsto slice: basic single-staff `\lyricsto` block text is attached to pitched MusicXML notes and covered with focused regression.
+- Latest completed LilyPond lyricsto target slice: multiple `\new Staff` blocks are handed off as multiple ABC voices, and `\lyricsto` target text is attached to the matching MusicXML part by part-name.
+- Latest completed LilyPond alternative slice: native `\alternative` ending bodies are unwrapped before ABC handoff and MusicXML ending start/stop barlines are added for multiple endings.
+- Latest completed LilyPond part-name roundtrip slice: minimal `exportMusicXmlDomToLilyPond` preserves MusicXML `part-name` as LilyPond `instrumentName` and through import roundtrip.
+- Latest completed LilyPond tuplet slice: native `\tuplet 3/2` is unwrapped to an ABC tuplet prefix and imported as MusicXML `time-modification` / `tuplet` notation through the existing ABC handoff.
+- Latest completed LilyPond multi-part metadata regression slice: multi-staff `\with { instrumentName = ... }` metadata is covered through the existing multi-staff ABC voice handoff.
+- Latest completed LilyPond simultaneous two-staff regression slice: staff-local `\key` / `\time` commands are stripped before tokenization to avoid note overcounting.
+- Latest completed LilyPond variable organ score slice: simple LilyPond variable references and `\new Staff ... << ... >>` simultaneous staff bodies are expanded/extracted before the existing ABC handoff.
+- Latest completed LilyPond lanes metadata roundtrip slice: `exportMusicXmlDomToLilyPond` emits `%@mks lanes` metadata and import restores same-staff multi-voice MusicXML backup layout from that metadata.
+- Latest completed LilyPond 7:8 tuplet roundtrip regression slice: the `%@mks lanes` roundtrip hint preserves the final 16th note in a mixed 7:8 tuplet plus 16th-run measure.
+- Latest completed LilyPond triplet-16th visual semantics roundtrip slice: `exportMusicXmlDomToLilyPond` emits `%@mks slur` metadata and the `%@mks lanes` roundtrip hint preserves 16th type / slur notations.
+- Latest completed LilyPond non-4/4 capacity direct import slice: 3/4 LilyPond direct import preserves time signature, diagnostics, and following rest measure layout through the existing ABC handoff.
+- Latest completed LilyPond overfull carry regression slice: overfull 3/4 direct import carries the overflow event to the next measure and emits the upstream-compatible carry diagnostic message.
+- Latest completed LilyPond export text slice: `exportMusicXmlDomToLilyPond` emits MusicXML first-measure time signature as LilyPond `\time`.
+- Latest focused verification: `mvn test -Dtest=LilyPondIoTest` passed with 53 tests / 0 failures / 0 errors.
+- Latest full verification: `mvn test` passed with 545 tests / 0 failures / 0 errors.
 - 2026-05-11 end-of-day resume point: continue from `src/ts/midi-io.ts` around `buildPlaybackEventsFromMusicXmlDoc`; Java-side focus is `MidiIo` / `MidiIoTest`. Latest focused verification is `mvn test -Dtest=MidiIoTest` with 103 tests / 0 failures / 0 errors, and latest full verification is `mvn test` with 484 tests / 0 failures / 0 errors.
 - Resume with `igapyon-miku-soft-developer` and continue straight-conversion slices from upstream `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`.
-- Suggested next step: continue MIDI export/import parity in small pieces where it fits the existing helper boundary. Do not duplicate pedal controller extraction; it is already covered by `collectMidiControlEventsFromMusicXmlDoc`.
+- Suggested next step: continue scanning upstream LilyPond regressions from the current position, checking whether the movement-title fallback export regression can be cut cleanly; otherwise return to broader MIDI export/import parity in small pieces where it fits the existing helper boundary. Do not duplicate pedal controller extraction; it is already covered by `collectMidiControlEventsFromMusicXmlDoc`.
 - Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 
 ### Highest Priority Format Work
