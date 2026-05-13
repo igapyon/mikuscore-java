@@ -518,8 +518,491 @@ public class LilyPondIoTest {
         assertEquals("sharp", directText(directChild(directNoteAt(measureAt(doc, 5), 1), "accidental")));
     }
 
+    @Test
+    public void importsNativeRepeatVoltaIntoMusicXmlRepeatBarlines() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { \\repeat volta 2 { c'4 d'4 e'4 f'4 } }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        Element measure = measureAt(doc, 0);
+        Element leftBarline = directChildWithAttribute(measure, "barline", "location", "left");
+        Element rightBarline = directChildWithAttribute(measure, "barline", "location", "right");
+
+        assertEquals("forward", directChild(leftBarline, "repeat").getAttribute("direction"));
+        assertEquals("backward", directChild(rightBarline, "repeat").getAttribute("direction"));
+        assertEquals("2", directChild(rightBarline, "ending").getAttribute("number"));
+        assertEquals("stop", directChild(rightBarline, "ending").getAttribute("type"));
+    }
+
+    @Test
+    public void importsAlternativeBlockWithMultipleEndings() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 2/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" {\n"
+                + "    \\repeat volta 2 { c'4 d'4 }\n"
+                + "    \\alternative {\n"
+                + "      { e'4 }\n"
+                + "      { f'4 }\n"
+                + "    }\n"
+                + "  }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        List<String> steps = new ArrayList<String>();
+        for (int index = 0; index < doc.getElementsByTagName("step").getLength(); index++) {
+            steps.add(doc.getElementsByTagName("step").item(index).getTextContent().trim());
+        }
+
+        assertEquals(true, steps.contains("E"));
+        assertEquals(true, steps.contains("F"));
+        assertEquals(true, hasEnding(doc, "1", "start"));
+        assertEquals(true, hasEnding(doc, "1", "stop"));
+        assertEquals(true, hasEnding(doc, "2", "start"));
+        assertEquals(true, hasEnding(doc, "2", "stop"));
+    }
+
+    @Test
+    public void importsNativeTupletRatioIntoMusicXmlTupletTimeModification() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 2/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { \\tuplet 3/2 { c'8 d'8 e'8 } }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        Element measure = measureAt(doc, 0);
+        Element firstNote = directNoteAt(measure, 0);
+        Element thirdNote = directNoteAt(measure, 2);
+
+        assertEquals(3, directChildren(measure, "note").size());
+        assertEquals("3", directText(directChild(directChild(firstNote, "time-modification"), "actual-notes")));
+        assertEquals("2", directText(directChild(directChild(firstNote, "time-modification"), "normal-notes")));
+        assertEquals("start", directChild(directChild(firstNote, "notations"), "tuplet").getAttribute("type"));
+        assertEquals("stop", directChild(directChild(thirdNote, "notations"), "tuplet").getAttribute("type"));
+    }
+
+    @Test
+    public void importsMultiPartStaffBlocksWithWithMetadata() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  <<\n"
+                + "    \\new Staff = \"Flute\" \\with { instrumentName = \"Fl.\" } { c'4 d'4 e'4 f'4 }\n"
+                + "    \\new Staff = \"Clarinet\" \\with { instrumentName = \"Cl.\" } { c4 d4 e4 f4 }\n"
+                + "  >>\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(2, directChildren(doc.getDocumentElement(), "part").size());
+        assertEquals("Fl.", doc.getElementsByTagName("part-name").item(0).getTextContent().trim());
+        assertEquals("Cl.", doc.getElementsByTagName("part-name").item(1).getTextContent().trim());
+    }
+
+    @Test
+    public void doesNotOvercountNotesForSimultaneousTwoStaffFragment() {
+        String lily = "<<\n"
+                + "  \\new Staff { \\clef \"treble\" \\key d \\major \\time 3/4 c''4 }\n"
+                + "  \\new Staff { \\clef \"bass\" c4 }\n"
+                + ">>";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        Element firstPartMeasure = measureAt(partAt(doc, 0), 0);
+        Element secondPartMeasure = measureAt(partAt(doc, 1), 0);
+
+        assertEquals(2, directChildren(doc.getDocumentElement(), "part").size());
+        assertEquals(1, directChildren(firstPartMeasure, "note").size());
+        assertEquals(1, directChildren(secondPartMeasure, "note").size());
+        assertEquals("C", directText(directChild(directChild(directNoteAt(firstPartMeasure, 0), "pitch"), "step")));
+        assertEquals("C", directText(directChild(directChild(directNoteAt(secondPartMeasure, 0), "pitch"), "step")));
+    }
+
+    @Test
+    public void importsVariableBasedOrganScoreWithRelativeBlocks() {
+        String lily = "\\header {\n"
+                + "  title = \"Jesu, meine Freude\"\n"
+                + "  composer = \"J S Bach\"\n"
+                + "}\n"
+                + "keyTime = { \\key c \\minor \\time 4/4 }\n"
+                + "ManualOneVoiceOneMusic = \\relative {\n"
+                + "  g'4 g f ees |\n"
+                + "  d2 c |\n"
+                + "}\n"
+                + "ManualOneVoiceTwoMusic = \\relative {\n"
+                + "  ees'16 d ees8~ 16 f ees d c8 d~ d c~ |\n"
+                + "  8 c4 b8 c8. g16 c b c d |\n"
+                + "}\n"
+                + "ManualTwoMusic = \\relative {\n"
+                + "  c'16 b c8~ 16 b c g a8 g~ 16 g aes ees |\n"
+                + "  f16 ees f d g aes g f ees d ees8~ 16 f ees d |\n"
+                + "}\n"
+                + "PedalOrganMusic = \\relative {\n"
+                + "  r8 c16 d ees d ees8~ 16 a, b g c b c8 |\n"
+                + "  r16 g ees f g f g8 c,2 |\n"
+                + "}\n"
+                + "\\score {\n"
+                + "  <<\n"
+                + "    \\new PianoStaff <<\n"
+                + "      \\new Staff = \"ManualOne\" <<\n"
+                + "        \\keyTime\n"
+                + "        \\clef \"treble\"\n"
+                + "        \\new Voice { \\voiceOne \\ManualOneVoiceOneMusic }\n"
+                + "        \\new Voice { \\voiceTwo \\ManualOneVoiceTwoMusic }\n"
+                + "      >>\n"
+                + "      \\new Staff = \"ManualTwo\" <<\n"
+                + "        \\keyTime\n"
+                + "        \\clef \"bass\"\n"
+                + "        \\new Voice { \\ManualTwoMusic }\n"
+                + "      >>\n"
+                + "    >>\n"
+                + "    \\new Staff = \"PedalOrgan\" <<\n"
+                + "      \\keyTime\n"
+                + "      \\clef \"bass\"\n"
+                + "      \\new Voice { \\PedalOrganMusic }\n"
+                + "    >>\n"
+                + "  >>\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(true, directChildren(doc.getDocumentElement(), "part").size() >= 3);
+        assertEquals(true, doc.getElementsByTagName("note").getLength() > 0);
+        assertEquals("ManualOne", doc.getElementsByTagName("part-name").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void importsBasicLyricsFromAddLyricsBlock() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { c'4 d'4 }\n"
+                + "  \\addlyrics { la le }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals("la", directText(directChild(directChild(directNoteAt(measureAt(doc, 0), 0), "lyric"), "text")));
+        assertEquals("le", directText(directChild(directChild(directNoteAt(measureAt(doc, 0), 1), "lyric"), "text")));
+    }
+
+    @Test
+    public void importsBasicLyricsFromStandaloneLyricModeBlock() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\lyricmode { do re }\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { c'4 d'4 }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals("do", directText(directChild(directChild(directNoteAt(measureAt(doc, 0), 0), "lyric"), "text")));
+        assertEquals("re", directText(directChild(directChild(directNoteAt(measureAt(doc, 0), 1), "lyric"), "text")));
+    }
+
+    @Test
+    public void importsBasicLyricsFromLyricstoBlock() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { c'4 d'4 }\n"
+                + "  \\lyricsto \"P1\" { mi fa }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals("mi", directText(directChild(directChild(directNoteAt(measureAt(doc, 0), 0), "lyric"), "text")));
+        assertEquals("fa", directText(directChild(directChild(directNoteAt(measureAt(doc, 0), 1), "lyric"), "text")));
+    }
+
+    @Test
+    public void appliesLyricstoTargetToMatchingStaffId() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  <<\n"
+                + "    \\new Staff = \"P1\" { c'4 d'4 }\n"
+                + "    \\new Staff = \"P2\" { e'4 f'4 }\n"
+                + "  >>\n"
+                + "  \\lyricsto \"P2\" { lo rem }\n"
+                + "}";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        Element firstPartMeasure = measureAt(partAt(doc, 0), 0);
+        Element secondPartMeasure = measureAt(partAt(doc, 1), 0);
+
+        assertNull(directChild(directNoteAt(firstPartMeasure, 0), "lyric"));
+        assertEquals("lo", directText(directChild(directChild(directNoteAt(secondPartMeasure, 0), "lyric"), "text")));
+        assertEquals("rem", directText(directChild(directChild(directNoteAt(secondPartMeasure, 1), "lyric"), "text")));
+    }
+
+    @Test
+    public void preservesPartNameAcrossMusicXmlToLilyPondToMusicXml() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list>\n"
+                + "    <score-part id=\"P1\"><part-name>Violin</part-name></score-part>\n"
+                + "  </part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>4</beats><beat-type>4</beat-type></time>\n"
+                + "        <clef><sign>G</sign><line>2</line></clef>\n"
+                + "      </attributes>\n"
+                + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+        Document roundtrip = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        assertEquals(true, lily.contains("instrumentName = \"Violin\""));
+        assertEquals("Violin", roundtrip.getElementsByTagName("part-name").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void roundtripsSameStaffMultiVoiceNoteViaMksLanesMetadata() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>2</beats><beat-type>4</beat-type></time>\n"
+                + "        <clef><sign>G</sign><line>2</line></clef>\n"
+                + "      </attributes>\n"
+                + "      <note>\n"
+                + "        <pitch><step>E</step><octave>5</octave></pitch>\n"
+                + "        <duration>960</duration><voice>1</voice><type>half</type>\n"
+                + "      </note>\n"
+                + "      <backup><duration>960</duration></backup>\n"
+                + "      <note>\n"
+                + "        <pitch><step>A</step><octave>4</octave></pitch>\n"
+                + "        <duration>480</duration><voice>2</voice><type>quarter</type>\n"
+                + "      </note>\n"
+                + "      <note>\n"
+                + "        <pitch><step>B</step><octave>4</octave></pitch>\n"
+                + "        <duration>480</duration><voice>2</voice><type>quarter</type>\n"
+                + "      </note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+        Document outDoc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        Element measure = measureAt(outDoc, 0);
+
+        assertEquals(true, lily.contains("%@mks lanes voice=P1 measure=1 data="));
+        assertEquals(3, directChildren(measure, "note").size());
+        assertEquals("960", directText(directChild(measure, "backup")));
+        assertEquals("E", directText(directChild(directChild(directNoteAt(measure, 0), "pitch"), "step")));
+        assertEquals("5", directText(directChild(directChild(directNoteAt(measure, 0), "pitch"), "octave")));
+        assertEquals("960", directText(directChild(directNoteAt(measure, 0), "duration")));
+    }
+
+    @Test
+    public void keepsFinal16thNoteInSevenToEightTupletAnd16thRunMeasureRoundtrip() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Part 1</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>2</beats><beat-type>4</beat-type></time>\n"
+                + "      </attributes>\n"
+                + "      <note><pitch><step>F</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>F</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>A</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>D</step><octave>5</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>F</step><octave>5</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>A</step><octave>5</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>\n"
+                + "      <note><pitch><step>D</step><octave>6</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>\n"
+                + "      <note><pitch><step>F</step><octave>6</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>\n"
+                + "      <note><pitch><step>A</step><octave>6</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>\n"
+                + "      <note><pitch><step>D</step><octave>7</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+        Document outDoc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        Element measure = measureAt(outDoc, 0);
+        Element lastNote = directNoteAt(measure, 10);
+
+        assertEquals(11, directChildren(measure, "note").size());
+        assertEquals("D", directText(directChild(directChild(lastNote, "pitch"), "step")));
+        assertEquals("7", directText(directChild(directChild(lastNote, "pitch"), "octave")));
+    }
+
+    @Test
+    public void keepsTriplet16thVisualSemanticsTypeAndSlurOnRoundtrip() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Part 1</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>2</beats><beat-type>4</beat-type></time>\n"
+                + "      </attributes>\n"
+                + "      <note>\n"
+                + "        <pitch><step>E</step><octave>6</octave></pitch>\n"
+                + "        <duration>80</duration><voice>1</voice><type>16th</type>\n"
+                + "        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>\n"
+                + "        <notations><tuplet type=\"start\"/><slur type=\"start\" number=\"1\" placement=\"above\"/></notations>\n"
+                + "      </note>\n"
+                + "      <note>\n"
+                + "        <pitch><step>F</step><octave>6</octave></pitch>\n"
+                + "        <duration>80</duration><voice>1</voice><type>16th</type>\n"
+                + "        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>\n"
+                + "      </note>\n"
+                + "      <note>\n"
+                + "        <pitch><step>E</step><octave>6</octave></pitch>\n"
+                + "        <duration>80</duration><voice>1</voice><type>16th</type>\n"
+                + "        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>\n"
+                + "        <notations><tuplet type=\"stop\"/><slur type=\"stop\" number=\"1\"/></notations>\n"
+                + "      </note>\n"
+                + "      <note>\n"
+                + "        <pitch><step>C</step><octave>6</octave></pitch>\n"
+                + "        <duration>480</duration><voice>1</voice><type>quarter</type>\n"
+                + "      </note>\n"
+                + "      <note>\n"
+                + "        <pitch><step>A</step><octave>5</octave></pitch>\n"
+                + "        <duration>80</duration><voice>1</voice><type>16th</type>\n"
+                + "        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>\n"
+                + "        <notations><tuplet type=\"start\"/><slur type=\"start\" number=\"1\" placement=\"above\"/></notations>\n"
+                + "      </note>\n"
+                + "      <note>\n"
+                + "        <pitch><step>B</step><octave>5</octave></pitch>\n"
+                + "        <duration>80</duration><voice>1</voice><type>16th</type>\n"
+                + "        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>\n"
+                + "      </note>\n"
+                + "      <note>\n"
+                + "        <pitch><step>A</step><octave>5</octave></pitch>\n"
+                + "        <duration>80</duration><voice>1</voice><type>16th</type>\n"
+                + "        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>\n"
+                + "        <notations><tuplet type=\"stop\"/><slur type=\"stop\" number=\"1\"/></notations>\n"
+                + "      </note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+        Document outDoc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+        Element measure = measureAt(outDoc, 0);
+
+        assertEquals(true, lily.contains("%@mks slur voice=P1 measure=1 event=1 type=start"));
+        assertEquals(true, lily.contains("%@mks slur voice=P1 measure=1 event=3 type=stop"));
+        assertEquals(7, directChildren(measure, "note").size());
+        assertEquals("16th", directText(directChild(directNoteAt(measure, 0), "type")));
+        assertEquals("16th", directText(directChild(directNoteAt(measure, 1), "type")));
+        assertEquals("16th", directText(directChild(directNoteAt(measure, 2), "type")));
+        assertEquals("start", directChild(directChild(directNoteAt(measure, 0), "notations"), "slur").getAttribute("type"));
+        assertEquals("stop", directChild(directChild(directNoteAt(measure, 2), "notations"), "slur").getAttribute("type"));
+        assertEquals("start", directChild(directChild(directNoteAt(measure, 4), "notations"), "slur").getAttribute("type"));
+        assertEquals("stop", directChild(directChild(directNoteAt(measure, 6), "notations"), "slur").getAttribute("type"));
+    }
+
+    @Test
+    public void respectsNonFourFourMeasureCapacityOnDirectImport() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 3/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { r4 r4 d'8 a8 f8 | r4 r4 r4 }\n"
+                + "}";
+
+        String xml = LilyPondIo.convertLilyPondToMusicXml(lily);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        Element firstMeasure = measureAt(doc, 0);
+        Element secondMeasure = measureAt(doc, 1);
+
+        Element time = directChild(directChild(firstMeasure, "attributes"), "time");
+        assertEquals("3", directText(directChild(time, "beats")));
+        assertEquals("4", directText(directChild(time, "beat-type")));
+        assertEquals(2, directPitchCount(firstMeasure));
+        assertEquals(true, doc.getElementsByTagName("miscellaneous-field").getLength() > 0);
+        assertEquals(3, directChildren(secondMeasure, "note").size());
+    }
+
+    @Test
+    public void carriesOverfullEventToNextMeasureInsteadOfDroppingIt() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 3/4\n"
+                + "\\key c \\major\n"
+                + "\\score {\n"
+                + "  \\new Staff = \"P1\" { r4 r4 d'8 a8 f8 | a8 d'8 f'8 a'8 d''8 f''8 }\n"
+                + "}";
+
+        String xml = LilyPondIo.convertLilyPondToMusicXml(lily);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        List<String> firstMeasureSteps = pitchedSteps(measureAt(doc, 0));
+        List<String> secondMeasureSteps = pitchedSteps(measureAt(doc, 1));
+
+        assertEquals("D", firstMeasureSteps.get(0));
+        assertEquals("A", firstMeasureSteps.get(1));
+        assertEquals("F", secondMeasureSteps.get(0));
+        assertEquals(true, xml.contains("carried event to next measure"));
+    }
+
+    @Test
+    public void exportsMusicXmlToLilyPondTextWithTimeSignature() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Part 1</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>4</beats><beat-type>4</beat-type></time>\n"
+                + "      </attributes>\n"
+                + "      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "      <note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "      <note><pitch><step>F</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+
+        assertEquals(true, lily.contains("\\score"));
+        assertEquals(true, lily.contains("\\new Staff"));
+        assertEquals(true, lily.contains("\\time 4/4"));
+    }
+
     private static Element measureAt(Document doc, int index) {
         Element part = directChild(doc.getDocumentElement(), "part");
+        return measureAt(part, index);
+    }
+
+    private static Element partAt(Document doc, int index) {
+        return directChildren(doc.getDocumentElement(), "part").get(index);
+    }
+
+    private static Element measureAt(Element part, int index) {
         return directChildren(part, "measure").get(index);
     }
 
@@ -537,12 +1020,47 @@ public class LilyPondIoTest {
         return count;
     }
 
+    private static List<String> pitchedSteps(Element measure) {
+        List<String> steps = new ArrayList<String>();
+        for (Element note : directChildren(measure, "note")) {
+            Element pitch = directChild(note, "pitch");
+            if (pitch != null) {
+                steps.add(directText(directChild(pitch, "step")));
+            }
+        }
+        return steps;
+    }
+
     private static Element directChild(Element parent, String name) {
         if (parent == null) {
             return null;
         }
         for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (child instanceof Element && name.equals(((Element) child).getTagName())) {
+                return (Element) child;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasEnding(Document doc, String number, String type) {
+        for (int index = 0; index < doc.getElementsByTagName("ending").getLength(); index++) {
+            Element ending = (Element) doc.getElementsByTagName("ending").item(index);
+            if (number.equals(ending.getAttribute("number")) && type.equals(ending.getAttribute("type"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Element directChildWithAttribute(Element parent, String name, String attributeName,
+            String attributeValue) {
+        if (parent == null) {
+            return null;
+        }
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && name.equals(((Element) child).getTagName())
+                    && attributeValue.equals(((Element) child).getAttribute(attributeName))) {
                 return (Element) child;
             }
         }

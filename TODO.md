@@ -214,24 +214,135 @@
 - [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の omitted-root relative pedal sample regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
   - omitted-root `\relative` の treble clef inference と pedal command token 誤読防止を確認
   - focused coverage: `LilyPondIoTest` 36 tests 成功
-- [x] ここまでの最新検証: `mvn test` 成功、528 tests / 0 failures / 0 errors
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native `\repeat volta` import regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\repeat volta N { ... }` を既存 LilyPond token handoff に渡す前に unwrap し、MusicXML first measure に forward/backward repeat barline と `ending[type="stop"]` を反映
+  - focused coverage: `LilyPondIoTest` 37 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の basic `\addlyrics` block import regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - source 全体から `\addlyrics { ... }` を抽出し、MusicXML pitched note へ `lyric/text` を順に付与
+  - focused coverage: `LilyPondIoTest` 38 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の standalone `\lyricmode` block import regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - source 全体から standalone `\lyricmode { ... }` を抽出し、MusicXML pitched note へ `lyric/text` を順に付与
+  - focused coverage: `LilyPondIoTest` 39 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の basic `\lyricsto` block import regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - source 全体から `\lyricsto "..." { ... }` を抽出し、single-staff MusicXML pitched note へ `lyric/text` を順に付与
+  - focused coverage: `LilyPondIoTest` 40 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の `\lyricsto` target matching staff id regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - 複数 `\new Staff` を ABC 複数 `V:` handoff へ渡し、`lyricsto` target part-name に一致する MusicXML part へ lyric を付与
+  - focused coverage: `LilyPondIoTest` 41 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の `\alternative` block with multiple endings regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\alternative { { ... } { ... } }` を ABC handoff 前に ending body へ unwrap し、MusicXML barline に ending number 1/2 の start/stop を付与
+  - focused coverage: `LilyPondIoTest` 42 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の MusicXML -> LilyPond -> MusicXML part-name roundtrip regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - 最小 `exportMusicXmlDomToLilyPond` facade を追加し、MusicXML `part-name` を LilyPond `instrumentName` に反映して import roundtrip で保持
+  - focused coverage: `LilyPondIoTest` 43 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の native `\tuplet` ratio import regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `\tuplet 3/2 { ... }` を ABC tuplet prefix `(3:2:3` へ unwrap し、既存 `AbcIo` handoff で MusicXML `time-modification` / `tuplet` に反映
+  - focused coverage: `LilyPondIoTest` 44 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の multi-part staff blocks with `\with` metadata regression を Java `LilyPondIoTest` に追加
+  - 既存 multi-staff ABC voice handoff と `\with { instrumentName = ... }` metadata handoff を組み合わせて確認
+  - focused coverage: `LilyPondIoTest` 45 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の simultaneous two-staff overcount regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - staff body 内の `\key` / `\time` を tokenizer 前に除外し、2 staff fragment が各 part 1 note のみになることを確認
+  - focused coverage: `LilyPondIoTest` 46 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の variable-based organ score import regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `name = { ... }` / `name = \relative { ... }` の参照を staff body で展開し、`\new Staff ... << ... >>` simultaneous block を抽出
+  - focused coverage: `LilyPondIoTest` 47 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の same-staff multi-voice lanes metadata roundtrip regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `exportMusicXmlDomToLilyPond` が `%@mks lanes voice=... measure=1 data=...` metadata を出し、import 側で backup / voice layout を復元
+  - focused coverage: `LilyPondIoTest` 48 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の 7:8 tuplet + 16th-run measure roundtrip regression を Java `LilyPondIoTest` に追加
+  - `%@mks lanes` roundtrip hint により、11 notes と最後の D7 を保持
+  - focused coverage: `LilyPondIoTest` 49 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の triplet-16th visual semantics roundtrip regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `exportMusicXmlDomToLilyPond` が `%@mks slur voice=... measure=... event=... type=...` metadata を出し、`%@mks lanes` roundtrip hint で type / slur を保持
+  - focused coverage: `LilyPondIoTest` 50 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の non-4/4 measure capacity direct import regression を Java `LilyPondIoTest` に追加
+  - 3/4 の direct import で time signature、diagnostic metadata、次 measure の rest layout が壊れないことを確認
+  - focused coverage: `LilyPondIoTest` 51 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の overfull event carry-to-next-measure regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - 3/4 の overfull input で D/A が first measure、F が second measure 先頭に carry され、diagnostic message に `carried event to next measure` が残ることを確認
+  - focused coverage: `LilyPondIoTest` 52 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の MusicXML -> LilyPond export text regression を Java `LilyPondIo` / `LilyPondIoTest` に追加
+  - `exportMusicXmlDomToLilyPond` が MusicXML first measure の time signature を `\time 4/4` として出力
+  - focused coverage: `LilyPondIoTest` 53 tests 成功
+- [x] ここまでの最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、53 tests / 0 failures / 0 errors
+- [x] ここまでの最新 full 検証: `mvn test` 成功、545 tests / 0 failures / 0 errors
 - [x] 直近の upstream 基準 checkout: `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`
 - [x] 2026-05-13 一時停止時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/lilypond/LilyPondIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/lilypond/LilyPondIoTest.java`
   - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
-  - 現在の未コミット差分: 上記 6 files が `MM` 状態。staged 済み差分に加えて、今回の omitted-root relative pedal sample slice の unstaged 差分も同じ files に乗っている
-  - 最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、36 tests / 0 failures / 0 errors
-  - 最新 full 検証: `mvn test` 成功、528 tests / 0 failures / 0 errors
+  - 当時の未コミット差分: 上記 6 files が `MM` 状態。staged 済み差分に加えて、omitted-root relative pedal sample slice の unstaged 差分も同じ files に乗っていた
+  - 最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、46 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、545 tests / 0 failures / 0 errors
   - 最新 diff 検証: `git diff --check` 問題なし
-- [ ] 次回再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
-- [ ] 次回再開時の第一候補は upstream `tests/unit/lilypond-io.spec.ts` の native `\repeat volta` import regression
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の native `\repeat volta` import regression
   - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports native \repeat volta into MusicXML repeat barlines`
   - 期待値: MusicXML `barline[location="left"] > repeat[direction="forward"]`、右 barline の `repeat[direction="backward"]`、`ending[type="stop"][number="2"]`
-  - 既存 LilyPond tokenizer / ABC handoff で小さく切れるか確認し、難しければ MusicXML DOM post-process の小 slice として扱う
+  - 実装方針: LilyPond tokenizer / ABC handoff 前に repeat wrapper を unwrap し、MusicXML DOM post-process の小 slice で repeat barline / ending を追加
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の basic lyrics from `\addlyrics` block import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports basic lyrics from \addlyrics block`
+  - 期待値: first / second note の `lyric > text` が `la` / `le`
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の basic lyrics from standalone `\lyricmode` block import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports basic lyrics from standalone \lyricmode block`
+  - 期待値: first / second note の `lyric > text` が `do` / `re`
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の basic lyrics from `\lyricsto` block import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports basic lyrics from \lyricsto block`
+  - 期待値: first / second note の `lyric > text` が `mi` / `fa`
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の `\lyricsto` target matching staff id regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `applies \lyricsto target to matching staff id`
+  - 期待値: first part に lyric なし、second part の first / second note の `lyric > text` が `lo` / `rem`
+  - 実装方針: 複数 Staff を ABC 複数 voice として渡し、part-name で lyric target を解決
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の `\alternative` block with multiple endings regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports \alternative block with multiple endings`
+  - 期待値: steps に `E` / `F` が含まれ、ending number 1/2 の start/stop が MusicXML barline に入る
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の MusicXML -> LilyPond -> MusicXML part-name roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `preserves part-name across MusicXML -> LilyPond -> MusicXML`
+  - 期待値: exported LilyPond に `instrumentName = "Violin"` が含まれ、roundtrip MusicXML の `part-name` が `Violin`
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の native `\tuplet` ratio import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports native \tuplet ratio into MusicXML tuplet/time-modification`
+  - 期待値: notes length 3、first note `time-modification` actual 3 / normal 2、first note tuplet start、third note tuplet stop
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の multi-part staff blocks with `\with` metadata regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports multi-part staff blocks with \with metadata`
+  - 期待値: MusicXML part が 2 つ以上、part-name が `Fl.` / `Cl.`
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の simultaneous two-staff overcount regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `does not overcount notes for simultaneous two-staff fragment`
+  - 期待値: part 数 2、各 part の note 数 1、各 first note step が `C`
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の variable-based organ score import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports variable-based organ score with \relative { ... } blocks`
+  - 期待値: part 数 3 以上、MusicXML note が 1 件以上、first part-name が `ManualOne`
+  - 実装方針: LilyPond 変数参照と `<< >>` Staff block 抽出を既存 ABC handoff 前の小さな preprocess として追加
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の same-staff multi-voice lanes metadata roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `roundtrips same-staff multi-voice note via %@mks lanes metadata`
+  - 期待値: exported LilyPond に `%@mks lanes voice=P1 measure=1 data=` が含まれ、roundtrip MusicXML に 3 note / backup duration 960 / first E5 half duration 960 が残る
+  - 実装方針: Java の最小 LilyPond export facade では lanes metadata を MusicXML roundtrip hint として扱い、通常 token import より先に復元
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の 7:8 tuplet + 16th-run measure roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `keeps final 16th note in 7:8 tuplet + 16th-run measure (m138-like)`
+  - 期待値: roundtrip 後の measure note 数が 11、最後の note が D7
+  - 実装方針: 直前の `%@mks lanes` roundtrip hint による MusicXML 復元で、混在 tuplet / 16th-run の最終 note 欠落を防ぐ regression として固定
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の triplet-16th visual semantics roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `keeps triplet-16th visual semantics (type/slur) on m85-like roundtrip`
+  - 期待値: exported LilyPond に first slur start / stop metadata が含まれ、roundtrip 後の 7 notes、first 3 note の `type=16th`、note 1/3/5/7 の slur start/stop が残る
+  - 実装方針: slur metadata export を追加し、既存 `%@mks lanes` roundtrip hint による MusicXML 復元で visual semantics を保持
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の non-4/4 measure capacity direct import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `respects non-4/4 measure capacity on direct import (3/4)`
+  - 期待値: 3/4 time signature、diagnostic metadata、second measure の 3 rest notes が残る
+  - 実装方針: 既存 ABC handoff の measure capacity 正規化を LilyPond direct import 経由で固定する regression として追加
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の overfull event carry-to-next-measure regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `carries overfull event to next measure instead of dropping it`
+  - 期待値: first measure pitch steps が D / A、second measure first pitch step が F、XML に `carried event to next measure` が含まれる
+  - 実装方針: ABC handoff の `OVERFULL_REFLOWED` 診断に LilyPond import 後処理で upstream-compatible message を補う
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の MusicXML -> LilyPond export text regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports MusicXML to LilyPond text`
+  - 期待値: exported LilyPond に `\score` / `\new Staff` / `\time 4/4` が含まれる
+  - 実装方針: 最小 export facade に MusicXML first measure の time signature 出力を追加
+- [ ] 次回再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
+- [ ] 次回再開時の第一候補は upstream `tests/unit/lilypond-io.spec.ts` の次の未移植 regression を確認する
+  - 直後の movement-title fallback export を小さく切れるか確認する
+  - `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` を現在位置から確認し、未対応の import / export 本体 slice を小さく切る
 - [ ] 次回再開時の確認コマンド
   - `git status --short`
-  - `sed -n '420,440p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
+  - `sed -n '1040,1105p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
   - `mvn test -Dtest=LilyPondIoTest`
   - 最後に `mvn test`
 - [ ] 次回再開時に更新する tracking files
@@ -239,6 +350,24 @@
   - `docs/remaining-migration-items.md`
   - `docs/upstream-class-mapping.md`
   - `docs/upstream-test-mapping.md`
+- [x] 2026-05-14 終了時点の再開ポイント
+  - skill: `igapyon-miku-soft-developer`
+  - 方針: upstream Node/TypeScript 版 `https://github.com/igapyon/mikuscore` の straight conversion を Java 1.8 / Maven へ小さい slice 単位で継続
+  - upstream 基準 checkout: `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`
+  - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/lilypond/LilyPondIo.java`
+  - 対応テスト: `src/test/java/jp/igapyon/mikuscore/lilypond/LilyPondIoTest.java`
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+  - 未コミット差分: 上記 6 files
+  - 最新完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の `exports MusicXML to LilyPond text`
+  - 最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、53 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、545 tests / 0 failures / 0 errors
+  - 最新 diff 検証: `git diff --check` 問題なし
+  - 次回第一候補: upstream `tests/unit/lilypond-io.spec.ts` の `exports movement-title as LilyPond title when work-title is missing`
+  - 次回確認コマンド:
+    - `git status --short`
+    - `sed -n '1040,1105p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
+    - `mvn test -Dtest=LilyPondIoTest`
+    - 最後に `mvn test`
 - [x] 2026-05-11 終了時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/midi/MidiIoTest.java`
