@@ -31,6 +31,8 @@ This document records upstream-following questions, parity gaps, and conversion 
 - Area: `render svg`
 - Upstream reference: `src/ts/verovio-out.ts`, browser/runtime-related render flow
 - Note: Upstream `renderMusicXmlDomToSvg` depends on `window.verovio`, `verovio.js` runtime initialization, and browser DOM serialization. Java direct conversion is therefore not part of the current initial slice. Keep Java `render svg` unsupported until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen.
+- 2026-05-14 note: The current Verovio JavaScript toolkit is an Emscripten WebAssembly / JS build of the C++ Verovio engine, not hand-written JavaScript that can be straight-converted to Java. The native Verovio Java binding uses JNI, which is outside the desired Java 1.8 pure-Java direction.
+- 2026-05-14 scale check: a shallow Verovio clone showed roughly 312K lines under `src`, roughly 357K lines for `src` + `include/vrv` + `tools`, and still roughly 156K lines after excluding bundled / large support areas such as Humdrum, pugi, MIDI, JSON, and `iohumdrum`. This scale is the practical background for keeping Java-side `render svg` unsupported in this repository.
 
 ## Closed Items
 

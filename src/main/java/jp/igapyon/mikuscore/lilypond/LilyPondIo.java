@@ -301,12 +301,21 @@ public final class LilyPondIo {
         String firstPartId = firstMusicXmlPartId(doc);
         StringBuilder out = new StringBuilder();
         out.append("\\version \"2.24.0\"\n");
+        out.append("\\header {\n");
+        out.append("  title = \"").append(lilyQuoted(firstMusicXmlTitle(doc))).append("\"\n");
+        out.append("}\n");
         String lanesPayload = encodeMksLanesRoundtripXml(doc);
         if (!lanesPayload.isEmpty()) {
             out.append("%@mks lanes voice=").append(firstPartId.isEmpty() ? "P1" : firstPartId)
                     .append(" measure=1 data=").append(lanesPayload).append('\n');
         }
+        appendMksMeasureMetadata(out, doc, firstPartId.isEmpty() ? "P1" : firstPartId);
+        appendMksEventMetadata(out, doc, firstPartId.isEmpty() ? "P1" : firstPartId);
         appendMksSlurMetadata(out, doc, firstPartId.isEmpty() ? "P1" : firstPartId);
+        String transposeMetadata = firstMusicXmlTransposeMetadata(doc, firstPartId.isEmpty() ? "P1" : firstPartId);
+        if (!transposeMetadata.isEmpty()) {
+            out.append("% ").append(transposeMetadata).append('\n');
+        }
         out.append("\\score {\n");
         out.append("  \\new Staff = \"").append(lilyQuoted(staffName)).append("\"");
         if (!partName.isEmpty()) {
@@ -341,6 +350,277 @@ public final class LilyPondIo {
             return "";
         }
         return beats + "/" + beatType;
+    }
+
+    private static String firstMusicXmlTitle(Document doc) {
+        Element root = doc == null ? null : doc.getDocumentElement();
+        Element work = firstDirectChild(root, "work");
+        String workTitle = directChildText(work, "work-title");
+        if (!workTitle.isEmpty()) {
+            return workTitle;
+        }
+        String movementTitle = directChildText(root, "movement-title");
+        return movementTitle.isEmpty() ? "mikuscore export" : movementTitle;
+    }
+
+    private static String firstMusicXmlTransposeMetadata(Document doc, String voiceId) {
+        Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        if (part == null) {
+            return "";
+        }
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            Element attributes = firstDirectChild((Element) measureNode, "attributes");
+            Element transpose = firstDirectChild(attributes, "transpose");
+            if (transpose == null) {
+                continue;
+            }
+            Integer chromatic = parseOptionalIntegerText(directChildText(transpose, "chromatic"));
+            Integer diatonic = parseOptionalIntegerText(directChildText(transpose, "diatonic"));
+            if (chromatic == null && diatonic == null) {
+                continue;
+            }
+            StringBuilder meta = new StringBuilder("%@mks transpose voice=").append(voiceId);
+            if (chromatic != null) {
+                meta.append(" chromatic=").append(chromatic.intValue());
+            }
+            if (diatonic != null) {
+                meta.append(" diatonic=").append(diatonic.intValue());
+            }
+            return meta.toString();
+        }
+        return "";
+    }
+
+    private static void appendMksMeasureMetadata(StringBuilder out, Document doc, String voiceId) {
+        Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        if (part == null) {
+            return;
+        }
+        int measureIndex = 0;
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            measureIndex++;
+            Element measure = (Element) measureNode;
+            StringBuilder meta = new StringBuilder("%@mks measure voice=").append(voiceId)
+                    .append(" measure=").append(measureIndex);
+            String number = String.valueOf(measure.getAttribute("number") == null ? "" : measure.getAttribute("number"))
+                    .trim();
+            if (!number.isEmpty()) {
+                meta.append(" number=").append(number);
+            }
+            String implicit = String.valueOf(measure.getAttribute("implicit") == null ? "" : measure.getAttribute("implicit"))
+                    .trim().toLowerCase();
+            boolean isImplicit = "yes".equals(implicit) || "true".equals(implicit) || "1".equals(implicit);
+            meta.append(" implicit=").append(isImplicit ? "1" : "0");
+
+            Element leftBarline = directChildWithAttribute(measure, "barline", "location", "left");
+            Element rightBarline = directChildWithAttribute(measure, "barline", "location", "right");
+            if (directChildWithAttribute(leftBarline, "repeat", "direction", "forward") != null) {
+                meta.append(" repeat=forward");
+            } else if (directChildWithAttribute(rightBarline, "repeat", "direction", "backward") != null) {
+                meta.append(" repeat=backward");
+                Element ending = directChildWithAttribute(rightBarline, "ending", "type", "stop");
+                Integer times = parseOptionalIntegerText(ending == null ? "" : ending.getAttribute("number"));
+                if (times != null && times.intValue() > 1) {
+                    meta.append(" times=").append(times.intValue());
+                }
+            }
+
+            Element attributes = firstDirectChild(measure, "attributes");
+            Element time = firstDirectChild(attributes, "time");
+            if (time != null) {
+                meta.append(" explicitTime=1");
+                Integer beats = parseOptionalIntegerText(directChildText(time, "beats"));
+                Integer beatType = parseOptionalIntegerText(directChildText(time, "beat-type"));
+                if (beats != null && beats.intValue() > 0) {
+                    meta.append(" beats=").append(beats.intValue());
+                }
+                if (beatType != null && beatType.intValue() > 0) {
+                    meta.append(" beatType=").append(beatType.intValue());
+                }
+            }
+
+            boolean hasLeftDouble = "light-light".equals(directChildText(leftBarline, "bar-style").toLowerCase());
+            boolean hasRightDouble = "light-light".equals(directChildText(rightBarline, "bar-style").toLowerCase());
+            if (hasLeftDouble && hasRightDouble) {
+                meta.append(" doubleBar=both");
+            } else if (hasLeftDouble) {
+                meta.append(" doubleBar=left");
+            } else if (hasRightDouble) {
+                meta.append(" doubleBar=right");
+            }
+            out.append("% ").append(meta).append('\n');
+            appendMksOctaveShiftMetadata(out, measure, voiceId, measureIndex);
+        }
+    }
+
+    private static void appendMksOctaveShiftMetadata(StringBuilder out, Element measure, String voiceId,
+            int measureIndex) {
+        if (measure == null) {
+            return;
+        }
+        for (Node directionNode = measure.getFirstChild(); directionNode != null; directionNode = directionNode
+                .getNextSibling()) {
+            if (!(directionNode instanceof Element) || !"direction".equals(((Element) directionNode).getTagName())) {
+                continue;
+            }
+            Element directionType = firstDirectChild((Element) directionNode, "direction-type");
+            Element octaveShift = firstDirectChild(directionType, "octave-shift");
+            if (octaveShift == null) {
+                continue;
+            }
+            String type = octaveShift.getAttribute("type").trim().toLowerCase();
+            if (!"up".equals(type) && !"down".equals(type) && !"stop".equals(type)) {
+                continue;
+            }
+            out.append("% %@mks octshift voice=").append(voiceId)
+                    .append(" measure=").append(measureIndex)
+                    .append(" type=").append(type);
+            Integer size = parseOptionalIntegerText(octaveShift.getAttribute("size"));
+            if (size != null && size.intValue() > 0) {
+                out.append(" size=").append(size.intValue());
+            }
+            Integer number = parseOptionalIntegerText(octaveShift.getAttribute("number"));
+            if (number != null && number.intValue() > 0) {
+                out.append(" number=").append(number.intValue());
+            }
+            out.append('\n');
+        }
+    }
+
+    private static void appendMksEventMetadata(StringBuilder out, Document doc, String voiceId) {
+        Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        if (part == null) {
+            return;
+        }
+        int measureIndex = 0;
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            measureIndex++;
+            int eventIndex = 0;
+            Element measure = (Element) measureNode;
+            for (Node noteNode = measure.getFirstChild(); noteNode != null; noteNode = noteNode.getNextSibling()) {
+                if (!(noteNode instanceof Element) || !"note".equals(((Element) noteNode).getTagName())) {
+                    continue;
+                }
+                Element note = (Element) noteNode;
+                if (firstDirectChild(note, "chord") != null || firstDirectChild(note, "rest") != null) {
+                    continue;
+                }
+                eventIndex++;
+                List<String> articulations = new ArrayList<String>();
+                Element notations = firstDirectChild(note, "notations");
+                Element articulationNode = firstDirectChild(notations, "articulations");
+                if (firstDirectChild(articulationNode, "staccato") != null) {
+                    articulations.add("staccato");
+                }
+                if (firstDirectChild(articulationNode, "accent") != null) {
+                    articulations.add("accent");
+                }
+                if (!articulations.isEmpty()) {
+                    out.append("% %@mks articul voice=").append(voiceId)
+                            .append(" measure=").append(measureIndex)
+                            .append(" event=").append(eventIndex)
+                            .append(" kind=").append(joinComma(articulations))
+                            .append('\n');
+                }
+                String accidental = directChildText(note, "accidental").toLowerCase();
+                if (!accidental.isEmpty()) {
+                    out.append("% %@mks accidental voice=").append(voiceId)
+                            .append(" measure=").append(measureIndex)
+                            .append(" event=").append(eventIndex)
+                            .append(" value=").append(accidental)
+                            .append('\n');
+                }
+                Element grace = firstDirectChild(note, "grace");
+                if (grace != null) {
+                    out.append("% %@mks grace voice=").append(voiceId)
+                            .append(" measure=").append(measureIndex)
+                            .append(" event=").append(eventIndex)
+                            .append(" slash=").append("yes".equals(grace.getAttribute("slash")) ? "1" : "0")
+                            .append('\n');
+                }
+                String tupletMetadata = musicXmlTupletMetadata(note, voiceId, measureIndex, eventIndex);
+                if (!tupletMetadata.isEmpty()) {
+                    out.append("% ").append(tupletMetadata).append('\n');
+                }
+                appendMksTrillMetadata(out, note, voiceId, measureIndex, eventIndex);
+            }
+        }
+    }
+
+    private static void appendMksTrillMetadata(StringBuilder out, Element note, String voiceId, int measureIndex,
+            int eventIndex) {
+        Element notations = firstDirectChild(note, "notations");
+        Element ornaments = firstDirectChild(notations, "ornaments");
+        if (firstDirectChild(ornaments, "trill-mark") != null) {
+            out.append("% %@mks trill voice=").append(voiceId)
+                    .append(" measure=").append(measureIndex)
+                    .append(" event=").append(eventIndex)
+                    .append(" mark=1\n");
+        }
+        if (ornaments == null) {
+            return;
+        }
+        for (Node child = ornaments.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (!(child instanceof Element) || !"wavy-line".equals(((Element) child).getTagName())) {
+                continue;
+            }
+            Element wavy = (Element) child;
+            String type = wavy.getAttribute("type").trim().toLowerCase();
+            if (!"start".equals(type) && !"stop".equals(type)) {
+                continue;
+            }
+            out.append("% %@mks trill voice=").append(voiceId)
+                    .append(" measure=").append(measureIndex)
+                    .append(" event=").append(eventIndex)
+                    .append(" wavy=").append(type);
+            Integer number = parseOptionalIntegerText(wavy.getAttribute("number"));
+            if (number != null && number.intValue() > 0) {
+                out.append(" number=").append(number.intValue());
+            }
+            out.append('\n');
+        }
+    }
+
+    private static String musicXmlTupletMetadata(Element note, String voiceId, int measureIndex, int eventIndex) {
+        Element timeModification = firstDirectChild(note, "time-modification");
+        Element notations = firstDirectChild(note, "notations");
+        Element tuplet = firstDirectChild(notations, "tuplet");
+        Integer actual = parseOptionalIntegerText(directChildText(timeModification, "actual-notes"));
+        Integer normal = parseOptionalIntegerText(directChildText(timeModification, "normal-notes"));
+        String tupletType = tuplet == null ? "" : tuplet.getAttribute("type").trim().toLowerCase();
+        Integer number = parseOptionalIntegerText(tuplet == null ? "" : tuplet.getAttribute("number"));
+        if (actual == null && normal == null && !"start".equals(tupletType) && !"stop".equals(tupletType)
+                && number == null) {
+            return "";
+        }
+        StringBuilder meta = new StringBuilder("%@mks tuplet voice=").append(voiceId)
+                .append(" measure=").append(measureIndex)
+                .append(" event=").append(eventIndex);
+        if (actual != null && actual.intValue() > 0) {
+            meta.append(" actual=").append(actual.intValue());
+        }
+        if (normal != null && normal.intValue() > 0) {
+            meta.append(" normal=").append(normal.intValue());
+        }
+        if ("start".equals(tupletType)) {
+            meta.append(" start=1");
+        }
+        if ("stop".equals(tupletType)) {
+            meta.append(" stop=1");
+        }
+        if (number != null && number.intValue() > 0) {
+            meta.append(" number=").append(number.intValue());
+        }
+        return meta.toString();
     }
 
     private static void appendMksSlurMetadata(StringBuilder out, Document doc, String voiceId) {
@@ -433,16 +713,81 @@ public final class LilyPondIo {
                 continue;
             }
             Element measure = (Element) measureNode;
-            for (Node noteNode = measure.getFirstChild(); noteNode != null; noteNode = noteNode.getNextSibling()) {
-                if (noteNode instanceof Element && "note".equals(((Element) noteNode).getTagName())) {
-                    String note = musicXmlNoteToLilyToken((Element) noteNode);
-                    if (!note.isEmpty()) {
-                        notes.add(note);
-                    }
-                }
-            }
+            notes.addAll(musicXmlMeasureLilyNotes(measure));
         }
         return notes;
+    }
+
+    private static List<String> musicXmlMeasureLilyNotes(Element measure) {
+        List<Element> allNotes = directChildren(measure, "note");
+        String selectedVoice = selectedMusicXmlVoiceForLilyExport(measure, allNotes);
+        List<String> out = new ArrayList<String>();
+        List<Element> chordGroup = new ArrayList<Element>();
+        for (Element note : allNotes) {
+            if (!selectedVoice.isEmpty() && !selectedVoice.equals(directChildText(note, "voice"))) {
+                continue;
+            }
+            if (firstDirectChild(note, "chord") != null) {
+                if (!chordGroup.isEmpty()) {
+                    chordGroup.add(note);
+                }
+                continue;
+            }
+            appendMusicXmlChordGroupToken(out, chordGroup);
+            chordGroup = new ArrayList<Element>();
+            chordGroup.add(note);
+        }
+        appendMusicXmlChordGroupToken(out, chordGroup);
+        return out;
+    }
+
+    private static String selectedMusicXmlVoiceForLilyExport(Element measure, List<Element> notes) {
+        if (directChildren(measure, "backup").isEmpty()) {
+            return "";
+        }
+        Map<String, Integer> countByVoice = new LinkedHashMap<String, Integer>();
+        for (Element note : notes) {
+            if (firstDirectChild(note, "chord") != null) {
+                continue;
+            }
+            String voice = directChildText(note, "voice");
+            if (voice.isEmpty()) {
+                continue;
+            }
+            Integer count = countByVoice.get(voice);
+            countByVoice.put(voice, Integer.valueOf(count == null ? 1 : count.intValue() + 1));
+        }
+        String selected = "";
+        int selectedCount = 0;
+        for (Map.Entry<String, Integer> entry : countByVoice.entrySet()) {
+            if (entry.getValue().intValue() > selectedCount) {
+                selected = entry.getKey();
+                selectedCount = entry.getValue().intValue();
+            }
+        }
+        return selected;
+    }
+
+    private static void appendMusicXmlChordGroupToken(List<String> out, List<Element> chordGroup) {
+        if (chordGroup == null || chordGroup.isEmpty()) {
+            return;
+        }
+        if (chordGroup.size() == 1) {
+            String note = musicXmlNoteToLilyToken(chordGroup.get(0));
+            if (!note.isEmpty()) {
+                out.add(note);
+            }
+            return;
+        }
+        StringBuilder chord = new StringBuilder("<");
+        for (int index = 0; index < chordGroup.size(); index++) {
+            if (index > 0) {
+                chord.append(' ');
+            }
+            chord.append(musicXmlNoteToLilyPitchToken(chordGroup.get(index)));
+        }
+        chord.append(">").append(noteTypeToLilyDuration(directChildText(chordGroup.get(0), "type")));
+        out.add(chord.toString());
     }
 
     private static String musicXmlNoteToLilyToken(Element note) {
@@ -452,10 +797,18 @@ public final class LilyPondIo {
         if (pitch == null) {
             return "r" + duration;
         }
+        return musicXmlNoteToLilyPitchToken(note) + duration;
+    }
+
+    private static String musicXmlNoteToLilyPitchToken(Element note) {
+        Element pitch = firstDirectChild(note, "pitch");
+        if (pitch == null) {
+            return "";
+        }
         String step = directChildText(pitch, "step");
         int alter = parseIntegerText(directChildText(pitch, "alter"), 0);
         int octave = parseIntegerText(directChildText(pitch, "octave"), 4);
-        return lilyPitchFromStepAlterOctave(step, alter, octave) + duration;
+        return lilyPitchFromStepAlterOctave(step, alter, octave);
     }
 
     private static int parseIntegerText(String text, int fallback) {
@@ -464,6 +817,25 @@ public final class LilyPondIo {
         } catch (Exception ex) {
             return fallback;
         }
+    }
+
+    private static Integer parseOptionalIntegerText(String text) {
+        try {
+            return Integer.valueOf(Integer.parseInt(String.valueOf(text == null ? "" : text).trim()));
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static String joinComma(List<String> values) {
+        StringBuilder out = new StringBuilder();
+        for (String value : values) {
+            if (out.length() > 0) {
+                out.append(',');
+            }
+            out.append(value);
+        }
+        return out.toString();
     }
 
     private static String lilyQuoted(String text) {
@@ -951,6 +1323,19 @@ public final class LilyPondIo {
             }
         }
         return null;
+    }
+
+    private static List<Element> directChildren(Element parent, String tagName) {
+        List<Element> out = new ArrayList<Element>();
+        if (parent == null) {
+            return out;
+        }
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element && tagName.equals(((Element) child).getTagName())) {
+                out.add((Element) child);
+            }
+        }
+        return out;
     }
 
     private static String directChildText(Element parent, String tagName) {
