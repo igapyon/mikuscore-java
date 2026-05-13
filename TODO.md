@@ -274,7 +274,7 @@
   - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
   - 当時の未コミット差分: 上記 6 files が `MM` 状態。staged 済み差分に加えて、omitted-root relative pedal sample slice の unstaged 差分も同じ files に乗っていた
   - 最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、46 tests / 0 failures / 0 errors
-  - 最新 full 検証: `mvn test` 成功、545 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、559 tests / 0 failures / 0 errors
   - 最新 diff 検証: `git diff --check` 問題なし
 - [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の native `\repeat volta` import regression
   - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `imports native \repeat volta into MusicXML repeat barlines`
@@ -336,13 +336,45 @@
   - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports MusicXML to LilyPond text`
   - 期待値: exported LilyPond に `\score` / `\new Staff` / `\time 4/4` が含まれる
   - 実装方針: 最小 export facade に MusicXML first measure の time signature 出力を追加
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の movement-title fallback export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports movement-title as LilyPond title when work-title is missing`
+  - 期待値: `work-title` が無い MusicXML では `movement-title` を LilyPond `\header` の `title` として出力する
+  - 実装方針: `exportMusicXmlDomToLilyPond` に header title 出力を追加し、`work/work-title` 優先、`movement-title` fallback、最後に `mikuscore export` fallback とする
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の transpose metadata export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports MusicXML transpose as %@mks transpose metadata for roundtrip`
+  - 期待値: exported LilyPond に `% %@mks transpose voice=P1 chromatic=-3 diatonic=-2` が含まれる
+  - 実装方針: `exportMusicXmlDomToLilyPond` で first part の first transpose attributes を `%@mks transpose` コメントとして出力する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の measure metadata export regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports and imports %@mks measure metadata for implicit and repeat`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports and imports section-boundary double bar + explicit same-meter time via %@mks measure metadata`
+  - 期待値: exported LilyPond に measure number / implicit / repeat / explicitTime / doubleBar の `% %@mks measure ...` が含まれ、既存 `%@mks lanes` roundtrip で MusicXML が復元される
+  - 実装方針: `exportMusicXmlDomToLilyPond` で first part measure ごとの `%@mks measure` コメントを出力する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の event metadata export regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports and imports staccato/accent via %@mks articul metadata`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports and imports accidental display (natural/sharp/flat) via %@mks accidental metadata`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports and imports grace notes via %@mks grace metadata`
+  - 期待値: exported LilyPond に `% %@mks articul ...`, `% %@mks accidental ...`, `% %@mks grace ...` が含まれ、既存 `%@mks lanes` roundtrip で MusicXML が復元される
+  - 実装方針: `exportMusicXmlDomToLilyPond` の pitched event 走査で staccato / accent、accidental display、grace slash を metadata コメント化する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の tuplet / octave-shift / trill metadata export regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `keeps grace + back-to-back triplets in the same 2/4 measure`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports and imports tuplet markers/time-modification via %@mks tuplet metadata`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports and imports octave-shift directions via %@mks octshift metadata`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports and imports trill ornaments via %@mks trill metadata`
+  - 期待値: exported LilyPond に `% %@mks tuplet ...`, `% %@mks octshift ...`, `% %@mks trill ...` が含まれ、既存 `%@mks lanes` roundtrip で MusicXML が復元される
+  - 実装方針: `exportMusicXmlDomToLilyPond` の event / direction 走査で tuplet, octave-shift, trill / wavy-line を metadata コメント化する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の backup-lane / chord-token export regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exported LilyPond does not overfill 3/4 when source has backup lanes`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `chooses dense lane for single-staff backup measure (m97-like) instead of collapsing to one long note`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports chord notes as LilyPond chord token without warning spam`
+  - 期待値: backup lane roundtrip が破綻せず、single-staff backup measure では dense lane を選び、chord-follow notes を LilyPond chord token として出力する
+  - 実装方針: `exportMusicXmlDomToLilyPond` の measure note export で backup を含む measure の dense voice を選択し、同一 event の chord notes を `<...>` token にまとめる
 - [ ] 次回再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
 - [ ] 次回再開時の第一候補は upstream `tests/unit/lilypond-io.spec.ts` の次の未移植 regression を確認する
-  - 直後の movement-title fallback export を小さく切れるか確認する
+  - backup-lane / chord-token の次の export regression から、小さく切れる未対応 slice を確認する
   - `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` を現在位置から確認し、未対応の import / export 本体 slice を小さく切る
 - [ ] 次回再開時の確認コマンド
   - `git status --short`
-  - `sed -n '1040,1105p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
+  - `sed -n '1535,1625p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
   - `mvn test -Dtest=LilyPondIoTest`
   - 最後に `mvn test`
 - [ ] 次回再開時に更新する tracking files
@@ -357,15 +389,14 @@
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/lilypond/LilyPondIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/lilypond/LilyPondIoTest.java`
   - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
-  - 未コミット差分: 上記 6 files
-  - 最新完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の `exports MusicXML to LilyPond text`
-  - 最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、53 tests / 0 failures / 0 errors
+  - 最新完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の backup-lane / chord-token export regressions
+  - 最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、67 tests / 0 failures / 0 errors
   - 最新 full 検証: `mvn test` 成功、545 tests / 0 failures / 0 errors
   - 最新 diff 検証: `git diff --check` 問題なし
-  - 次回第一候補: upstream `tests/unit/lilypond-io.spec.ts` の `exports movement-title as LilyPond title when work-title is missing`
+  - 次回第一候補: upstream `tests/unit/lilypond-io.spec.ts` の backup-lane / chord-token 後続 export regression
   - 次回確認コマンド:
     - `git status --short`
-    - `sed -n '1040,1105p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
+    - `sed -n '1535,1625p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
     - `mvn test -Dtest=LilyPondIoTest`
     - 最後に `mvn test`
 - [x] 2026-05-11 終了時点の再開ポイント
@@ -408,6 +439,10 @@
   - [x] unsupported conversion pair は最新 upstream と同じ方向の usage error として扱う
 - [x] `render svg` は Java direct parity 可否を別途判断し、今回 slice では未実装なら明示的に pending / unsupported として扱う
   - upstream `src/ts/verovio-out.ts` は `window.verovio` / `verovio.js` runtime に依存するため、Java direct conversion は初期 slice では行わない
+  - 2026-05-14 調査メモ: 現行 Verovio JavaScript toolkit は C++ 本体を Emscripten で WebAssembly / JS 化した配布物であり、Java straight conversion の入力としては不向き
+  - 2026-05-14 調査メモ: Verovio C++ 本体は巨大で、浅い clone の概算では `src` だけで約 312K 行、`src` + `include/vrv` + `tools` で約 357K 行、bundled / Humdrum / pugi / MIDI / JSON 等を除いても約 156K 行級
+  - JNI は採用しない方針のため、Verovio Java binding / JNI integration はこの Java 1.8 pure-Java 移植の初期対象にしない
+  - その背景から、Java 版は現時点では SVG render 未対応として扱う
   - Java 側では renderer runtime 方針が決まるまで `render svg` を unsupported のまま扱う
   - [x] Java CLI は `render svg` command family を認識し、Verovio/browser runtime 制約を明示して unsupported を返す
 - [ ] ABC / MuseScore / MIDI / MEI / LilyPond / VSQX は、最新 upstream の責務分離を見て Java 直移植対象と除外対象を再分類する

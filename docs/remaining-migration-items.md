@@ -63,11 +63,17 @@ completed slice history remains below.
 - Latest completed LilyPond non-4/4 capacity direct import slice: 3/4 LilyPond direct import preserves time signature, diagnostics, and following rest measure layout through the existing ABC handoff.
 - Latest completed LilyPond overfull carry regression slice: overfull 3/4 direct import carries the overflow event to the next measure and emits the upstream-compatible carry diagnostic message.
 - Latest completed LilyPond export text slice: `exportMusicXmlDomToLilyPond` emits MusicXML first-measure time signature as LilyPond `\time`.
-- Latest focused verification: `mvn test -Dtest=LilyPondIoTest` passed with 53 tests / 0 failures / 0 errors.
-- Latest full verification: `mvn test` passed with 545 tests / 0 failures / 0 errors.
+- Latest completed LilyPond title export slice: `exportMusicXmlDomToLilyPond` emits a LilyPond `\header` title, using MusicXML `work/work-title` first and falling back to `movement-title` when `work-title` is missing.
+- Latest completed LilyPond transpose export slice: `exportMusicXmlDomToLilyPond` emits first MusicXML `transpose` metadata as `%@mks transpose` for roundtrip handoff.
+- Latest completed LilyPond measure metadata export slice: `exportMusicXmlDomToLilyPond` emits `%@mks measure` metadata for measure number / implicit flag / repeat / explicit time / double-bar roundtrip handoff.
+- Latest completed LilyPond event metadata export slice: `exportMusicXmlDomToLilyPond` emits `%@mks articul`, `%@mks accidental`, and `%@mks grace` metadata for roundtrip handoff.
+- Latest completed LilyPond tuplet / octave-shift / trill metadata export slice: `exportMusicXmlDomToLilyPond` emits `%@mks tuplet`, `%@mks octshift`, and `%@mks trill` metadata for roundtrip handoff.
+- Latest completed LilyPond backup-lane / chord-token export slice: backup-lane roundtrip stays valid, dense same-staff backup voices export the denser chord lane, and chord-follow notes export as a single LilyPond chord token.
+- Latest focused verification: `mvn test -Dtest=LilyPondIoTest` passed with 67 tests / 0 failures / 0 errors.
+- Latest full verification: `mvn test` passed with 559 tests / 0 failures / 0 errors.
 - 2026-05-11 end-of-day resume point: continue from `src/ts/midi-io.ts` around `buildPlaybackEventsFromMusicXmlDoc`; Java-side focus is `MidiIo` / `MidiIoTest`. Latest focused verification is `mvn test -Dtest=MidiIoTest` with 103 tests / 0 failures / 0 errors, and latest full verification is `mvn test` with 484 tests / 0 failures / 0 errors.
 - Resume with `igapyon-miku-soft-developer` and continue straight-conversion slices from upstream `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`.
-- Suggested next step: continue scanning upstream LilyPond regressions from the current position, checking whether the movement-title fallback export regression can be cut cleanly; otherwise return to broader MIDI export/import parity in small pieces where it fits the existing helper boundary. Do not duplicate pedal controller extraction; it is already covered by `collectMidiControlEventsFromMusicXmlDoc`.
+- Suggested next step: continue scanning upstream LilyPond export regressions after the chord-token / backup-lane slice, with multi-staff `PianoStaff` export as the next larger candidate; otherwise return to broader MIDI export/import parity in small pieces where it fits the existing helper boundary. Do not duplicate pedal controller extraction; it is already covered by `collectMidiControlEventsFromMusicXmlDoc`.
 - Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 
 ### Highest Priority Format Work
@@ -110,6 +116,8 @@ completed slice history remains below.
 - [ ] Complete supported input / output format matrix
 - [ ] Decide final Java handling for `render svg`
   - current Java behavior recognizes the command family and reports the Verovio/browser runtime constraint
+  - 2026-05-14 decision context: keep SVG rendering unsupported for now because upstream rendering is backed by Verovio JS/WASM over a large C++ engine, and JNI-based Verovio Java binding is not desired for this Java 1.8 / Maven port
+  - 2026-05-14 scale note: Verovio C++ is roughly 300K+ lines in the main `src` tree, so a pure-Java renderer would be a separate substantial project rather than a small straight-conversion slice
 - [ ] Clarify artifact roles and release artifact expectations
 - [ ] Decide whether to add a Maven wrapper
 
