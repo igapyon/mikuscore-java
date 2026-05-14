@@ -1458,6 +1458,143 @@ public class LilyPondIoTest {
         assertEquals(false, lily.contains("skipped chord-follow note"));
     }
 
+    @Test
+    public void exportsMultiStaffPartAsPianoStaffWithPerStaffBlocks() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>4</beats><beat-type>4</beat-type></time>\n"
+                + "        <staves>2</staves>\n"
+                + "        <clef number=\"1\"><sign>G</sign><line>2</line></clef>\n"
+                + "        <clef number=\"2\"><sign>F</sign><line>4</line></clef>\n"
+                + "      </attributes>\n"
+                + "      <note><pitch><step>C</step><octave>5</octave></pitch><duration>1920</duration><voice>1</voice><staff>1</staff><type>whole</type></note>\n"
+                + "      <backup><duration>1920</duration></backup>\n"
+                + "      <note><pitch><step>C</step><octave>3</octave></pitch><duration>1920</duration><voice>1</voice><staff>2</staff><type>whole</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+
+        assertEquals(true, lily.contains("\\new PianoStaff"));
+        assertEquals(true, lily.contains("\\new Staff = \"P1_s1\""));
+        assertEquals(true, lily.contains("\\new Staff = \"P1_s2\""));
+        assertEquals(true, lily.contains("\\clef bass"));
+    }
+
+    @Test
+    public void exportsNonVoiceOneNotesOnStaff() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>4</beats><beat-type>4</beat-type></time>\n"
+                + "        <staves>2</staves>\n"
+                + "      </attributes>\n"
+                + "      <note><pitch><step>C</step><octave>5</octave></pitch><duration>1920</duration><voice>1</voice><staff>1</staff><type>whole</type></note>\n"
+                + "      <backup><duration>1920</duration></backup>\n"
+                + "      <note><pitch><step>C</step><octave>3</octave></pitch><duration>1920</duration><voice>2</voice><staff>2</staff><type>whole</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+
+        assertEquals(true, lily.contains("c''1"));
+        assertEquals(true, lily.contains("c1"));
+    }
+
+    @Test
+    public void omitsRestOnlyStaffsInMultiStaffExport() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Imported MIDI</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>4</beats><beat-type>4</beat-type></time>\n"
+                + "        <staves>4</staves>\n"
+                + "      </attributes>\n"
+                + "      <note><pitch><step>C</step><octave>5</octave></pitch><duration>1920</duration><voice>1</voice><staff>1</staff><type>whole</type></note>\n"
+                + "      <backup><duration>1920</duration></backup>\n"
+                + "      <note><rest/><duration>1920</duration><voice>1</voice><staff>2</staff><type>whole</type></note>\n"
+                + "      <backup><duration>1920</duration></backup>\n"
+                + "      <note><rest/><duration>1920</duration><voice>1</voice><staff>3</staff><type>whole</type></note>\n"
+                + "      <backup><duration>1920</duration></backup>\n"
+                + "      <note><rest/><duration>1920</duration><voice>1</voice><staff>4</staff><type>whole</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+
+        assertEquals(true, lily.contains("\\new Staff = \"P1\""));
+        assertEquals(false, lily.contains("P1_s2"));
+        assertEquals(false, lily.contains("P1_s3"));
+        assertEquals(false, lily.contains("P1_s4"));
+    }
+
+    @Test
+    public void exportsSingleStaffBassClefWhenMusicXmlClefIsF4() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Bass</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>4</beats><beat-type>4</beat-type></time>\n"
+                + "        <clef><sign>F</sign><line>4</line></clef>\n"
+                + "      </attributes>\n"
+                + "      <note><pitch><step>C</step><octave>3</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+
+        assertEquals(true, lily.contains("\\new Staff = \"P1\" \\with { instrumentName = \"Bass\" } { \\clef bass"));
+    }
+
+    @Test
+    public void infersBassClefForLowStaffWhenExplicitClefNumberIsMissing() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<score-partwise version=\"4.0\">\n"
+                + "  <part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>\n"
+                + "  <part id=\"P1\">\n"
+                + "    <measure number=\"1\">\n"
+                + "      <attributes>\n"
+                + "        <divisions>480</divisions>\n"
+                + "        <key><fifths>0</fifths><mode>major</mode></key>\n"
+                + "        <time><beats>4</beats><beat-type>4</beat-type></time>\n"
+                + "        <staves>2</staves>\n"
+                + "      </attributes>\n"
+                + "      <note><pitch><step>C</step><octave>5</octave></pitch><duration>1920</duration><voice>1</voice><staff>1</staff><type>whole</type></note>\n"
+                + "      <backup><duration>1920</duration></backup>\n"
+                + "      <note><pitch><step>C</step><octave>2</octave></pitch><duration>1920</duration><voice>1</voice><staff>2</staff><type>whole</type></note>\n"
+                + "    </measure>\n"
+                + "  </part>\n"
+                + "</score-partwise>";
+
+        String lily = LilyPondIo.exportMusicXmlDomToLilyPond(MusicXmlIo.parseMusicXmlDocument(xml));
+
+        assertEquals(true, lily.contains("\\new Staff = \"P1_s1\" \\with { instrumentName = \"Piano\" } {"));
+        assertEquals(true, lily.contains("\\new Staff = \"P1_s2\" \\with { instrumentName = \"Piano\" } { \\clef bass"));
+    }
+
     private static Element measureAt(Document doc, int index) {
         Element part = directChild(doc.getDocumentElement(), "part");
         return measureAt(part, index);

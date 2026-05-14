@@ -4936,7 +4936,7 @@ public final class AbcIo {
                 new AbcMeasureMeta(number.length() > 0 ? number : String.valueOf(measureNo),
                         isTruthy(params.get("implicit")),
                         isTruthy(leftRepeatRaw) || "forward".equals(repeatRaw),
-                        isTruthy(rightRepeatRaw) || "backward".equals(repeatRaw),
+                        isTruthy(rightRepeatRaw) || "backward".equals(repeatRaw) || repeatTimesRaw > 1,
                         repeatTimesRaw > 1 ? Integer.valueOf(repeatTimesRaw) : null,
                         endingStart,
                         endingStop,
@@ -5448,7 +5448,21 @@ public final class AbcIo {
             }
             Integer measureNo = parseIntegerOrNull(key.substring(prefix.length()));
             if (measureNo != null) {
-                result.put(measureNo, measureMetaByKey.get(key));
+                AbcMeasureMeta existing = result.get(measureNo);
+                AbcMeasureMeta hinted = measureMetaByKey.get(key);
+                if (existing == null || hinted == null) {
+                    result.put(measureNo, hinted);
+                } else {
+                    result.put(measureNo, new AbcMeasureMeta(
+                            firstNonEmpty(hinted.getNumber(), existing.getNumber(), String.valueOf(measureNo)),
+                            hinted.isImplicit(),
+                            existing.isRepeatStart() || hinted.isRepeatStart(),
+                            existing.isRepeatEnd() || hinted.isRepeatEnd(),
+                            hinted.getRepeatTimes() != null ? hinted.getRepeatTimes() : existing.getRepeatTimes(),
+                            firstNonEmpty(existing.getEndingStart(), hinted.getEndingStart(), ""),
+                            firstNonEmpty(existing.getEndingStop(), hinted.getEndingStop(), ""),
+                            firstNonEmpty(hinted.getEndingStopType(), existing.getEndingStopType(), "")));
+                }
             }
         }
         return result;

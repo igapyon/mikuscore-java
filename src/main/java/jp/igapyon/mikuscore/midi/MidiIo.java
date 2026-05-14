@@ -2341,7 +2341,7 @@ public final class MidiIo {
                                     || priorSamePitchIndex.intValue() >= events.size()
                                             ? null
                                             : events.get(priorSamePitchIndex.intValue());
-                            boolean shouldMergeRepeatedSlurSamePitch = safeOptions.isMidiMode() && !isChord
+                            boolean shouldMergeRepeatedSlurSamePitch = safeOptions.includeTieProcessing() && !isChord
                                     && !isGrace && !tieFlags.isStart() && !tieFlags.isStop()
                                     && isInsideOngoingSlurOnly && priorSamePitchEvent != null
                                     && generatedEvents.size() == 1 && allowsRepeatedSlurMergeForCurrent
@@ -4784,8 +4784,7 @@ public final class MidiIo {
             String mksName = mksTextMetadata == null ? ""
                     : trimToEmpty(mksTextMetadata.getPartNameByTrackIndex().get(Integer.valueOf(trackIndex)));
             String trackName = trimToEmpty(safeTrackNameByIndex.get(Integer.valueOf(trackIndex)));
-            String preferred = !isGenericMidiTrackName(trackName) ? trackName
-                    : (mksName.length() > 0 ? mksName : trackName);
+            String preferred = !isGenericMidiTrackName(trackName) ? trackName : mksName;
             String name;
             if (preferred.length() > 0) {
                 Integer channelCount = channelCountByTrackIndex.get(Integer.valueOf(trackIndex));
@@ -5980,7 +5979,7 @@ public final class MidiIo {
     private static double firstSoundTempoInDocument(Document doc, double fallback) {
         Element root = doc == null ? null : doc.getDocumentElement();
         Element sound = firstDescendantElementWithAttribute(root, "sound", "tempo");
-        Double parsed = sound == null ? null : parseFiniteDouble(sound.getAttribute("tempo"));
+        Double parsed = sound == null ? null : parseFiniteDouble(sound.getTextContent());
         return parsed == null ? fallback : parsed.doubleValue();
     }
 

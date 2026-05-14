@@ -10,10 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -659,7 +661,7 @@ public class MidiIoTest {
 
         assertEquals(4, events.size());
         assertEquals(0, events.get(0).getTick());
-        assertEquals(90, events.get(0).getBpm());
+        assertEquals(120, events.get(0).getBpm());
         assertEquals(240, events.get(1).getTick());
         assertEquals(100, events.get(1).getBpm());
         assertEquals(480, events.get(2).getTick());
@@ -722,6 +724,31 @@ public class MidiIoTest {
     }
 
     @Test
+    public void collectsMidiTimeSignatureEventsForFf58ExportLikeUpstreamRegression() {
+        Document doc = MusicXmlIo.parseMusicXmlDocument("<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1440</duration>"
+                + "<voice>1</voice><type>half</type><dot/></note></measure>"
+                + "<measure number=\"2\"><attributes><time><beats>6</beats><beat-type>8</beat-type></time>"
+                + "</attributes><note><pitch><step>D</step><octave>4</octave></pitch><duration>1440</duration>"
+                + "<voice>1</voice><type>half</type><dot/></note></measure>"
+                + "</part></score-partwise>");
+
+        List<MidiIo.MidiTimeSignatureEvent> events = MidiIo.collectMidiTimeSignatureEventsFromMusicXmlDoc(doc, 128);
+
+        assertEquals(2, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertEquals(3, events.get(0).getBeats());
+        assertEquals(4, events.get(0).getBeatType());
+        assertEquals(384, events.get(1).getStartTicks());
+        assertEquals(6, events.get(1).getBeats());
+        assertEquals(8, events.get(1).getBeatType());
+    }
+
+    @Test
     public void collectsMidiKeySignatureEventsFromMusicXmlDoc() {
         Document emptyDoc = MusicXmlIo.parseMusicXmlDocument("<score-partwise/>");
         List<MidiIo.MidiKeySignatureEvent> emptyEvents = MidiIo.collectMidiKeySignatureEventsFromMusicXmlDoc(emptyDoc,
@@ -750,6 +777,32 @@ public class MidiIoTest {
         assertEquals(3360, events.get(2).getStartTicks());
         assertEquals(7, events.get(2).getFifths());
         assertEquals("major", events.get(2).getMode());
+    }
+
+    @Test
+    public void collectsMidiKeySignatureEventsForFf59ExportLikeUpstreamRegression() {
+        Document doc = MusicXmlIo.parseMusicXmlDocument("<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<key><fifths>4</fifths><mode>major</mode></key>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>E</step><alter>1</alter><octave>4</octave></pitch>"
+                + "<duration>1920</duration><voice>1</voice><type>whole</type></note></measure>"
+                + "<measure number=\"2\"><attributes><key><fifths>-1</fifths><mode>minor</mode></key>"
+                + "</attributes><note><pitch><step>A</step><octave>4</octave></pitch><duration>1920</duration>"
+                + "<voice>1</voice><type>whole</type></note></measure>"
+                + "</part></score-partwise>");
+
+        List<MidiIo.MidiKeySignatureEvent> events = MidiIo.collectMidiKeySignatureEventsFromMusicXmlDoc(doc, 128);
+
+        assertEquals(2, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertEquals(4, events.get(0).getFifths());
+        assertEquals("major", events.get(0).getMode());
+        assertEquals(512, events.get(1).getStartTicks());
+        assertEquals(-1, events.get(1).getFifths());
+        assertEquals("minor", events.get(1).getMode());
     }
 
     @Test
@@ -839,6 +892,16 @@ public class MidiIoTest {
         assertEquals(480, pickupPrelude.get(1).getStartTicks());
         assertEquals(4, pickupPrelude.get(1).getBeats());
         assertEquals(4, pickupPrelude.get(1).getBeatType());
+
+        List<MidiIo.MidiTimeSignatureEvent> sixEightPickupPrelude = MidiIo.normalizeMidiExportTimeSignatureEvents(
+                Arrays.asList(new MidiIo.MidiTimeSignatureEvent(0, 6, 8)), 480, 240);
+        assertEquals(2, sixEightPickupPrelude.size());
+        assertEquals(0, sixEightPickupPrelude.get(0).getStartTicks());
+        assertEquals(1, sixEightPickupPrelude.get(0).getBeats());
+        assertEquals(8, sixEightPickupPrelude.get(0).getBeatType());
+        assertEquals(240, sixEightPickupPrelude.get(1).getStartTicks());
+        assertEquals(6, sixEightPickupPrelude.get(1).getBeats());
+        assertEquals(8, sixEightPickupPrelude.get(1).getBeatType());
     }
 
     @Test
@@ -1088,6 +1151,40 @@ public class MidiIoTest {
         assertEquals(4, writerResult.getWriterTrackPlan().getMetaEventData().size());
         assertEquals(1, writerResult.getWriterTrackPlan().getPlaybackTrackPlans().size());
         assertEquals(1, writerResult.getWriterTrackPlan().getControlTrackPlans().size());
+    }
+
+    @Test
+    public void doesNotEmitMksTextMetadataWhenDisabledInRawMidiExport() {
+        byte[] midi = exportRawMidiForTextMetaRegression(Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(69, 0, 240, 1, 90, "P1", "P1")),
+                false, "Title", "", "Composer", 240);
+        List<String> texts = collectTextMetaFromMidi(midi);
+
+        assertEquals(false, anyStartsWith(texts, "mks:"));
+        assertEquals(true, texts.contains("title:Title"));
+    }
+
+    @Test
+    public void emitsStandardTitleTextMetaEvenWhenMksTextMetadataIsDisabled() {
+        byte[] midi = exportRawMidiForTextMetaRegression(Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(69, 0, 240, 1, 90, "P1", "P1")),
+                false, "Sample Title", "", "", 0);
+        List<String> texts = collectTextMetaFromMidi(midi);
+
+        assertEquals(true, texts.contains("title:Sample Title"));
+        assertEquals(false, anyStartsWith(texts, "mks:"));
+    }
+
+    @Test
+    public void emitsRawWriterTrackNameMetaForNoteTracks() {
+        byte[] midi = exportRawMidiForTextMetaRegression(Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(69, 0, 240, 1, 90, "P1", "Violin 1"),
+                new MidiIo.RawMidiPlaybackEvent(67, 0, 240, 1, 90, "P2", "Violin 2")),
+                false, "Sample Title", "", "", 0);
+        List<String> texts = collectTextMetaFromMidi(midi);
+
+        assertEquals(true, texts.contains("Violin 1"));
+        assertEquals(true, texts.contains("Violin 2"));
     }
 
     @Test
@@ -1786,6 +1883,614 @@ public class MidiIoTest {
     }
 
     @Test
+    public void restoresTitleComposerAndPartNameFromMksTextMetaOnMidiImport() {
+        byte[] midi = buildMidiImportFixture(Arrays.asList(
+                "mks:meta-version:1",
+                "mks:title:Roundtrip%20Title",
+                "mks:composer:Roundtrip%20Composer",
+                "mks:part-name-track:1:Violin%20Solo"), "Track 1", 60, 480);
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("Roundtrip Title", doc.getElementsByTagName("work-title").item(0).getTextContent().trim());
+        assertEquals("Roundtrip Composer", doc.getElementsByTagName("creator").item(0).getTextContent().trim());
+        assertEquals("Violin Solo", doc.getElementsByTagName("part-name").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void prefersStandardMidiMetaTitleAndComposerOverMksTextMetaOnMidiImport() {
+        byte[] midi = buildMidiImportFixture(Arrays.asList(
+                "title:Concert Overture",
+                "composer:Standard Composer",
+                "mks:meta-version:1",
+                "mks:title:Roundtrip%20Title",
+                "mks:composer:Roundtrip%20Composer"), "Track 1", 60, 480);
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("Concert Overture", doc.getElementsByTagName("work-title").item(0).getTextContent().trim());
+        assertEquals("Standard Composer", doc.getElementsByTagName("creator").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void prefersExplicitTrackNameOverMksPartNameTrackOnMidiImport() {
+        byte[] midi = buildMidiImportFixture(Arrays.asList(
+                "mks:meta-version:1",
+                "mks:part-name-track:1:Viola"), "Solo Violin", 60, 480);
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("Solo Violin", doc.getElementsByTagName("part-name").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void usesAltoClefWhenImportedMidiPartNameIncludesViola() {
+        byte[] midi = buildMidiImportFixture(Arrays.asList(
+                "mks:meta-version:1",
+                "mks:part-name-track:1:Viola"), "Track 1", 60, 480);
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("C", doc.getElementsByTagName("sign").item(0).getTextContent().trim());
+        assertEquals("3", doc.getElementsByTagName("line").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void keepsSingleStaffAltoClefForViolaEvenWithWideMidiPitchRange() {
+        List<byte[]> chunks = new ArrayList<byte[]>();
+        chunks.add(MidiIo.buildRawMidiTempoTrackChunk(Arrays.asList(new MidiIo.MidiTempoEvent(0, 120)),
+                Collections.<MidiIo.MidiTimeSignatureEvent>emptyList(),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(),
+                new MidiIo.RawMidiTempoTrackOptions(false, Collections.<String>emptyList(),
+                        Arrays.asList("mks:meta-version:1", "mks:part-name-track:1:Viola"), "Meta")));
+        chunks.addAll(MidiIo.buildRawMidiNoteTrackChunks(Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(48, 0, 480, 1, 100, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(76, 480, 480, 1, 100, "P1", "Track 1")),
+                Collections.<String, Integer>emptyMap(), "acoustic_grand_piano", "off_before_on"));
+        byte[] midi = MidiIo.buildRawMidiBytesFromTrackChunks(chunks, 480);
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals(0, doc.getElementsByTagName("staves").getLength());
+        assertEquals("C", doc.getElementsByTagName("sign").item(0).getTextContent().trim());
+        assertEquals("3", doc.getElementsByTagName("line").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void doesNotInferStaccatoFromDetachedMidiImportNotes() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 120, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(62, 240, 120, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 480, 120, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi,
+                new MidiIo.MidiImportOptions("1/16", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+        List<Element> pitchedNotes = pitchedNoteElements(MusicXmlIo.parseMusicXmlDocument(result.getXml()));
+
+        assertEquals(true, result.isOk());
+        assertEquals(3, pitchedNotes.size());
+        assertEquals(0, pitchedNotes.get(0).getElementsByTagName("staccato").getLength());
+        assertEquals(0, pitchedNotes.get(1).getElementsByTagName("staccato").getLength());
+        assertEquals(0, pitchedNotes.get(2).getElementsByTagName("staccato").getLength());
+    }
+
+    @Test
+    public void appliesBeamTagsToGroupedShortMidiImportNotesAndBreaksAcrossRests() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 240, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(62, 240, 240, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 720, 240, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi,
+                new MidiIo.MidiImportOptions("1/8", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+        List<Element> pitchedNotes = pitchedNoteElements(MusicXmlIo.parseMusicXmlDocument(result.getXml()));
+
+        assertEquals(true, result.isOk());
+        assertEquals(3, pitchedNotes.size());
+        assertEquals("begin", pitchedNotes.get(0).getElementsByTagName("beam").item(0).getTextContent().trim());
+        assertEquals("end", pitchedNotes.get(1).getElementsByTagName("beam").item(0).getTextContent().trim());
+        assertEquals(0, pitchedNotes.get(2).getElementsByTagName("beam").getLength());
+    }
+
+    @Test
+    public void splitsImplicitBeamsAtBeatBoundariesOnMidiImport() {
+        List<byte[]> chunks = new ArrayList<byte[]>();
+        chunks.add(MidiIo.buildRawMidiTempoTrackChunk(Arrays.asList(new MidiIo.MidiTempoEvent(0, 120)),
+                Arrays.asList(new MidiIo.MidiTimeSignatureEvent(0, 2, 4)),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(),
+                new MidiIo.RawMidiTempoTrackOptions(false, Collections.<String>emptyList(),
+                        Collections.<String>emptyList(), "Meta")));
+        chunks.addAll(MidiIo.buildRawMidiNoteTrackChunks(Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 240, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(62, 240, 240, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 480, 240, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(65, 720, 240, 1, 96, "P1", "Track 1")),
+                Collections.<String, Integer>emptyMap(), "acoustic_grand_piano", "off_before_on"));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(
+                MidiIo.buildRawMidiBytesFromTrackChunks(chunks, 480),
+                new MidiIo.MidiImportOptions("1/8", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+        List<Element> pitchedNotes = pitchedNoteElements(MusicXmlIo.parseMusicXmlDocument(result.getXml()));
+
+        assertEquals(true, result.isOk());
+        assertEquals(4, pitchedNotes.size());
+        assertEquals("begin", pitchedNotes.get(0).getElementsByTagName("beam").item(0).getTextContent().trim());
+        assertEquals("end", pitchedNotes.get(1).getElementsByTagName("beam").item(0).getTextContent().trim());
+        assertEquals("begin", pitchedNotes.get(2).getElementsByTagName("beam").item(0).getTextContent().trim());
+        assertEquals("end", pitchedNotes.get(3).getElementsByTagName("beam").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void keepsSamePitchRetriggerStableWhenNoteOnAppearsBeforeNoteOffAtSameTick() {
+        List<MidiIo.RawMidiPlaybackEvent> events = Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 120, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(60, 120, 120, 1, 96, "P1", "Track 1"));
+        byte[] offThenOn = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", events,
+                "off_before_on");
+        byte[] onThenOff = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", events,
+                "on_before_off");
+
+        MidiIo.MidiImportResult offThenOnResult = MidiIo.convertMidiToMusicXml(offThenOn,
+                new MidiIo.MidiImportOptions("1/16", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+        MidiIo.MidiImportResult onThenOffResult = MidiIo.convertMidiToMusicXml(onThenOff,
+                new MidiIo.MidiImportOptions("1/16", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+
+        assertEquals(true, offThenOnResult.isOk());
+        assertEquals(true, onThenOffResult.isOk());
+        assertEquals(pitchedDurations(offThenOnResult.getXml()), pitchedDurations(onThenOffResult.getXml()));
+        assertEquals(false, hasWarningCode(onThenOffResult, "MIDI_NOTE_PAIR_BROKEN"));
+    }
+
+    @Test
+    public void autoSplitsOverlappingMidiImportNotesIntoMultipleVoices() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 480, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 120, 480, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi,
+                new MidiIo.MidiImportOptions("1/16", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals(true, distinctVoiceCount(doc) >= 2);
+        assertEquals(true, hasWarningCode(result, "MIDI_POLYPHONY_VOICE_ASSIGNED"));
+    }
+
+    @Test
+    public void separatesSameMidiChannelAcrossDifferentTracksIntoSeparateParts() {
+        List<byte[]> chunks = new ArrayList<byte[]>();
+        chunks.add(MidiIo.buildRawMidiTempoTrackChunk(Arrays.asList(new MidiIo.MidiTempoEvent(0, 120)),
+                Collections.<MidiIo.MidiTimeSignatureEvent>emptyList(),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(),
+                new MidiIo.RawMidiTempoTrackOptions(false, Collections.<String>emptyList(),
+                        Collections.<String>emptyList(), "Meta")));
+        chunks.addAll(MidiIo.buildRawMidiNoteTrackChunks(Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 480, 1, 96, "P1", ""),
+                new MidiIo.RawMidiPlaybackEvent(64, 0, 480, 1, 96, "P2", "")),
+                Collections.<String, Integer>emptyMap(), "acoustic_grand_piano", "off_before_on"));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(
+                MidiIo.buildRawMidiBytesFromTrackChunks(chunks, 480), null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals(2, doc.getElementsByTagName("part").getLength());
+        assertEquals(2, doc.getElementsByTagName("score-part").getLength());
+    }
+
+    @Test
+    public void separatesChannelTenIntoDedicatedDrumPartOnMidiImport() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(36, 0, 240, 10, 100, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals(true, firstPartName(doc).startsWith("Drums"));
+        assertEquals(true, hasWarningCode(result, "MIDI_DRUM_CHANNEL_SEPARATED"));
+        assertEquals(1, doc.getElementsByTagName("unpitched").getLength());
+    }
+
+    @Test
+    public void doesNotCreateEmptyPartsFromMidiChannelsWithoutNotes() {
+        byte[] midi = MidiIo.buildRawMidiBytesFromTrackChunks(Arrays.asList(rawMidiTrackChunk(
+                0x00, 0xc0, 0x00,
+                0x00, 0xc1, 0x28,
+                0x00, 0x90, 0x3c, 0x60,
+                0x83, 0x60, 0x80, 0x3c, 0x00,
+                0x00, 0xff, 0x2f, 0x00)), 480);
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals(1, doc.getElementsByTagName("part").getLength());
+        assertEquals(1, doc.getElementsByTagName("score-part").getLength());
+    }
+
+    @Test
+    public void reflectsCc11ExpressionInImportedDynamicsEstimation() {
+        byte[] midi = MidiIo.buildRawMidiBytesFromTrackChunks(Arrays.asList(rawMidiTrackChunk(
+                0x00, 0x90, 0x3c, 0x64,
+                0x83, 0x60, 0x80, 0x3c, 0x00,
+                0x00, 0xb0, 0x0b, 0x14,
+                0x00, 0x90, 0x3e, 0x64,
+                0x83, 0x60, 0x80, 0x3e, 0x00,
+                0x00, 0xff, 0x2f, 0x00)), 480);
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        List<String> dynamics = dynamicTagNames(MusicXmlIo.parseMusicXmlDocument(result.getXml()));
+
+        assertEquals(true, result.isOk());
+        assertTrue(dynamics.contains("ff"));
+        assertTrue(dynamics.contains("pp"));
+    }
+
+    @Test
+    public void prettyPrintsImportedMusicXmlWhenDebugMetadataIsEnabled() {
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(buildFormat0SingleNoteMidi(96),
+                new MidiIo.MidiImportOptions(null, Boolean.TRUE, null, null, null));
+
+        assertEquals(true, result.isOk());
+        assertTrue(result.getXml().contains("\n"));
+        assertTrue(result.getXml().contains("  <part-list>"));
+    }
+
+    @Test
+    public void readsMidiKeySignatureMetaEventIntoMusicXmlKey() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1",
+                Collections.<MidiIo.MidiTimeSignatureEvent>emptyList(),
+                Arrays.asList(new MidiIo.MidiTickKeySignatureEvent(0, -3, "minor")),
+                Arrays.asList(new MidiIo.RawMidiPlaybackEvent(69, 0, 480, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("-3", doc.getElementsByTagName("fifths").item(0).getTextContent().trim());
+        assertEquals("minor", doc.getElementsByTagName("mode").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void normalizesLeadingPickupTimeSignatureMetaEventsOnMidiImport() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1",
+                Arrays.asList(new MidiIo.MidiTimeSignatureEvent(0, 1, 8),
+                        new MidiIo.MidiTimeSignatureEvent(240, 3, 8)),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(),
+                Arrays.asList(new MidiIo.RawMidiPlaybackEvent(69, 0, 240, 1, 96, "P1", "Track 1"),
+                        new MidiIo.RawMidiPlaybackEvent(71, 240, 480, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("3", doc.getElementsByTagName("beats").item(0).getTextContent().trim());
+        assertEquals("8", doc.getElementsByTagName("beat-type").item(0).getTextContent().trim());
+        assertEquals(true, hasWarningCode(result, "MIDI_TIME_SIGNATURE_PICKUP_NORMALIZED"));
+    }
+
+    @Test
+    public void usesTripletAwareDivisionsForTripletLikeMidiImportTiming() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 160, 1, 100, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(62, 160, 160, 1, 100, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 320, 160, 1, 100, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi,
+                new MidiIo.MidiImportOptions("1/16", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("12", doc.getElementsByTagName("divisions").item(0).getTextContent().trim());
+        assertEquals(true, elementTextValues(doc, "duration").contains("4"));
+    }
+
+    @Test
+    public void choosesEighthGridOnAutoModeForStraightEighthMidiImportTiming() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 240, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(62, 240, 240, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 480, 240, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi,
+                new MidiIo.MidiImportOptions("auto", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("2", doc.getElementsByTagName("divisions").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void keepsTripletAwareGridOnAutoModeWhenTripletLikeTimingDominates() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 160, 1, 100, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(62, 160, 160, 1, 100, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 320, 160, 1, 100, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi,
+                new MidiIo.MidiImportOptions("auto", Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, ""));
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("12", doc.getElementsByTagName("divisions").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void restoresPickupMeasureFromMksPickupTicksWhenFf58PreludeIsAbsent() {
+        byte[] midi = buildMidiImportFixture(Arrays.asList("mks:pickup-ticks:240"), "Track 1",
+                Arrays.asList(new MidiIo.MidiTimeSignatureEvent(0, 6, 8)),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(),
+                Arrays.asList(new MidiIo.RawMidiPlaybackEvent(76, 0, 120, 1, 96, "P1", "Track 1"),
+                        new MidiIo.RawMidiPlaybackEvent(75, 120, 120, 1, 96, "P1", "Track 1"),
+                        new MidiIo.RawMidiPlaybackEvent(76, 240, 120, 1, 96, "P1", "Track 1"),
+                        new MidiIo.RawMidiPlaybackEvent(71, 360, 120, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+        Element firstMeasure = (Element) doc.getElementsByTagName("measure").item(0);
+
+        assertEquals(true, result.isOk());
+        assertEquals("yes", firstMeasure.getAttribute("implicit"));
+        assertEquals("6", doc.getElementsByTagName("beats").item(0).getTextContent().trim());
+        assertEquals("8", doc.getElementsByTagName("beat-type").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void infersMusicXmlKeyWhenMidiKeySignatureMetaEventIsMissing() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(62, 0, 480, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(66, 480, 480, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(69, 960, 480, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(74, 1440, 480, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("2", doc.getElementsByTagName("fifths").item(0).getTextContent().trim());
+        assertEquals("major", doc.getElementsByTagName("mode").item(0).getTextContent().trim());
+        assertEquals(true, hasWarningCode(result, "MIDI_KEY_SIGNATURE_INFERRED"));
+    }
+
+    @Test
+    public void emitsNaturalAccidentalWhenMidiNoteContradictsKeySignature() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1",
+                Collections.<MidiIo.MidiTimeSignatureEvent>emptyList(),
+                Arrays.asList(new MidiIo.MidiTickKeySignatureEvent(0, 1, "major")),
+                Arrays.asList(new MidiIo.RawMidiPlaybackEvent(65, 0, 480, 1, 100, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("natural", doc.getElementsByTagName("accidental").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void prefersSharpLowerChromaticNeighborBetweenRepeatedMidiDNotes() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1",
+                Collections.<MidiIo.MidiTimeSignatureEvent>emptyList(),
+                Arrays.asList(new MidiIo.MidiTickKeySignatureEvent(0, -1, "major")),
+                Arrays.asList(new MidiIo.RawMidiPlaybackEvent(62, 0, 480, 1, 90, "P1", "Track 1"),
+                        new MidiIo.RawMidiPlaybackEvent(61, 480, 480, 1, 90, "P1", "Track 1"),
+                        new MidiIo.RawMidiPlaybackEvent(62, 960, 480, 1, 90, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        List<Element> notes = pitchedNoteElements(MusicXmlIo.parseMusicXmlDocument(result.getXml()));
+        Element middlePitch = (Element) notes.get(1).getElementsByTagName("pitch").item(0);
+
+        assertEquals(true, result.isOk());
+        assertTrue(notes.size() >= 3);
+        assertEquals("C", middlePitch.getElementsByTagName("step").item(0).getTextContent().trim());
+        assertEquals("1", middlePitch.getElementsByTagName("alter").item(0).getTextContent().trim());
+    }
+
+    @Test
+    public void keepsUpperStaffHysteresisAroundGrandStaffSplitBoundaryOnMidiImport() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(64, 0, 480, 1, 100, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(59, 480, 480, 1, 100, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(54, 960, 480, 1, 100, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+        Element b3Note = firstPitchedNote(doc, "B", "", "3");
+        Element fs3Note = firstPitchedNote(doc, "F", "1", "3");
+
+        assertEquals(true, result.isOk());
+        assertEquals("2", doc.getElementsByTagName("staves").item(0).getTextContent().trim());
+        assertEquals("G", clefSign(doc, "1"));
+        assertEquals("F", clefSign(doc, "2"));
+        assertEquals("1", childText(b3Note, "staff"));
+        assertEquals("2", childText(fs3Note, "staff"));
+    }
+
+    @Test
+    public void doesNotEmitPhantomEmptyStaffWhenMidiMelodyStaysOnOneSide() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(72, 0, 480, 1, 100, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals(0, doc.getElementsByTagName("staves").getLength());
+        assertEquals("G", doc.getElementsByTagName("sign").item(0).getTextContent().trim());
+        for (Element note : pitchedNoteElements(doc)) {
+            assertEquals(false, "2".equals(childText(note, "staff")));
+        }
+    }
+
+    @Test
+    public void doesNotEmitFullRestOnlyInactiveVoiceInMeasureThatAlreadyHasNotesOnMidiImport() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1",
+                Arrays.asList(new MidiIo.MidiTimeSignatureEvent(0, 1, 4)),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(),
+                Arrays.asList(new MidiIo.RawMidiPlaybackEvent(60, 0, 480, 1, 100, "P1", "Track 1"),
+                        new MidiIo.RawMidiPlaybackEvent(64, 120, 240, 1, 100, "P1", "Track 1"),
+                        new MidiIo.RawMidiPlaybackEvent(67, 480, 240, 1, 100, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+        Element measure2 = measureByNumber(doc, "2");
+
+        assertEquals(true, result.isOk());
+        assertEquals(0, voiceNoteCount(measure2, "2"));
+    }
+
+    @Test
+    public void readsMidiTempoMetaEventIntoMusicXmlDirectionSoundTempo() {
+        List<byte[]> chunks = new ArrayList<byte[]>();
+        chunks.add(MidiIo.buildRawMidiTempoTrackChunk(Arrays.asList(new MidiIo.MidiTempoEvent(0, 100)),
+                Collections.<MidiIo.MidiTimeSignatureEvent>emptyList(),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(),
+                new MidiIo.RawMidiTempoTrackOptions(false, Collections.<String>emptyList(),
+                        Collections.<String>emptyList(), "Meta")));
+        chunks.addAll(MidiIo.buildRawMidiNoteTrackChunks(Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 480, 1, 96, "P1", "Track 1")),
+                Collections.<String, Integer>emptyMap(), "acoustic_grand_piano", "off_before_on"));
+        byte[] midi = MidiIo.buildRawMidiBytesFromTrackChunks(chunks, 480);
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+        List<MidiIo.MidiTempoEvent> tempoEvents = MidiIo.collectMidiTempoEventsFromMusicXmlDoc(doc, 128);
+
+        assertEquals(true, result.isOk());
+        assertEquals("100", doc.getElementsByTagName("sound").item(0).getAttributes()
+                .getNamedItem("tempo").getTextContent().trim());
+        assertEquals("100", doc.getElementsByTagName("per-minute").item(0).getTextContent().trim());
+        assertEquals(100, tempoEvents.get(0).getBpm());
+    }
+
+    @Test
+    public void mapsMidiImportVelocityToDynamicsAndSuppressesRepeatedDynamics() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 480, 1, 16, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(62, 480, 480, 1, 16, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 960, 480, 1, 79, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        List<String> dynamics = dynamicTagNames(MusicXmlIo.parseMusicXmlDocument(result.getXml()));
+
+        assertEquals(true, result.isOk());
+        assertTrue(dynamics.contains("pp"));
+        assertTrue(dynamics.contains("ff"));
+        assertEquals(1, countString(dynamics, "pp"));
+    }
+
+    @Test
+    public void splitsNonNotatableMidiImportDurationsIntoTiedTypedNotes() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1",
+                Arrays.asList(new MidiIo.RawMidiPlaybackEvent(60, 0, 1200, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi, null);
+        List<Element> pitchedNotes = pitchedNoteElements(MusicXmlIo.parseMusicXmlDocument(result.getXml()));
+
+        assertEquals(true, result.isOk());
+        assertTrue(pitchedNotes.size() > 1);
+        assertEquals(true, allPitchedNotesHaveChild(pitchedNotes, "type"));
+        assertEquals(true, hasTieType(pitchedNotes, "start"));
+        assertEquals(true, hasTieType(pitchedNotes, "stop"));
+        assertEquals(false, elementTextValues(MusicXmlIo.parseMusicXmlDocument(result.getXml()), "duration")
+                .contains("10"));
+    }
+
+    @Test
+    public void writesMidiMetaMetadataIntoMiscellaneousFieldByDefault() {
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(buildFormat0SingleNoteMidi(96), null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+        List<Element> metaFields = miscFieldsWithNamePrefix(doc, "mks:dbg:midi:meta");
+        String firstPayload = miscFieldTextByName(doc, "mks:dbg:midi:meta:0001");
+
+        assertEquals(true, result.isOk());
+        assertTrue(metaFields.size() > 0);
+        assertEquals(true, firstPayload.contains("key=0x3C"));
+        assertEquals(true, firstPayload.contains("vel=0x60"));
+    }
+
+    @Test
+    public void writesMidiRawSourceMetadataByDefault() {
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(buildFormat0SingleNoteMidi(96), null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("hex-v1", miscFieldTextByName(doc, "mks:src:midi:raw-encoding"));
+        assertEquals(true, miscFieldTextByName(doc, "mks:src:midi:raw-0001").matches("^[0-9A-F]+$"));
+    }
+
+    @Test
+    public void readsMikuscoreSysExMetadataIntoMiscellaneousFieldsOnMidiImport() {
+        String payloadText = "mks|v=1|m=0001|i=0001|n=0001|d="
+                + "schema%3Dmks-sysex-v1%0Aapp%3Dmikuscore%0Asource%3Dmusicxml";
+        List<byte[]> chunks = new ArrayList<byte[]>();
+        chunks.add(MidiIo.buildRawMidiTempoTrackChunk(Arrays.asList(new MidiIo.MidiTempoEvent(0, 120)),
+                Collections.<MidiIo.MidiTimeSignatureEvent>emptyList(),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(),
+                new MidiIo.RawMidiTempoTrackOptions(true, Arrays.asList(payloadText),
+                        Collections.<String>emptyList(), "Meta")));
+        chunks.addAll(MidiIo.buildRawMidiNoteTrackChunks(Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 480, 1, 76, "P1", "Track 1")),
+                Collections.<String, Integer>emptyMap(), "acoustic_grand_piano", "off_before_on"));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(
+                MidiIo.buildRawMidiBytesFromTrackChunks(chunks, 480), null);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("mks-sysex-v1", miscFieldTextByName(doc, "mks:meta:midi:sysex:schema"));
+        assertEquals("mikuscore", miscFieldTextByName(doc, "mks:meta:midi:sysex:app"));
+    }
+
+    @Test
+    public void canDisableMidiDebugMetadataOutputOnMidiImport() {
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(buildFormat0SingleNoteMidi(96),
+                new MidiIo.MidiImportOptions(null, Boolean.FALSE, null, null, null));
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals(0, miscFieldsWithNamePrefix(doc, "mks:dbg:midi:meta").size());
+    }
+
+    @Test
+    public void writesMidiImportWarningsIntoDiagnosticMiscellaneousFields() {
+        byte[] midi = buildMidiImportFixture(Collections.<String>emptyList(), "Track 1", Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 480, 1, 96, "P1", "Track 1"),
+                new MidiIo.RawMidiPlaybackEvent(64, 120, 480, 1, 96, "P1", "Track 1")));
+
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(midi,
+                new MidiIo.MidiImportOptions("1/16", Boolean.TRUE, null, Boolean.TRUE, ""));
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals(true, hasWarningCode(result, "MIDI_POLYPHONY_VOICE_ASSIGNED"));
+        assertEquals("1", miscFieldTextByName(doc, "mks:diag:count"));
+        assertEquals(true, miscFieldTextByName(doc, "mks:diag:0001")
+                .contains("code=MIDI_POLYPHONY_VOICE_ASSIGNED"));
+    }
+
+    @Test
+    public void canDisableMidiRawSourceMetadataOutputOnMidiImport() {
+        MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(buildFormat0SingleNoteMidi(96),
+                new MidiIo.MidiImportOptions(null, null, Boolean.FALSE, null, null));
+        Document doc = MusicXmlIo.parseMusicXmlDocument(result.getXml());
+
+        assertEquals(true, result.isOk());
+        assertEquals("", miscFieldTextByName(doc, "mks:src:midi:raw-encoding"));
+        assertEquals(0, miscFieldsWithNamePrefix(doc, "mks:src:midi:raw").size());
+    }
+
+    @Test
     public void rejectsEmptyMidiImportWithUpstreamDiagnostic() {
         MidiIo.MidiImportResult result = MidiIo.convertMidiToMusicXml(new byte[0], null);
 
@@ -1811,7 +2516,7 @@ public class MidiIoTest {
 
         MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 480);
 
-        assertEquals(132, result.getTempo());
+        assertEquals(120, result.getTempo());
         assertEquals(2, result.getEvents().size());
         assertEquals(60, result.getEvents().get(0).getMidiNumber());
         assertEquals(0, result.getEvents().get(0).getStartTicks());
@@ -1830,6 +2535,169 @@ public class MidiIoTest {
 
         assertEquals(120, result.getTempo());
         assertEquals(0, result.getEvents().size());
+    }
+
+    @Test
+    public void keepsFullNonImplicitMeasureLengthForPlaybackTimeline() {
+        String xml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure>"
+                + "<measure number=\"2\">"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure>"
+                + "</part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("playback"));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsSortedByStart(result);
+
+        assertTrue(events.size() >= 2);
+        assertEquals(0, events.get(0).getStartTicks());
+        assertEquals(384, events.get(1).getStartTicks());
+    }
+
+    @Test
+    public void doesNotDoubleCountUnderfullBarBeforeImplicitPickupInPlaybackTimeline() {
+        String xml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>960</duration>"
+                + "<voice>1</voice><type>half</type></note></measure>"
+                + "<measure number=\"X1\" implicit=\"yes\">"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure>"
+                + "<measure number=\"2\">"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure>"
+                + "</part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("playback"));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsSortedByStart(result);
+
+        assertTrue(events.size() >= 3);
+        assertEquals(384, events.get(2).getStartTicks());
+    }
+
+    @Test
+    public void keepsTimelineStableForUnderfullImplicitRegularUnderfullSequence() {
+        String xml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>960</duration>"
+                + "<voice>1</voice><type>half</type></note></measure>"
+                + "<measure number=\"X1\" implicit=\"yes\">"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure>"
+                + "<measure number=\"2\">"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure>"
+                + "<measure number=\"3\">"
+                + "<note><pitch><step>F</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure>"
+                + "</part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("playback"));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsSortedByStart(result);
+
+        assertTrue(events.size() >= 4);
+        assertEquals(0, events.get(0).getStartTicks());
+        assertEquals(256, events.get(1).getStartTicks());
+        assertEquals(384, events.get(2).getStartTicks());
+        assertEquals(896, events.get(3).getStartTicks());
+    }
+
+    @Test
+    public void keepsStableTripletEighthTimingInMusicXmlPlaybackExtraction() {
+        String xml = "<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>5</octave></pitch><duration>160</duration><voice>1</voice>"
+                + "<type>eighth</type><time-modification><actual-notes>3</actual-notes>"
+                + "<normal-notes>2</normal-notes></time-modification></note>"
+                + "<note><pitch><step>D</step><octave>5</octave></pitch><duration>160</duration><voice>1</voice>"
+                + "<type>eighth</type><time-modification><actual-notes>3</actual-notes>"
+                + "<normal-notes>2</normal-notes></time-modification></note>"
+                + "<note><pitch><step>E</step><octave>5</octave></pitch><duration>160</duration><voice>1</voice>"
+                + "<type>eighth</type><time-modification><actual-notes>3</actual-notes>"
+                + "<normal-notes>2</normal-notes></time-modification></note>"
+                + "<note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi"));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsSortedByStart(result);
+
+        assertEquals(3, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        int d1 = events.get(1).getStartTicks() - events.get(0).getStartTicks();
+        int d2 = events.get(2).getStartTicks() - events.get(1).getStartTicks();
+        assertTrue(d1 == 42 || d1 == 43);
+        assertTrue(d2 == 42 || d2 == 43);
+        assertEquals(85, d1 + d2);
+        assertTrue(events.get(0).getDurTicks() > 0);
+        assertTrue(events.get(1).getDurTicks() > 0);
+        assertTrue(events.get(2).getDurTicks() > 0);
+    }
+
+    @Test
+    public void keepsNoteTimingExtractionStableWithStaccatoAccentNotations() {
+        String xml = "<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><notations><articulations><staccato/></articulations></notations></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><notations><articulations><accent/></articulations></notations></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi"));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsSortedByStart(result);
+
+        assertEquals(2, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertEquals(128, events.get(1).getStartTicks());
+        assertTrue(events.get(0).getDurTicks() > 0);
+        assertTrue(events.get(0).getDurTicks() <= 128);
+        assertTrue(events.get(1).getDurTicks() > 0);
+        assertTrue(events.get(1).getDurTicks() <= 128);
+    }
+
+    @Test
+    public void doesNotDuplicateTimeSignatureEventsOnExplicitSameMeterRedeclaration() {
+        Document doc = MusicXmlIo.parseMusicXmlDocument("<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Piano</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"24\"><attributes><divisions>480</divisions>"
+                + "<time><beats>2</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>A</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note>"
+                + "<note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<barline location=\"right\"><bar-style>light-light</bar-style></barline></measure>"
+                + "<measure number=\"25\"><attributes><time><beats>2</beats><beat-type>4</beat-type></time>"
+                + "</attributes><note><pitch><step>B</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note>"
+                + "<note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>");
+
+        List<MidiIo.MidiTimeSignatureEvent> events = MidiIo.collectMidiTimeSignatureEventsFromMusicXmlDoc(doc, 128);
+
+        assertEquals(1, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertEquals(2, events.get(0).getBeats());
+        assertEquals(4, events.get(0).getBeatType());
     }
 
     @Test
@@ -1892,6 +2760,89 @@ public class MidiIoTest {
         assertEquals(128, result.getEvents().get(0).getStartTicks());
         assertTrue(result.getEvents().get(1).getStartTicks() > result.getEvents().get(0).getStartTicks());
         assertTrue(result.getEvents().get(1).getDurTicks() < 128);
+    }
+
+    @Test
+    public void supportsClassicalEqualGraceTimingInMidiPlaybackExtractionMode() {
+        String xml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note>"
+                + "<note><grace/><pitch><step>G</step><octave>5</octave></pitch>"
+                + "<voice>1</voice><type>16th</type></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi", "classical_equal"));
+        MidiIo.RawMidiPlaybackEvent grace = playbackEventByMidiNumber(result, 79);
+        MidiIo.RawMidiPlaybackEvent principal = playbackEventByMidiNumber(result, 62);
+
+        assertTrue(grace != null);
+        assertTrue(principal != null);
+        assertEquals(128, grace.getStartTicks());
+        assertEquals(grace.getStartTicks() + grace.getDurTicks(), principal.getStartTicks());
+        assertTrue(Math.abs(grace.getDurTicks() - principal.getDurTicks()) <= 1);
+    }
+
+    @Test
+    public void mergesTiedNotesIntoOneSustainedPlaybackEventInMidiMode() {
+        String xml = "<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type><tie type=\"start\"/>"
+                + "<notations><tied type=\"start\"/></notations></note>"
+                + "<note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>"
+                + "</measure>"
+                + "<measure number=\"2\">"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type><tie type=\"stop\"/>"
+                + "<notations><tied type=\"stop\"/></notations></note>"
+                + "<note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi"));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsByMidiNumberSorted(result, 60);
+
+        assertEquals(1, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertTrue(events.get(0).getDurTicks() >= 256);
+    }
+
+    @Test
+    public void mergesTiedNotesWhenContinuationOmitsVoiceByChannelPitchFallback() {
+        String xml = "<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>2</voice><type>quarter</type><tie type=\"start\"/>"
+                + "<notations><tied type=\"start\"/></notations></note>"
+                + "<backup><duration>480</duration></backup>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note>"
+                + "</measure>"
+                + "<measure number=\"2\">"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<type>quarter</type><tie type=\"stop\"/>"
+                + "<notations><tied type=\"stop\"/></notations></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi"));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsByMidiNumberSorted(result, 60);
+
+        assertEquals(1, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertTrue(events.get(0).getDurTicks() >= 256);
     }
 
     @Test
@@ -1959,6 +2910,183 @@ public class MidiIoTest {
         assertEquals(80, enabled.getEvents().get(3).getVelocity());
         assertEquals(80, disabled.getEvents().get(0).getVelocity());
         assertEquals(80, disabled.getEvents().get(2).getVelocity());
+    }
+
+    @Test
+    public void appliesMetricAccentVelocityForSixEightAndFiveFourSignatures() {
+        String sixEightXml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>6</beats><beat-type>8</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>F</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>G</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>A</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "</measure></part></score-partwise>";
+        String fiveFourXml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>5</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>F</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>G</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult sixEight = MidiIo.buildPlaybackEventsFromXml(sixEightXml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi", "before_beat", true, "subtle"));
+        MidiIo.MidiPlaybackEventsResult fiveFour = MidiIo.buildPlaybackEventsFromXml(fiveFourXml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi", "before_beat", true, "subtle"));
+
+        assertEquals(Arrays.asList(Integer.valueOf(82), Integer.valueOf(80), Integer.valueOf(80),
+                Integer.valueOf(81), Integer.valueOf(80), Integer.valueOf(80)),
+                playbackVelocities(sixEight));
+        assertEquals(Arrays.asList(Integer.valueOf(82), Integer.valueOf(80), Integer.valueOf(81),
+                Integer.valueOf(80), Integer.valueOf(80)), playbackVelocities(fiveFour));
+    }
+
+    @Test
+    public void appliesThreeBeatAndFallbackMetricAccentPatterns() {
+        String threeThreeXml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>3</beats><beat-type>3</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>640</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>640</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>640</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+        String sevenEightXml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>7</beats><beat-type>8</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>F</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>G</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>A</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>B</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult threeThree = MidiIo.buildPlaybackEventsFromXml(threeThreeXml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi", "before_beat", true, "subtle"));
+        MidiIo.MidiPlaybackEventsResult sevenEight = MidiIo.buildPlaybackEventsFromXml(sevenEightXml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi", "before_beat", true, "subtle"));
+
+        assertEquals(Arrays.asList(Integer.valueOf(82), Integer.valueOf(80), Integer.valueOf(80)),
+                playbackVelocities(threeThree));
+        assertEquals(Arrays.asList(Integer.valueOf(82), Integer.valueOf(80), Integer.valueOf(80),
+                Integer.valueOf(80), Integer.valueOf(80), Integer.valueOf(80), Integer.valueOf(80)),
+                playbackVelocities(sevenEight));
+    }
+
+    @Test
+    public void supportsConfigurableMetricAccentAmountProfilesInPlaybackExtraction() {
+        String xml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><pitch><step>F</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult subtle = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi", "before_beat", true, "subtle"));
+        MidiIo.MidiPlaybackEventsResult balanced = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi", "before_beat", true, "balanced"));
+        MidiIo.MidiPlaybackEventsResult strong = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi", "before_beat", true, "strong"));
+
+        assertEquals(Arrays.asList(Integer.valueOf(82), Integer.valueOf(80), Integer.valueOf(81),
+                Integer.valueOf(80)), playbackVelocities(subtle));
+        assertEquals(Arrays.asList(Integer.valueOf(84), Integer.valueOf(80), Integer.valueOf(82),
+                Integer.valueOf(80)), playbackVelocities(balanced));
+        assertEquals(Arrays.asList(Integer.valueOf(86), Integer.valueOf(80), Integer.valueOf(83),
+                Integer.valueOf(80)), playbackVelocities(strong));
+    }
+
+    @Test
+    public void collectsInScoreTempoChangesWithTickPositions() {
+        Document doc = MusicXmlIo.parseMusicXmlDocument(
+                "<score-partwise version=\"3.1\">"
+                        + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                        + "<part id=\"P1\"><measure number=\"1\">"
+                        + "<attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                        + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                        + "<direction><sound tempo=\"90\"/></direction>"
+                        + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                        + "<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>60</per-minute></metronome></direction-type></direction>"
+                        + "</measure></part></score-partwise>");
+
+        List<MidiIo.MidiTempoEvent> tempos = MidiIo.collectMidiTempoEventsFromMusicXmlDoc(doc, 128);
+
+        assertEquals(0, tempos.get(0).getTick());
+        assertEquals(120, tempos.get(0).getBpm());
+        boolean hasNinetyAfterStart = false;
+        boolean hasSixtyAfterStart = false;
+        for (MidiIo.MidiTempoEvent tempo : tempos) {
+            hasNinetyAfterStart = hasNinetyAfterStart || tempo.getBpm() == 90 && tempo.getTick() > 0;
+            hasSixtyAfterStart = hasSixtyAfterStart || tempo.getBpm() == 60 && tempo.getTick() > 0;
+        }
+        assertTrue(hasNinetyAfterStart);
+        assertTrue(hasSixtyAfterStart);
+    }
+
+    @Test
+    public void collectsPedalMarkingsAsCc64Events() {
+        Document doc = MusicXmlIo.parseMusicXmlDocument(
+                "<score-partwise version=\"3.1\">"
+                        + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                        + "<part id=\"P1\"><measure number=\"1\">"
+                        + "<attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                        + "<direction><direction-type><pedal type=\"start\"/></direction-type></direction>"
+                        + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                        + "<direction><direction-type><pedal type=\"change\"/></direction-type></direction>"
+                        + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                        + "<direction><direction-type><pedal type=\"stop\"/></direction-type></direction>"
+                        + "</measure></part></score-partwise>");
+
+        List<MidiIo.RawMidiControlEvent> ccEvents = MidiIo.collectMidiControlEventsFromMusicXmlDoc(doc, 128);
+
+        assertEquals(4, ccEvents.size());
+        List<Integer> values = new ArrayList<Integer>();
+        for (MidiIo.RawMidiControlEvent event : ccEvents) {
+            assertEquals(64, event.getControllerNumber());
+            values.add(Integer.valueOf(event.getControllerValue()));
+        }
+        assertEquals(Arrays.asList(Integer.valueOf(127), Integer.valueOf(0), Integer.valueOf(127),
+                Integer.valueOf(0)), values);
+    }
+
+    @Test
+    public void mapsDrumNotesViaMidiUnpitchedAndInstrumentNameHintsInPlaybackExtraction() {
+        String xml = "<score-partwise version=\"3.1\">"
+                + "<part-list><score-part id=\"P1\">"
+                + "<part-name>Drums</part-name>"
+                + "<score-instrument id=\"P1-I-Kick\"><instrument-name>Bass Drum</instrument-name></score-instrument>"
+                + "<score-instrument id=\"P1-I-Snare\"><instrument-name>Snare Drum</instrument-name></score-instrument>"
+                + "<midi-instrument id=\"P1-I-Kick\"><midi-channel>10</midi-channel><midi-unpitched>36</midi-unpitched></midi-instrument>"
+                + "</score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><instrument id=\"P1-I-Kick\"/><unpitched><display-step>D</display-step><display-octave>4</display-octave></unpitched>"
+                + "<duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "<note><instrument id=\"P1-I-Snare\"/><pitch><step>C</step><octave>4</octave></pitch>"
+                + "<duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi"));
+
+        assertTrue(result.getEvents().size() >= 2);
+        assertEquals(10, result.getEvents().get(0).getChannel());
+        assertEquals(36, result.getEvents().get(0).getMidiNumber());
+        assertEquals(38, result.getEvents().get(1).getMidiNumber());
     }
 
     @Test
@@ -2059,6 +3187,120 @@ public class MidiIoTest {
         assertEquals(244, midi.getEvents().get(0).getDurTicks());
         assertEquals(3, playback.getEvents().size());
         assertEquals(120, playback.getEvents().get(0).getDurTicks());
+    }
+
+    @Test
+    public void mergesRepeatedSamePitchInsideSlurInPlaybackLikeModeWithTieProcessing() {
+        String xml = "<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>1</beats><beat-type>1</beat-type></time></attributes>"
+                + "<note><pitch><step>F</step><octave>5</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type>"
+                + "<notations><slur type=\"start\" number=\"1\"/></notations></note>"
+                + "<note><pitch><step>F</step><octave>5</octave></pitch><duration>120</duration>"
+                + "<voice>1</voice><type>16th</type></note>"
+                + "<note><pitch><step>E</step><octave>5</octave></pitch><duration>120</duration>"
+                + "<voice>1</voice><type>16th</type>"
+                + "<notations><slur type=\"stop\" number=\"1\"/></notations></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("playback", "before_beat", false, "subtle", null, false,
+                        false, true));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsByMidiNumberSorted(result, 77);
+
+        assertEquals(1, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertTrue(events.get(0).getDurTicks() > 120);
+    }
+
+    @Test
+    public void keepsRetriggerWhenRepeatedSamePitchNoteIsSlurStartBoundary() {
+        String xml = "<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>1</beats><beat-type>1</beat-type></time></attributes>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration>"
+                + "<voice>1</voice><type>eighth</type></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration>"
+                + "<voice>1</voice><type>eighth</type>"
+                + "<notations><slur type=\"start\" number=\"1\"/></notations></note>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type>"
+                + "<notations><slur type=\"stop\" number=\"1\"/></notations></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult midi = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi"));
+        MidiIo.MidiPlaybackEventsResult playback = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("playback", "before_beat", false, "subtle", null, false,
+                        false, true));
+        List<MidiIo.RawMidiPlaybackEvent> midiD4 = playbackEventsByMidiNumberSorted(midi, 62);
+        List<MidiIo.RawMidiPlaybackEvent> playbackD4 = playbackEventsByMidiNumberSorted(playback, 62);
+
+        assertEquals(2, midiD4.size());
+        assertEquals(0, midiD4.get(0).getStartTicks());
+        assertTrue(midiD4.get(1).getStartTicks() > 0);
+        assertEquals(2, playbackD4.size());
+        assertTrue(playbackD4.get(1).getStartTicks() > 0);
+    }
+
+    @Test
+    public void doesNotExtendSlurStopNoteIntoFollowingSamePitch() {
+        String xml = "<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>2</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type>"
+                + "<notations><slur type=\"start\" number=\"1\"/></notations></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type>"
+                + "<notations><slur type=\"stop\" number=\"1\"/></notations></note>"
+                + "</measure>"
+                + "<measure number=\"2\">"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note>"
+                + "<note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi"));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsByMidiNumberSorted(result, 62);
+
+        assertEquals(3, events.size());
+        assertEquals(128, events.get(1).getStartTicks());
+        assertTrue(events.get(1).getStartTicks() + events.get(1).getDurTicks() <= events.get(2).getStartTicks());
+    }
+
+    @Test
+    public void keepsRetriggerForRepeatedSamePitchSlurWhenStaccatoIsPresentInPlaybackLikeMode() {
+        String xml = repeatedSamePitchSlurWithMiddleArticulationXml("staccato");
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("playback", "before_beat", false, "subtle", null, false,
+                        false, true));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsByMidiNumberSorted(result, 77);
+
+        assertEquals(2, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertTrue(events.get(1).getStartTicks() > 0);
+    }
+
+    @Test
+    public void keepsRetriggerForRepeatedSamePitchSlurWhenTenutoIsPresentInPlaybackLikeMode() {
+        String xml = repeatedSamePitchSlurWithMiddleArticulationXml("tenuto");
+
+        MidiIo.MidiPlaybackEventsResult result = MidiIo.buildPlaybackEventsFromXml(xml, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("playback", "before_beat", false, "subtle", null, false,
+                        false, true));
+        List<MidiIo.RawMidiPlaybackEvent> events = playbackEventsByMidiNumberSorted(result, 77);
+
+        assertEquals(2, events.size());
+        assertEquals(0, events.get(0).getStartTicks());
+        assertTrue(events.get(1).getStartTicks() > 0);
     }
 
     @Test
@@ -2363,5 +3605,415 @@ public class MidiIoTest {
 
         assertEquals(1, grouped.get(Integer.valueOf(2)).size());
         assertEquals(180, grouped.get(Integer.valueOf(2)).get(0).getBpm());
+    }
+
+    private static byte[] buildMidiImportFixture(List<String> tempoTrackTextLines, String noteTrackName,
+            int midiNumber, int durationTicks) {
+        return buildMidiImportFixture(tempoTrackTextLines, noteTrackName,
+                Arrays.asList(new MidiIo.RawMidiPlaybackEvent(midiNumber, 0, durationTicks, 1, 100, "P1",
+                        noteTrackName)));
+    }
+
+    private static byte[] buildMidiImportFixture(List<String> tempoTrackTextLines, String noteTrackName,
+            List<MidiIo.RawMidiPlaybackEvent> events) {
+        return buildMidiImportFixture(tempoTrackTextLines, noteTrackName, events, "off_before_on");
+    }
+
+    private static byte[] buildMidiImportFixture(List<String> tempoTrackTextLines, String noteTrackName,
+            List<MidiIo.RawMidiPlaybackEvent> events, String retriggerPolicy) {
+        return buildMidiImportFixture(tempoTrackTextLines, noteTrackName,
+                Collections.<MidiIo.MidiTimeSignatureEvent>emptyList(),
+                Collections.<MidiIo.MidiTickKeySignatureEvent>emptyList(), events, retriggerPolicy);
+    }
+
+    private static byte[] buildMidiImportFixture(List<String> tempoTrackTextLines, String noteTrackName,
+            List<MidiIo.MidiTimeSignatureEvent> timeSignatureEvents,
+            List<MidiIo.MidiTickKeySignatureEvent> keySignatureEvents,
+            List<MidiIo.RawMidiPlaybackEvent> events) {
+        return buildMidiImportFixture(tempoTrackTextLines, noteTrackName, timeSignatureEvents, keySignatureEvents,
+                events, "off_before_on");
+    }
+
+    private static byte[] buildMidiImportFixture(List<String> tempoTrackTextLines, String noteTrackName,
+            List<MidiIo.MidiTimeSignatureEvent> timeSignatureEvents,
+            List<MidiIo.MidiTickKeySignatureEvent> keySignatureEvents,
+            List<MidiIo.RawMidiPlaybackEvent> events, String retriggerPolicy) {
+        List<byte[]> chunks = new ArrayList<byte[]>();
+        chunks.add(MidiIo.buildRawMidiTempoTrackChunk(Arrays.asList(new MidiIo.MidiTempoEvent(0, 120)),
+                timeSignatureEvents,
+                keySignatureEvents,
+                new MidiIo.RawMidiTempoTrackOptions(false, Collections.<String>emptyList(), tempoTrackTextLines,
+                        "Meta")));
+        chunks.addAll(MidiIo.buildRawMidiNoteTrackChunks(events,
+                Collections.<String, Integer>emptyMap(), "acoustic_grand_piano", retriggerPolicy));
+        return MidiIo.buildRawMidiBytesFromTrackChunks(chunks, 480);
+    }
+
+    private static byte[] rawMidiTrackChunk(int... data) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write('M');
+        out.write('T');
+        out.write('r');
+        out.write('k');
+        int length = data == null ? 0 : data.length;
+        out.write((length >>> 24) & 0xff);
+        out.write((length >>> 16) & 0xff);
+        out.write((length >>> 8) & 0xff);
+        out.write(length & 0xff);
+        if (data != null) {
+            for (int value : data) {
+                out.write(value & 0xff);
+            }
+        }
+        return out.toByteArray();
+    }
+
+    private static byte[] buildFormat0SingleNoteMidi(int velocity) {
+        int safeVelocity = Math.max(1, Math.min(127, velocity));
+        return new byte[] {
+                'M', 'T', 'h', 'd',
+                0, 0, 0, 6,
+                0, 0,
+                0, 1,
+                1, (byte) 0xe0,
+                'M', 'T', 'r', 'k',
+                0, 0, 0, 13,
+                0, (byte) 0x90, 60, (byte) safeVelocity,
+                (byte) 0x83, 0x60, (byte) 0x80, 60, 0,
+                0, (byte) 0xff, 0x2f, 0 };
+    }
+
+    private static byte[] exportRawMidiForTextMetaRegression(List<MidiIo.RawMidiPlaybackEvent> events,
+            boolean emitMksTextMeta, String title, String movementTitle, String composer, int pickupTicks) {
+        MidiIo.MidiExportPlaybackBuildResult result = MidiIo.buildMidiPlaybackExport(events, 120,
+                "electric_piano_2", Collections.<String, Integer>emptyMap(),
+                Collections.<MidiIo.RawMidiControlEvent>emptyList(),
+                Arrays.asList(new MidiIo.MidiTempoEvent(0, 120)),
+                Arrays.asList(new MidiIo.MidiTimeSignatureEvent(0, pickupTicks > 0 ? 6 : 4, pickupTicks > 0 ? 8 : 4)),
+                Arrays.asList(new MidiIo.MidiKeySignatureEvent(0, pickupTicks > 0 ? -1 : 0, "major")),
+                true, false, emitMksTextMeta, 480, Collections.<String>emptyList(), false,
+                "off_before_on", title, movementTitle, composer, pickupTicks);
+        return result.getRawBytes();
+    }
+
+    private static List<String> collectTextMetaFromMidi(byte[] midi) {
+        List<String> texts = new ArrayList<String>();
+        byte[] bytes = midi == null ? new byte[0] : midi;
+        if (bytes.length < 14) {
+            return texts;
+        }
+        int trackCount = ((bytes[10] & 0xff) << 8) | (bytes[11] & 0xff);
+        int offset = 14;
+        for (int track = 0; track < trackCount && offset + 8 <= bytes.length; track++) {
+            if (bytes[offset] != 'M' || bytes[offset + 1] != 'T' || bytes[offset + 2] != 'r'
+                    || bytes[offset + 3] != 'k') {
+                break;
+            }
+            int length = ((bytes[offset + 4] & 0xff) << 24) | ((bytes[offset + 5] & 0xff) << 16)
+                    | ((bytes[offset + 6] & 0xff) << 8) | (bytes[offset + 7] & 0xff);
+            int pos = offset + 8;
+            int end = Math.min(bytes.length, pos + Math.max(0, length));
+            int runningStatus = -1;
+            while (pos < end) {
+                int[] delta = readTestVlq(bytes, pos, end);
+                pos = delta[1];
+                if (pos >= end) {
+                    break;
+                }
+                int status = bytes[pos] & 0xff;
+                if (status < 0x80) {
+                    if (runningStatus < 0) {
+                        break;
+                    }
+                    status = runningStatus;
+                } else {
+                    pos++;
+                    if (status < 0xf0) {
+                        runningStatus = status;
+                    }
+                }
+                if (status == 0xff) {
+                    if (pos >= end) {
+                        break;
+                    }
+                    int type = bytes[pos++] & 0xff;
+                    int[] len = readTestVlq(bytes, pos, end);
+                    int metaLen = len[0];
+                    pos = len[1];
+                    int payloadEnd = Math.min(end, pos + Math.max(0, metaLen));
+                    if (type == 0x01 || type == 0x03) {
+                        texts.add(new String(Arrays.copyOfRange(bytes, pos, payloadEnd), StandardCharsets.UTF_8));
+                    }
+                    pos = payloadEnd;
+                    continue;
+                }
+                if (status == 0xf0 || status == 0xf7) {
+                    int[] len = readTestVlq(bytes, pos, end);
+                    pos = Math.min(end, len[1] + Math.max(0, len[0]));
+                    continue;
+                }
+                int eventType = status & 0xf0;
+                int dataLength = (eventType == 0xc0 || eventType == 0xd0) ? 1 : 2;
+                pos = Math.min(end, pos + dataLength);
+            }
+            offset = end;
+        }
+        return texts;
+    }
+
+    private static int[] readTestVlq(byte[] bytes, int offset, int end) {
+        int value = 0;
+        int pos = offset;
+        while (pos < end) {
+            int b = bytes[pos++] & 0xff;
+            value = (value << 7) | (b & 0x7f);
+            if ((b & 0x80) == 0) {
+                break;
+            }
+        }
+        return new int[] { value, pos };
+    }
+
+    private static boolean anyStartsWith(List<String> values, String prefix) {
+        for (String value : values) {
+            if (value != null && value.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<Element> pitchedNoteElements(Document doc) {
+        List<Element> out = new ArrayList<Element>();
+        for (int index = 0; index < doc.getElementsByTagName("note").getLength(); index++) {
+            Element note = (Element) doc.getElementsByTagName("note").item(index);
+            if (note.getElementsByTagName("pitch").getLength() > 0) {
+                out.add(note);
+            }
+        }
+        return out;
+    }
+
+    private static List<String> pitchedDurations(String xml) {
+        List<String> out = new ArrayList<String>();
+        for (Element note : pitchedNoteElements(MusicXmlIo.parseMusicXmlDocument(xml))) {
+            out.add(note.getElementsByTagName("duration").item(0).getTextContent().trim());
+        }
+        return out;
+    }
+
+    private static boolean hasWarningCode(MidiIo.MidiImportResult result, String code) {
+        for (MidiIo.MidiImportDiagnostic warning : result.getWarnings()) {
+            if (code.equals(warning.getCode())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static int distinctVoiceCount(Document doc) {
+        List<String> voices = new ArrayList<String>();
+        for (int index = 0; index < doc.getElementsByTagName("voice").getLength(); index++) {
+            String voice = doc.getElementsByTagName("voice").item(index).getTextContent().trim();
+            if (!voices.contains(voice)) {
+                voices.add(voice);
+            }
+        }
+        return voices.size();
+    }
+
+    private static String firstPartName(Document doc) {
+        return doc.getElementsByTagName("part-name").item(0).getTextContent().trim();
+    }
+
+    private static Element firstPitchedNote(Document doc, String step, String alter, String octave) {
+        for (Element note : pitchedNoteElements(doc)) {
+            Element pitch = (Element) note.getElementsByTagName("pitch").item(0);
+            if (step.equals(childText(pitch, "step")) && alter.equals(childText(pitch, "alter"))
+                    && octave.equals(childText(pitch, "octave"))) {
+                return note;
+            }
+        }
+        return null;
+    }
+
+    private static String clefSign(Document doc, String number) {
+        for (int index = 0; index < doc.getElementsByTagName("clef").getLength(); index++) {
+            Element clef = (Element) doc.getElementsByTagName("clef").item(index);
+            if (number.equals(clef.getAttribute("number"))) {
+                return childText(clef, "sign");
+            }
+        }
+        return "";
+    }
+
+    private static Element measureByNumber(Document doc, String number) {
+        for (int index = 0; index < doc.getElementsByTagName("measure").getLength(); index++) {
+            Element measure = (Element) doc.getElementsByTagName("measure").item(index);
+            if (number.equals(measure.getAttribute("number"))) {
+                return measure;
+            }
+        }
+        return null;
+    }
+
+    private static int voiceNoteCount(Element measure, String voice) {
+        int count = 0;
+        if (measure == null) {
+            return count;
+        }
+        for (int index = 0; index < measure.getElementsByTagName("note").getLength(); index++) {
+            Element note = (Element) measure.getElementsByTagName("note").item(index);
+            if (voice.equals(childText(note, "voice"))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static String childText(Element element, String name) {
+        if (element == null || element.getElementsByTagName(name).getLength() == 0) {
+            return "";
+        }
+        return element.getElementsByTagName(name).item(0).getTextContent().trim();
+    }
+
+    private static List<String> dynamicTagNames(Document doc) {
+        List<String> out = new ArrayList<String>();
+        for (int index = 0; index < doc.getElementsByTagName("dynamics").getLength(); index++) {
+            Element dynamics = (Element) doc.getElementsByTagName("dynamics").item(index);
+            for (int childIndex = 0; childIndex < dynamics.getChildNodes().getLength(); childIndex++) {
+                if (dynamics.getChildNodes().item(childIndex) instanceof Element) {
+                    out.add(((Element) dynamics.getChildNodes().item(childIndex)).getTagName());
+                }
+            }
+        }
+        return out;
+    }
+
+    private static int countString(List<String> values, String expected) {
+        int count = 0;
+        for (String value : values) {
+            if (expected.equals(value)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static boolean allPitchedNotesHaveChild(List<Element> notes, String name) {
+        for (Element note : notes) {
+            if (note.getElementsByTagName(name).getLength() == 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean hasTieType(List<Element> notes, String type) {
+        for (Element note : notes) {
+            for (int index = 0; index < note.getElementsByTagName("tie").getLength(); index++) {
+                Element tie = (Element) note.getElementsByTagName("tie").item(index);
+                if (type.equals(tie.getAttribute("type"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static List<Element> miscFieldsWithNamePrefix(Document doc, String prefix) {
+        List<Element> out = new ArrayList<Element>();
+        for (int index = 0; index < doc.getElementsByTagName("miscellaneous-field").getLength(); index++) {
+            Element field = (Element) doc.getElementsByTagName("miscellaneous-field").item(index);
+            if (field.getAttribute("name").startsWith(prefix)) {
+                out.add(field);
+            }
+        }
+        return out;
+    }
+
+    private static String miscFieldTextByName(Document doc, String name) {
+        for (int index = 0; index < doc.getElementsByTagName("miscellaneous-field").getLength(); index++) {
+            Element field = (Element) doc.getElementsByTagName("miscellaneous-field").item(index);
+            if (name.equals(field.getAttribute("name"))) {
+                return field.getTextContent().trim();
+            }
+        }
+        return "";
+    }
+
+    private static List<String> elementTextValues(Document doc, String name) {
+        List<String> out = new ArrayList<String>();
+        for (int index = 0; index < doc.getElementsByTagName(name).getLength(); index++) {
+            out.add(doc.getElementsByTagName(name).item(index).getTextContent().trim());
+        }
+        return out;
+    }
+
+    private static List<MidiIo.RawMidiPlaybackEvent> playbackEventsSortedByStart(
+            MidiIo.MidiPlaybackEventsResult result) {
+        List<MidiIo.RawMidiPlaybackEvent> events = new ArrayList<MidiIo.RawMidiPlaybackEvent>(
+                result == null ? Collections.<MidiIo.RawMidiPlaybackEvent>emptyList() : result.getEvents());
+        Collections.sort(events, new Comparator<MidiIo.RawMidiPlaybackEvent>() {
+            @Override
+            public int compare(MidiIo.RawMidiPlaybackEvent left, MidiIo.RawMidiPlaybackEvent right) {
+                int byStart = Integer.compare(left.getStartTicks(), right.getStartTicks());
+                if (byStart != 0) {
+                    return byStart;
+                }
+                return Integer.compare(left.getMidiNumber(), right.getMidiNumber());
+            }
+        });
+        return events;
+    }
+
+    private static MidiIo.RawMidiPlaybackEvent playbackEventByMidiNumber(MidiIo.MidiPlaybackEventsResult result,
+            int midiNumber) {
+        if (result == null) {
+            return null;
+        }
+        for (MidiIo.RawMidiPlaybackEvent event : result.getEvents()) {
+            if (event.getMidiNumber() == midiNumber) {
+                return event;
+            }
+        }
+        return null;
+    }
+
+    private static List<MidiIo.RawMidiPlaybackEvent> playbackEventsByMidiNumberSorted(
+            MidiIo.MidiPlaybackEventsResult result, int midiNumber) {
+        List<MidiIo.RawMidiPlaybackEvent> out = new ArrayList<MidiIo.RawMidiPlaybackEvent>();
+        for (MidiIo.RawMidiPlaybackEvent event : playbackEventsSortedByStart(result)) {
+            if (event.getMidiNumber() == midiNumber) {
+                out.add(event);
+            }
+        }
+        return out;
+    }
+
+    private static List<Integer> playbackVelocities(MidiIo.MidiPlaybackEventsResult result) {
+        List<Integer> out = new ArrayList<Integer>();
+        for (MidiIo.RawMidiPlaybackEvent event : playbackEventsSortedByStart(result)) {
+            out.add(Integer.valueOf(event.getVelocity()));
+        }
+        return out;
+    }
+
+    private static String repeatedSamePitchSlurWithMiddleArticulationXml(String articulationName) {
+        return "<score-partwise version=\"4.0\">"
+                + "<part-list><score-part id=\"P1\"><part-name>Music</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>1</beats><beat-type>1</beat-type></time></attributes>"
+                + "<note><pitch><step>F</step><octave>5</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type>"
+                + "<notations><slur type=\"start\" number=\"1\"/></notations></note>"
+                + "<note><pitch><step>F</step><octave>5</octave></pitch><duration>120</duration>"
+                + "<voice>1</voice><type>16th</type>"
+                + "<notations><articulations><" + articulationName + "/></articulations></notations></note>"
+                + "<note><pitch><step>E</step><octave>5</octave></pitch><duration>120</duration>"
+                + "<voice>1</voice><type>16th</type>"
+                + "<notations><slur type=\"stop\" number=\"1\"/></notations></note>"
+                + "</measure></part></score-partwise>";
     }
 }

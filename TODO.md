@@ -368,14 +368,218 @@
   - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports chord notes as LilyPond chord token without warning spam`
   - 期待値: backup lane roundtrip が破綻せず、single-staff backup measure では dense lane を選び、chord-follow notes を LilyPond chord token として出力する
   - 実装方針: `exportMusicXmlDomToLilyPond` の measure note export で backup を含む measure の dense voice を選択し、同一 event の chord notes を `<...>` token にまとめる
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の multi-staff / clef export regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports multi-staff part as PianoStaff with per-staff blocks`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports non-voice1 notes on a staff (no forced voice=1 drop)`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `omits rest-only staffs in multi-staff export`
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `exports single-staff bass clef when MusicXML clef is F4`
+  - 期待値: 複数の pitched staff は `\new PianoStaff` と `P1_sN` staff block で出力し、staff 2 の voice 2 note も落とさず、rest-only staff は省略し、F4 clef は `\clef bass` として出力する
+  - 実装方針: first part の pitched staff number を収集し、複数 staff の場合は staff 別 note filter で LilyPond body を出力する。staff 無指定 note は MusicXML 既定に合わせて staff 1 として扱う
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/lilypond-io.spec.ts` の low-staff inferred bass clef export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の `infers bass clef for low staff when explicit clef number is missing`
+  - 期待値: explicit clef number が無い multi-staff MusicXML でも、低音域 staff は `\clef bass` として出力する
+  - 実装方針: explicit MusicXML clef が見つからない staff では、該当 staff の pitched note octave 平均から low staff を bass 推定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import metadata / Viola clef regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `restores title/composer/part-name from mks text meta`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `prefers standard MIDI meta title/composer over mks text meta`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `prefers explicit track-name over mks part-name-track when naming parts`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `uses alto clef when imported MIDI part-name includes Viola/Vla`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps single-staff C3 clef for Viola even with wide MIDI pitch range`
+  - 期待値: public `convertMidiToMusicXml` 経由で MKS text meta / standard text meta / explicit track-name precedence / Viola alto clef policy が維持される
+  - 実装方針: 既存 raw MIDI writer helper で最小 SMF fixture を組み、public import facade の regression coverage として固定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import note notation regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `does not infer staccato from repeated half-duty detached MIDI notes`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `applies beam tags to grouped short notes and breaks beams across rests`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `splits implicit beams at beat boundaries in MIDI import`
+  - 期待値: public `convertMidiToMusicXml` 経由で detached MIDI note から staccato を誤推定せず、短い note の beam が rest と beat 境界で適切に分割される
+  - 実装方針: 既存 raw MIDI writer helper で最小 SMF fixture を組み、public import facade の regression coverage として固定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import note pairing / part split regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps same-pitch retrigger stable even when note-on appears before note-off at same tick`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `auto-splits overlapping notes into multiple voices`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `separates same MIDI channel across different tracks into separate parts`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `separates channel 10 into dedicated drum part`
+  - 期待値: same-pitch retrigger の note pairing が安定し、overlap は複数 voice に分離され、track/channel 境界と channel 10 drum part が保持される
+  - 実装方針: public `convertMidiToMusicXml` regression coverage を追加し、generic MIDI track name は part-name として採用しすぎず fallback / drum naming を優先する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import key/time/quantize regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `reads MIDI key signature meta event into MusicXML key`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `normalizes leading pickup FF58 (1/8 at tick 0 then 3/8) to 3/8 on MIDI import`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `uses triplet-aware divisions for 1/16 import when triplet-like timing is detected`
+  - 期待値: public `convertMidiToMusicXml` 経由で FF59 key signature、FF58 pickup normalization、triplet-aware divisions が MusicXML に反映される
+  - 実装方針: 既存 raw MIDI writer helper で key/time meta event と triplet-like note timing fixture を組み、public import facade の regression coverage として固定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import auto-grid / pickup metadata / key inference regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `chooses 1/8 grid on auto mode for straight eighth-note timing`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps triplet-aware grid behavior on auto mode when triplet-like timing is dominant`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `restores pickup measure from mks:pickup-ticks text metadata when FF58 prelude is absent`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `infers MusicXML key when MIDI key signature meta event is missing`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `emits natural accidental when note contradicts key signature`
+  - 期待値: public `convertMidiToMusicXml` 経由で auto quantize grid、MKS pickup metadata、key inference warning、key-signature contradiction accidental が MusicXML に反映される
+  - 実装方針: 既存 raw MIDI writer helper で straight / triplet timing、MKS text metadata、key-signature fixture を組み、public import facade の regression coverage として固定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import accidental spelling / staff layout regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `prefers C# over Db for lower chromatic neighbor between repeated D notes`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps upper-staff hysteresis around split boundary in grand staff mode`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `does not emit phantom empty staff when melody stays on one side`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `does not emit full-rest-only inactive voice in a measure that already has notes`
+  - 期待値: public `convertMidiToMusicXml` 経由で chromatic neighbor spelling、grand-staff hysteresis、単独 treble melody の single-staff 維持、measure 内 inactive voice rest 抑止が MusicXML に反映される
+  - 実装方針: 既存 raw MIDI writer helper で最小 SMF fixture を組み、public import facade の regression coverage として固定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import tempo / dynamics / duration regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `reads MIDI tempo meta event into MusicXML direction/sound tempo`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `maps note velocity to fixed dynamics marks (ppp..fff) and suppresses repeats`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `splits non-notatable imported durations into tied notes with valid type tags`
+  - 期待値: public `convertMidiToMusicXml` 経由で tempo direction / collectable tempo event、velocity dynamics の重複抑止、非標準 duration の tied typed notes 分割が MusicXML に反映される
+  - 実装方針: 既存 raw MIDI writer helper と tempo track chunk helper で最小 SMF fixture を組み、public import facade の regression coverage として固定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import debug/source/SysEx metadata regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `writes MIDI meta metadata into miscellaneous-field by default`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `writes src:midi raw source metadata by default`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `reads mikuscore SysEx metadata into mks:meta:midi:sysex miscellaneous fields`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `can disable MIDI debug metadata output`
+  - 期待値: public `convertMidiToMusicXml` 経由で debug MIDI meta、raw source hex、MKS SysEx payload、debug metadata disable option が MusicXML miscellaneous-field に反映される
+  - 実装方針: exact raw velocity metadata だけ最小 format-0 SMF を直接 fixture 化し、それ以外は既存 raw MIDI writer / SysEx chunk helper を使う
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import warning diagnostics / source metadata option regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `writes MIDI import warnings into diag:* miscellaneous fields`
+  - Java option regression: `sourceMetadata=false` で raw source metadata を抑止できることを public `convertMidiToMusicXml` 経由で確認
+  - 期待値: polyphony voice-assignment warning が result warnings と MusicXML `mks:diag:*` に反映され、source metadata option が `mks:src:midi:*` 出力を抑止する
+  - 実装方針: 既存 raw MIDI writer helper の overlap fixture と最小 format-0 SMF fixture を使う
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MusicXML -> MIDI key/time signature export regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `collects key signature events from MusicXML for MIDI FF59 export`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `collects time signature events from MusicXML for MIDI FF58 export`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `emits MuseScore-style FF58 pickup prelude when pickupTicks metadata is provided`
+  - 期待値: MusicXML measure attribute の key/time changes が ticksPerQuarter 128 の MIDI tick に変換され、6/8 + pickupTicks 240 から 1/8 prelude + 6/8 full meter に正規化される
+  - 実装方針: 既存 collect / normalize helper 境界の regression として固定し、public export pipeline を大きく変更しない
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の raw MIDI text metadata export regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `does not emit mks text metadata when emitMksTextMeta is false`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `always emits standard title text meta even when mks text metadata is disabled`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `emits raw-writer track-name meta (FF03) for note tracks`
+  - 期待値: raw MIDI export で MKS text meta を抑止しても standard `title:` meta は出力し、note track の FF03 track-name meta が保持される
+  - 実装方針: Java test 側に最小 SMF text meta collector を追加し、rawWriter output の FF01 / FF03 payload を直接確認する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MusicXML playback timeline regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps full non-implicit measure length for playback timeline`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `does not double-count underfull bar when followed by implicit pickup`
+  - 期待値: 非 implicit の underfull measure は playback timeline 上 full measure 分進め、続く implicit pickup を二重加算しない
+  - 実装方針: public `buildPlaybackEventsFromXml` regression coverage として固定し、既存 `resolveMeasureAdvanceDiv` 境界を大きく変更しない
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の classical-equal grace timing regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `supports classical-equal grace timing mode (grace/principal split beat equally)`
+  - 期待値: `graceTimingMode=classical_equal` では grace note と principal note が拍内をほぼ等分し、principal は grace の直後から始まる
+  - 実装方針: public `buildPlaybackEventsFromXml` regression coverage として固定し、既存 grace timing 実装境界を大きく変更しない
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の tied-note playback merge regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `merges tied notes into one sustained playback event in MIDI mode`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `merges tied notes even when continuation note omits voice (fallback by channel/pitch)`
+  - 期待値: tie start / stop は MIDI playback extraction で 1 つの sustained event に統合され、continuation note が voice を省略しても channel/pitch fallback で結合される
+  - 実装方針: public `buildPlaybackEventsFromXml` regression coverage として固定し、既存 tie processing 境界を大きく変更しない
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の slur playback merge boundary regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `does not retrigger repeated same-pitch note inside slur in playback-like mode with tie processing`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps retrigger when repeated same-pitch note is slur-start boundary`
+  - 期待値: playback-like mode で tie/slur processing を明示有効にした場合は同音 slur 内 note を merge し、slur-start 境界の同音 note は retrigger する
+  - 実装方針: repeated same-pitch slur merge 条件を MIDI mode 固定から `includeTieProcessing()` に寄せ、default playback mode は維持する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の slur-stop / articulation retrigger regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `does not extend slur-stop note into following same pitch`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps retrigger for repeated same-pitch slur when staccato is present in playback-like mode`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps retrigger for repeated same-pitch slur when tenuto is present in playback-like mode`
+  - 期待値: slur-stop note は後続同音へ伸びず、playback-like mode の同音 slur でも staccato / tenuto がある場合は retrigger する
+  - 実装方針: public `buildPlaybackEventsFromXml` regression coverage として固定し、既存 slur / articulation 境界を大きく変更しない
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の underfull timeline / metric accent regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `keeps timeline stable for underfull + implicit + regular-underfull sequence`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `applies metric beat accents in 6/8 and 5-beat signatures`
+  - 期待値: underfull + implicit + regular-underfull sequence の playback timeline が安定し、6/8 と 5/4 の metric accent velocity が upstream pattern と一致する
+  - 実装方針: public `buildPlaybackEventsFromXml` regression coverage として固定し、既存 measure advance / metric accent 境界を大きく変更しない
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の metric accent profile regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `applies 3-beat and fallback patterns as specified`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `supports configurable metric accent amount profiles`
+  - 期待値: 3-beat / fallback meter の metric accent pattern と subtle / balanced / strong profile の velocity 差分が upstream と一致する
+  - 実装方針: public `buildPlaybackEventsFromXml` regression coverage として固定し、既存 metric accent helper 境界を大きく変更しない
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の in-score tempo / pedal / drum playback regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `collects in-score tempo changes with tick positions`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `collects pedal markings as CC64 events`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `maps drum notes via midi-unpitched and instrument-name hints`
+  - 期待値: in-score tempo change は tick 0 の default tempo を先取り上書きせず、pedal change は CC64 off/on を同 tick に出し、drum note は `midi-unpitched` と instrument-name hint で GM drum note に解決する
+  - 実装方針: public `collectMidiTempoEventsFromMusicXmlDoc` / `collectMidiControlEventsFromMusicXmlDoc` / `buildPlaybackEventsFromXml` regression coverage として固定し、初期 tempo 読み取りを upstream `getFirstNumber(doc, "sound[tempo]")` 相当に寄せる
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import empty-channel / expression regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `does not create empty parts from channels without note events`
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `reflects CC11 expression in imported dynamics estimation`
+  - 期待値: program change だけの channel から空 part を作らず、CC11 expression 低下は import dynamics 推定で `ff` から `pp` への変化として反映される
+  - 実装方針: 最小 raw SMF fixture を `MidiIoTest` に追加し、public `convertMidiToMusicXml` regression coverage として固定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/midi-io.spec.ts` の MIDI import pretty-print regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` の `pretty-prints imported MusicXML by default when debug metadata is enabled`
+  - 期待値: debug metadata enabled の MIDI import 結果 XML は改行とインデントを含む pretty-print 形式になる
+  - 実装方針: Java 側には upstream の `debugPrettyPrint` option が無く常に pretty-print されるため、public `convertMidiToMusicXml` regression coverage として固定する
+- [x] 2026-05-14 確認 slice: upstream `tests/unit/midi-io.spec.ts` の末尾到達
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-io.spec.ts` 末尾まで確認
+  - 結果: export / roundtrip metadata 付近の残り候補は raw-writer FF03、playback timing、same-meter FF58 dedupe、MKS/standard metadata、Viola clef まで既存 `MidiIoTest` / TODO mapping で coverage 済み
+  - 実装方針: 重複 test は追加せず、次回は別 upstream format spec か broader MIDI implementation parity へ切り替える
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の grace missing-voice lane regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC does not split a separate lane for grace notes missing voice`
+  - 期待値: voice 未指定 grace note は同一 ABC lane の grace group `{d}` として出力され、余分な `V:P1_v2` を作らず、roundtrip 後も単一 part と grace note を保持する
+  - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC repeat times metadata regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC keeps %@mks repeat times only when standard ABC cannot express them`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML restores repeat times from %@mks measure metadata when standard ABC surface is insufficient`
+  - 期待値: backward repeat `times=3` は standard ABC `:|` と `%@mks measure ... times=3` の組み合わせで export され、import 時は MusicXML `<repeat ... times="3"/>` に復元される
+  - 実装方針: public `musicXmlToAbc` / `musicXmlFromAbc` regression coverage を追加し、`%@mks measure ... times=N` を backward repeat 補足情報として扱う
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC discontinue ending metadata regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC keeps discontinue ending metadata only when standard ABC surface is insufficient`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML restores discontinue ending type from %@mks measure metadata`
+  - 期待値: right ending `type=discontinue` は standard ABC `[1` と `%@mks measure ... ending-stop=1 ending-type=discontinue` の組み合わせで export され、import 時は start と discontinue の barline ending が両方復元される
+  - 実装方針: public `musicXmlToAbc` / `musicXmlFromAbc` regression coverage を追加し、notation metadata と `%@mks measure` metadata を merge して start / stop 情報を保持する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC tuplet shorthand / explicit ratio import regressions
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports common tuplet shorthand (3 in the bounded subset`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses explicit tuplet ratios through the parser path`
+  - 期待値: ABC `(3 DEF` は MusicXML `actual-notes=3` / `normal-notes=2` と tuplet start / stop に復元され、`(5:4:5 C D E F G` は `actual-notes=5` / `normal-notes=4` として復元される
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の per-part key signature roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC->MusicXML preserves per-part key signatures via standard K fields`
+  - 期待値: part ごとに異なる初期 key / measure 途中 key change を `%@mks key` ではなく standard ABC `K:` / `[K:]` で出力し、roundtrip 後に P1/P2 の各 measure key fifths が復元される
+  - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の duplicate key hint import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML keeps first %@mks key hint when duplicates exist for same voice and measure`
+  - 期待値: 同一 voice / measure に `%@mks key` が重複した場合、最初の key hint を採用し、後続重複 hint で上書きしない
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の shared header K export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC uses shared header K when all lanes start with the same key`
+  - 期待値: 全 lane の初期 key が同じ場合は standard ABC header `K:G` に集約し、`%@mks key` や voice-local `[K:G]` を出力しない
+  - 実装方針: 既存 `musicXmlToAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の natural against lane key signature export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC emits natural against lane key signature (A major G->=G)`
+  - 期待値: A major lane 上の G natural pitch は ABC で `=G` として出力される
+  - 実装方針: 既存 `musicXmlToAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の per-part initial key accidental emission regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC uses per-part initial key for accidental emission`
+  - 期待値: 複数 part の中でも対象 part の初期 key を使い、A major の P3 lane では G natural を `=G` として出力する
+  - 実装方針: 既存 `musicXmlToAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の common C-clef header roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports common C-clef headers and roundtrips them`
+  - 期待値: MusicXML C clef line 3 / 4 を ABC `clef=alto` / `clef=tenor` として出力し、roundtrip 後に MusicXML C clef line 3 / 4 として復元する
+  - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/with_following_rest.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/with_following_rest.musicxml`
+  - 期待値: note / note / rest / note を含む 1 measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/with_following_rest.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/with_rest_tail.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/with_rest_tail.musicxml`
+  - 期待値: note / rest / rest / rest を含む 1 measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/with_rest_tail.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/full_with_half.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/full_with_half.musicxml`
+  - 期待値: half note + quarter note + quarter note を含む 1 measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/full_with_half.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/inherited_time_changed.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/inherited_time_changed.musicxml`
+  - 期待値: measure 2 で time signature が 3/4 に変わる fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/inherited_time_changed.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/inherited_divisions_changed.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/inherited_divisions_changed.musicxml`
+  - 期待値: measure 2 で divisions が 2 に変わる fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/inherited_divisions_changed.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/inherited_attributes.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/inherited_attributes.musicxml`
+  - 期待値: measure 2 が measure 1 の divisions / time signature を継承する fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/inherited_attributes.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
 - [ ] 次回再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
-- [ ] 次回再開時の第一候補は upstream `tests/unit/lilypond-io.spec.ts` の次の未移植 regression を確認する
-  - backup-lane / chord-token の次の export regression から、小さく切れる未対応 slice を確認する
-  - `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` を現在位置から確認し、未対応の import / export 本体 slice を小さく切る
+- [ ] 次回再開時の第一候補は upstream format spec のうち、まだ末尾到達していない MEI / MuseScore / ABC fixture / LilyPond broader parity から小さく切り出せる regression を確認する
+  - MIDI に戻る場合は `tests/unit/midi-io.spec.ts` の新規 upstream 追加が無いかだけ確認し、既存 coverage と重複する regression は追加しない
+  - LilyPond に戻る場合は upstream 側に新規 regression が追加されていないか `workplace/mikuscore/tests/unit/lilypond-io.spec.ts` の末尾を確認する
 - [ ] 次回再開時の確認コマンド
   - `git status --short`
-  - `sed -n '1535,1625p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
-  - `mvn test -Dtest=LilyPondIoTest`
+  - `rg -n "TODO|pending|it\\(" workplace/mikuscore/tests/unit/abc-io.spec.ts`
+  - `mvn test -Dtest=AbcIoTest`
   - 最後に `mvn test`
 - [ ] 次回再開時に更新する tracking files
   - `TODO.md`
@@ -386,18 +590,18 @@
   - skill: `igapyon-miku-soft-developer`
   - 方針: upstream Node/TypeScript 版 `https://github.com/igapyon/mikuscore` の straight conversion を Java 1.8 / Maven へ小さい slice 単位で継続
   - upstream 基準 checkout: `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`
-  - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/lilypond/LilyPondIo.java`
-  - 対応テスト: `src/test/java/jp/igapyon/mikuscore/lilypond/LilyPondIoTest.java`
+  - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/abc/AbcIo.java`
+  - 対応テスト: `src/test/java/jp/igapyon/mikuscore/abc/AbcIoTest.java`
   - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
-  - 最新完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の backup-lane / chord-token export regressions
-  - 最新 focused 検証: `mvn test -Dtest=LilyPondIoTest` 成功、67 tests / 0 failures / 0 errors
-  - 最新 full 検証: `mvn test` 成功、545 tests / 0 failures / 0 errors
+  - 最新完了 slice: upstream `tests/fixtures/inherited_attributes.musicxml` の ABC golden fixture expansion
+  - 最新 focused 検証: `mvn test -Dtest=AbcIoTest` 成功、90 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、638 tests / 0 failures / 0 errors
   - 最新 diff 検証: `git diff --check` 問題なし
-  - 次回第一候補: upstream `tests/unit/lilypond-io.spec.ts` の backup-lane / chord-token 後続 export regression
+  - 次回第一候補: ABC fixture をさらに 1 件だけ追加するか、MEI / MuseScore など別 format spec の未移植 regression を小さく確認する
   - 次回確認コマンド:
     - `git status --short`
-    - `sed -n '1535,1625p' workplace/mikuscore/tests/unit/lilypond-io.spec.ts`
-    - `mvn test -Dtest=LilyPondIoTest`
+    - `rg -n "TODO|pending|it\\(" workplace/mikuscore/tests/unit/abc-io.spec.ts`
+    - `mvn test -Dtest=AbcIoTest`
     - 最後に `mvn test`
 - [x] 2026-05-11 終了時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
