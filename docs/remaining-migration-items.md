@@ -1111,6 +1111,14 @@ Out of scope for the initial Java conversion:
   - MusicXML lyrics export as ABC `w:` lines
   - hyphenated lyric tokens roundtrip through MusicXML syllabic begin / middle / end markers
   - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add ABC inline `[V:...]` voice switch public regression slice from `src/ts/abc-io.ts`
+  - inline body voice switches route notes to the declared MusicXML parts
+  - declared voice names become MusicXML part names
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` case
+- [x] Add ABC `%%score` grouped voices multi-staff import regression slice from `src/ts/abc-io.ts`
+  - grouped voices import as one MusicXML part with multiple staves
+  - staff clefs, backup duration, part-name join, and staff assignment are covered
+  - focused `AbcIoTest` coverage and a small `AbcIo` public import path connection
 - [x] Add `ScoreCore.save()` integrity validation slice from `core/ScoreCore.ts`
   - `MusicXmlState.validateMusicXmlForSave`
   - invalid note duration, dirty-state missing voice, invalid pitch, rest-with-pitch, chord-without-pitch diagnostics
