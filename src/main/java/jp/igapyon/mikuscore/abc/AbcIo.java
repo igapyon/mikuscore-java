@@ -2576,7 +2576,7 @@ public final class AbcIo {
                 "beat-type"), 4)));
         int fifths = (int) Math.round(parseDouble(directChildText(directChild(firstAttributes, "key"), "fifths"), 0));
         String key = keyFromFifthsMode(Math.max(-7, Math.min(7, fifths)), "major");
-        Integer firstTempo = findMusicXmlFirstTempo(root);
+        AbcTempoHeader tempoHeader = findMusicXmlTempoHeader(root);
 
         Map<String, String> partNameById = collectMusicXmlPartNames(root);
         List<String> headerLines = new ArrayList<String>();
@@ -2587,8 +2587,8 @@ public final class AbcIo {
         headerLines.add("C:" + composer);
         headerLines.add("M:" + beats + "/" + beatType);
         headerLines.add("L:1/8");
-        if (firstTempo != null) {
-            headerLines.add("Q:1/4=" + firstTempo.intValue());
+        if (tempoHeader != null) {
+            headerLines.add("Q:" + tempoHeader.getUnit() + "=" + tempoHeader.getBpm());
         }
         headerLines.add("K:" + key);
 
@@ -2953,27 +2953,80 @@ public final class AbcIo {
         return "";
     }
 
-    private static Integer findMusicXmlFirstTempo(Element root) {
+    private static AbcTempoHeader findMusicXmlTempoHeader(Element root) {
+        AbcTempoHeader leading = findLeadingMusicXmlTempoHeader(root);
+        if (leading != null) {
+            return leading;
+        }
         for (Element part : directChildren(root, "part")) {
             for (Element measure : directChildren(part, "measure")) {
                 for (Element direction : directChildren(measure, "direction")) {
-                    for (Element sound : directChildren(direction, "sound")) {
-                        Double tempo = parseOptionalNumber(trimToEmpty(sound.getAttribute("tempo")));
-                        if (tempo != null && tempo.doubleValue() > 0) {
-                            return Integer.valueOf(clampRoundedTempo((int) Math.round(tempo.doubleValue())));
-                        }
-                    }
-                    for (Element directionType : directChildren(direction, "direction-type")) {
-                        Element metronome = directChild(directionType, "metronome");
-                        Double tempo = parseOptionalNumber(directChildText(metronome, "per-minute"));
-                        if (tempo != null && tempo.doubleValue() > 0) {
-                            return Integer.valueOf(clampRoundedTempo((int) Math.round(tempo.doubleValue())));
-                        }
+                    AbcTempoHeader tempo = musicXmlTempoHeaderFromDirection(direction);
+                    if (tempo != null) {
+                        return tempo;
                     }
                 }
             }
         }
         return null;
+    }
+
+    private static AbcTempoHeader findLeadingMusicXmlTempoHeader(Element root) {
+        for (Element part : directChildren(root, "part")) {
+            for (Element measure : directChildren(part, "measure")) {
+                AbcTempoHeader tempo = null;
+                for (Element child : directChildren(measure)) {
+                    if ("note".equals(child.getTagName())) {
+                        return tempo;
+                    }
+                    if ("direction".equals(child.getTagName())) {
+                        AbcTempoHeader directionTempo = musicXmlTempoHeaderFromDirection(child);
+                        if (directionTempo != null) {
+                            tempo = directionTempo;
+                        }
+                    }
+                }
+                if (tempo != null) {
+                    return tempo;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static AbcTempoHeader musicXmlTempoHeaderFromDirection(Element direction) {
+        for (Element directionType : directChildren(direction, "direction-type")) {
+            Element metronome = directChild(directionType, "metronome");
+            Double tempo = parseOptionalNumber(directChildText(metronome, "per-minute"));
+            if (tempo != null && tempo.doubleValue() > 0) {
+                String unit = musicXmlMetronomeBeatUnitToAbcUnit(directChildText(metronome, "beat-unit"));
+                return new AbcTempoHeader(unit, clampRoundedTempo((int) Math.round(tempo.doubleValue())));
+            }
+        }
+        for (Element sound : directChildren(direction, "sound")) {
+            Double tempo = parseOptionalNumber(trimToEmpty(sound.getAttribute("tempo")));
+            if (tempo != null && tempo.doubleValue() > 0) {
+                return new AbcTempoHeader("1/4", clampRoundedTempo((int) Math.round(tempo.doubleValue())));
+            }
+        }
+        return null;
+    }
+
+    private static String musicXmlMetronomeBeatUnitToAbcUnit(String beatUnit) {
+        String normalized = trimToEmpty(beatUnit).toLowerCase();
+        if ("whole".equals(normalized)) {
+            return "1/1";
+        }
+        if ("half".equals(normalized)) {
+            return "1/2";
+        }
+        if ("eighth".equals(normalized)) {
+            return "1/8";
+        }
+        if ("16th".equals(normalized)) {
+            return "1/16";
+        }
+        return "1/4";
     }
 
     private static int importAbcBodyEntryToVoiceStores(AbcImportBodyEntry entry, AbcVoiceStores voiceStores,
@@ -3148,7 +3201,8 @@ public final class AbcIo {
                         warnings.add("line " + lineNo + ": Unterminated quoted string marker; value kept.");
                     }
                     String quotedText = quotedString.getNormalizedText();
-                    if (isLikelyAbcChordSymbol(quotedText)) {
+                    if (isLikelyAbcChordSymbol(quotedText)
+                            && buildHarmonyXmlFromChordSymbol(quotedText).length() > 0) {
                         pendingChordSymbols.add(quotedText);
                     } else if (trimToEmpty(quotedText).length() > 0) {
                         pendingAnnotations.add(quotedText);
@@ -4120,6 +4174,24 @@ public final class AbcIo {
             return true;
         }
         return false;
+    }
+
+    private static final class AbcTempoHeader {
+        private final String unit;
+        private final int bpm;
+
+        AbcTempoHeader(String unit, int bpm) {
+            this.unit = unit;
+            this.bpm = bpm;
+        }
+
+        String getUnit() {
+            return unit;
+        }
+
+        int getBpm() {
+            return bpm;
+        }
     }
 
     private static final class AbcTupletEvent {
