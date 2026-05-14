@@ -187,6 +187,30 @@ completed slice history remains below.
 - Latest completed ABC fixture expansion slice: `inherited_attributes.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
 - Latest ABC focused verification after inherited-attributes fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
 - Latest full verification after inherited-attributes fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `mixed_voices.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after mixed-voices fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after mixed-voices fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `with_backup.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after with-backup fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after with-backup fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `with_unknown.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after with-unknown fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after with-unknown fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `underfull.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after underfull fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after underfull fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `overfull.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after overfull fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after overfull fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `roundtrip_moonlight_m13_m16_like.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after moonlight fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after moonlight fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `roundtrip_triplet_m1_m4_like.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after triplet fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after triplet fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `roundtrip_sample6_m1_m2.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after sample6 fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after sample6 fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
 - Suggested next step: add one more small ABC fixture, or move to MEI, MuseScore, or another upstream format spec in small pieces. If returning to MIDI tests, first check only for new upstream additions and avoid duplicate regressions.
 - Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 
@@ -218,6 +242,14 @@ completed slice history remains below.
   - latest fixture expansion adds `inherited_time_changed.musicxml` to Java ABC golden resources
   - latest fixture expansion adds `inherited_divisions_changed.musicxml` to Java ABC golden resources
   - latest fixture expansion adds `inherited_attributes.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `mixed_voices.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `with_backup.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `with_unknown.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `underfull.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `overfull.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `roundtrip_moonlight_m13_m16_like.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `roundtrip_triplet_m1_m4_like.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `roundtrip_sample6_m1_m2.musicxml` to Java ABC golden resources
   - remaining work is broader fixture-based parity expansion and other format parity slices
 
 ### Not Started Format Work
@@ -275,7 +307,7 @@ completed slice history remains below.
 - ABC lexer: first low-level `abc-lexer.ts` helper slice migrated
 - ABC parser: playable-event, structural token, body dispatcher, and grace group helper slices migrated
 - ABC I/O: utility, meta directive, import line processor, body text entry, voice directive tail, header parsing, voice measure meta, MusicXML export XML, part measure render context, rendered measure misc XML, rendered part measure XML, part list/body XML integration, MusicXML export context, measure note XML core, note lyric/time-modification XML, note leading direction XML, measure beam XML, note notations decoration XML, body import voice stores helper, body lyric application, body field state update, body barline processing, non-playable body entry dispatch, simple body token dispatch, bracket / grace / fallback body dispatch, pending note state helper, ABC chord harmony XML helper, MusicXML to ABC harmony / lyric helper, MusicXML to ABC DOM utility helper, MusicXML to ABC lane definition helper, MusicXML to ABC meta line helper, MusicXML to ABC measure meta helper, MusicXML to ABC measure state helper, MusicXML to ABC direction token helper, MusicXML to ABC note lane / timing helper, MusicXML to ABC note ornament helper, MusicXML to ABC pitch token helper, MusicXML to ABC note ornament prefix helper, MusicXML to ABC note articulation prefix helper, MusicXML to ABC note technical prefix helper, first ABC body import to MusicXML integration, initial MusicXML to ABC public integration, initial ABC golden fixture roundtrip, ABC body tuplet timing, ABC body grace group import, ABC overlay import integration, basic / standard-shorthand / prefixed ABC body decoration pending state, ABC body navigation / wedge / dynamics decoration import, ABC richer decoration aliases, ABC overfull compatibility diagnostics, ABC body repeat / ending metadata, ABC body tie handoff, ABC chord tie handoff, missing voice measure rest fallback, grace-note occupancy exclusion, slur warning, and ABC body broken rhythm / slur handoff slices migrated
-- ABC I/O MusicXML to ABC public integration now includes harmony / direction / lyric prefix handoff, grace / tie / slur handoff, tuplet / time-modification handoff, note notation prefix handoff, trill accidental metadata roundtrip, measure / diagnostic metadata line handoff, and ABC quoted-string import to harmony / words direction handoff
+- ABC I/O MusicXML to ABC public integration now includes harmony / direction / lyric prefix handoff, lyric `w:` import/export and hyphenated syllabic roundtrip, grace / tie / slur handoff, tuplet / time-modification handoff, note notation prefix handoff, trill accidental metadata roundtrip, measure / diagnostic metadata line handoff, and ABC quoted-string import to harmony / words direction handoff
 - Render output: not migrated; `render svg` is constrained by upstream `verovio.js` browser runtime dependency
 
 ## Current Scope
@@ -1020,6 +1052,128 @@ Out of scope for the initial Java conversion:
   - grace-note occupancy exclusion
   - slur-stop warning diagnostics
   - focused JUnit tests
+- [x] Add ABC length shorthand public import regression slice from `src/ts/abc-io.ts`
+  - slash length shorthand including `//` maps to MusicXML durations
+  - numerator-slash shorthand works for notes, chords, and grace groups
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add ABC tempo Q header public roundtrip regression slice from `src/ts/abc-io.ts`
+  - MusicXML tempo exports as ABC `Q:1/4=...`
+  - ABC import restores the tempo as MusicXML `<sound tempo="..."/>`
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` case
+- [x] Add ABC tempo beat-unit / leading-tempo export regression slice from `src/ts/abc-io.ts`
+  - MusicXML metronome `beat-unit=half` exports as ABC `Q:1/2=...`
+  - ABC import converts `Q:1/2=72` back to quarter tempo 144
+  - when multiple leading tempo directions appear before the first note, the last one is exported
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add ABC same-staff multi-voice overfull regression slice from `src/ts/abc-io.ts`
+  - MusicXML -> ABC -> MusicXML roundtrip for same-staff voice 1 / voice 2 no longer reports save-time `MEASURE_OVERFULL`
+  - Java currently accepts the existing lane-to-part roundtrip shape as the save-valid representation
+  - restoring the exact same-staff / backup layout remains a future parity candidate
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` case
+- [x] Add ABC clef inference / bare voice clef shorthand regression slice from `src/ts/abc-io.ts`
+  - low-note ABC import without explicit clef infers F4 bass clef
+  - bare `V:` tail clef names `treble` / `bass` and aliases `c3` / `c4` map to MusicXML clefs
+  - inline body text after a bare voice clef shorthand remains imported as notes
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add ABC voice directive tail diagnostics / transpose regression slice from `src/ts/abc-io.ts`
+  - unsupported bare `V:` tail words are skipped with diagnostics instead of becoming notes
+  - supported `V:` `transpose=-3` imports as MusicXML chromatic transpose
+  - unsupported standard `V:` properties such as `staves` and `middle` are reported as diagnostics
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add ABC overfull compatibility public regression slice from `src/ts/abc-io.ts`
+  - default ABC import reflows overfull measure content and records `OVERFULL_REFLOWED`
+  - save validation stays ok after default compatibility reflow
+  - `overfullCompatibilityMode=false` keeps the original overfull measure and save validation reports `MEASURE_OVERFULL`
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add ABC inline field / continued header public regression slice from `src/ts/abc-io.ts`
+  - parser fallback warnings are persisted as `ABC_IMPORT_WARNING` diagnostics
+  - inline `[K:]`, `[M:]`, `[L:]`, and `[Q:]` field changes affect imported MusicXML key, meter, durations, and tempo
+  - continued body lines with standalone `K:` field changes remain supported
+  - unsupported continued header-field text is skipped with diagnostics rather than parsed as notes
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add ABC quoted annotation / chord harmony public regression slice from `src/ts/abc-io.ts`
+  - supported quoted chord symbols import as MusicXML `<harmony>`
+  - quoted annotation text imports as MusicXML direction words
+  - extended and slash chord symbols are covered through the public facade
+  - unsupported chord-like quoted text is preserved as annotation instead of disappearing
+  - focused `AbcIoTest` coverage and a small `AbcIo` classification fix
+- [x] Add MusicXML to ABC quoted annotation / harmony export regression slice from `src/ts/abc-io.ts`
+  - MusicXML direction words export as quoted ABC annotations
+  - unsupported chord-like annotations roundtrip as words instead of harmony
+  - MusicXML harmony exports as supported quoted ABC chord symbols, including extended and slash chord forms
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add MusicXML to ABC rehearsal decoration roundtrip regression slice from `src/ts/abc-io.ts`
+  - MusicXML rehearsal directions export as `!rehearsal:...!`
+  - ABC import restores the rehearsal direction
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` case
+- [x] Add ABC lyric `w:` import/export and hyphenated roundtrip regression slice from `src/ts/abc-io.ts`
+  - ABC `w:` lyrics attach to subsequent pitched MusicXML notes
+  - MusicXML lyrics export as ABC `w:` lines
+  - hyphenated lyric tokens roundtrip through MusicXML syllabic begin / middle / end markers
+  - focused `AbcIoTest` coverage for the corresponding `abc-io.spec.ts` cases
+- [x] Add `ScoreCore.save()` integrity validation slice from `core/ScoreCore.ts`
+  - `MusicXmlState.validateMusicXmlForSave`
+  - invalid note duration, dirty-state missing voice, invalid pitch, rest-with-pitch, chord-without-pitch diagnostics
+  - no-op missing voice remains allowed to match upstream `original_noop` behavior
+  - overfull save-time rejection with tuplet rounding tolerance
+  - focused `MusicXmlStateTest` fixture coverage
+- [x] Add `ScoreCore.delete_note` preservation regression slice from `core/ScoreCore.ts` / `core/xmlUtils.ts`
+  - delete replaces only the target note with same-duration rest
+  - measure attributes remain stable
+  - target note position and total measure/voice duration are preserved
+  - focused `MusicXmlStateTest` coverage for MP-2 / MP-3 / TI-7 intent
+- [x] Add `ScoreCore.dispatch` invalid payload no-target regression slice from `core/ScoreCore.ts`
+  - invalid `change_duration` payload returns `MVP_INVALID_COMMAND_PAYLOAD` before target changes are reported
+  - invalid `change_to_pitch` payload returns `MVP_INVALID_COMMAND_PAYLOAD` before target changes are reported
+  - apply facade returns failure JSON with empty `changed_node_ids` / `affected_measure_numbers`
+  - focused `MusicXmlStateTest` coverage for PL-1 / PL-2 intent
+- [x] Add `ScoreCore.dispatch` failed-command atomicity regression slice from `core/ScoreCore.ts`
+  - successful `change_to_pitch` output remains valid
+  - following overfull `change_duration` reports `MEASURE_OVERFULL`
+  - failed apply facade returns failure JSON without changing the previously successful XML snapshot
+  - focused `MusicXmlStateTest` coverage for AT-1 intent
+- [x] Add `ScoreCore.insert_note_after` stable insertion regression slice from `core/ScoreCore.ts`
+  - insertion after matching voice anchor reports anchor and new node ids
+  - non-target notes and measure attributes remain stable around local insertion
+  - inserted MusicXML remains save-valid
+  - focused `MusicXmlStateTest` coverage for IN-1 / ID-1 / MP-1 intent
+- [x] Add `ScoreCore` non-primary voice edit regression slice from `core/ScoreCore.ts`
+  - `change_to_pitch` can edit voice 2 when command voice matches the target voice
+  - `change_duration` in voice 2 leaves voice 1 notes unchanged and fills the edited lane underfull gap
+  - focused `MusicXmlStateTest` coverage for BF-1a / BF-1b intent
+- [x] Add `ScoreCore.insert_note_after` voice/lane rejection no-target regression slice from `core/ScoreCore.ts`
+  - anchor voice mismatch returns `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` with no changed targets
+  - interleaved local voice lane crossing returns `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` with no changed targets
+  - apply facade returns failure JSON with empty `changed_node_ids` / `affected_measure_numbers`
+  - focused `MusicXmlStateTest` coverage for BF-3 / BF-4 no-dirty intent
+- [x] Add `ScoreCore` backup / forward structural boundary no-target regression slice from `core/ScoreCore.ts`
+  - insert across a same-measure backup boundary returns `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` with no changed targets
+  - split across a forward gap returns `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` with no changed targets
+  - apply facade returns failure JSON with empty `changed_node_ids` / `affected_measure_numbers`
+  - focused `MusicXmlStateTest` coverage for BF-2 / BF-8 no-dirty intent
+- [x] Add `ScoreCore` backup / forward structural boundary allowed regression slice from `core/ScoreCore.ts`
+  - insert away from a backup / forward boundary is allowed and reports anchor plus inserted node ids
+  - delete away from a backup / forward boundary is allowed and reports the deleted node id
+  - split immediately before a backup boundary is allowed and save-valid
+  - focused `MusicXmlStateTest` coverage for BF-5 / BF-6 / BF-7 intent
+- [x] Add `ScoreCore` node-id / unsupported-kind / unknown-element preservation regression slice from `core/ScoreCore.ts`
+  - delete-to-rest replacement keeps generated node ids stable in Java measure inspection
+  - deleting a rest target returns `MVP_UNSUPPORTED_NOTE_KIND` with no changed targets
+  - `change_to_pitch` preserves unknown XML elements
+  - focused `MusicXmlStateTest` coverage for ID-2 / NK-1 / PT-1 intent
+- [x] Add `ScoreCore` beam preservation / grace save regression slice from `core/ScoreCore.ts`
+  - `change_to_pitch` preserves existing `<beam>` XML around the edited note
+  - save-time integrity allows a grace note without `<duration>`
+  - focused `MusicXmlStateTest` coverage for BM-1 / SV-3a intent
+- [x] Add `ScoreCore` missing-voice edit recovery slice from `core/ScoreCore.ts`
+  - no-op save still allows a missing voice as original text
+  - `change_to_pitch` fills command voice on the edited missing-voice note
+  - dirty save passes after the edited note gains `<voice>1</voice>`
+  - focused `MusicXmlStateTest` coverage for SV-4 / SV-4b intent
+- [x] Add `ScoreCore` grand-staff same-voice backup save regression slice from `core/ScoreCore.ts`
+  - same-voice measure rests split by `<backup>` across staff 1 / staff 2 remain save-valid
+  - timing occupancy is evaluated on the timeline rather than by summing duplicate staff lanes
+  - focused `MusicXmlStateTest` coverage for SV-8 intent
 - [ ] Continue ABC migration with broader `src/ts/abc-io.ts` body import parity
   - broader golden fixtures and fixture-based parity expansion
 - [x] Decide whether SVG render can be implemented directly in Java or must be recorded as constrained by upstream runtime dependencies

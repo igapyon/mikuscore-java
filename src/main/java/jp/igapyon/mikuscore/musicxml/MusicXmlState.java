@@ -157,6 +157,21 @@ public final class MusicXmlState {
         return validateMusicXmlCommand(root, command);
     }
 
+    public static MusicXmlCommandValidation validateMusicXmlForSave(String xmlText, boolean dirty) {
+        Document doc = parseMusicXmlDocument(xmlText);
+        Element root = requireScorePartwiseRoot(doc);
+        MusicXmlCommandValidation.Diagnostic invalidNote = findInvalidNoteDiagnostic(root, !dirty);
+        if (invalidNote != null) {
+            return validationFailure(invalidNote.getCode(), invalidNote.getMessage());
+        }
+        MusicXmlCommandValidation.Diagnostic overfull = findOverfullDiagnostic(root);
+        if (overfull != null) {
+            return validationFailure(overfull.getCode(), overfull.getMessage());
+        }
+        return new MusicXmlCommandValidation(true, false, new ArrayList<String>(), new ArrayList<String>(),
+                new ArrayList<MusicXmlCommandValidation.Diagnostic>());
+    }
+
     public static String applyMusicXmlCommand(String xmlText, String commandJson) {
         Document doc = parseMusicXmlDocument(xmlText);
         Element root = requireScorePartwiseRoot(doc);
@@ -184,6 +199,7 @@ public final class MusicXmlState {
 
         if ("change_to_pitch".equals(type)) {
             setPitch(note, MusicXmlCommandJson.castMap(command.get("pitch")));
+            ensureCommandVoice(note, MusicXmlCommandJson.stringValue(command, "voice"));
             autoAssignGrandStaffByPitch(note);
         } else if ("change_duration".equals(type)) {
             changeDuration(note, MusicXmlCommandJson.stringValue(command, "voice"),
@@ -286,6 +302,122 @@ public final class MusicXmlState {
         affectedMeasureNumbers.add(target.selector.getMeasureNumber());
         return new MusicXmlCommandValidation(true, true, changedNodeIds, affectedMeasureNumbers, warnings,
                 new ArrayList<MusicXmlCommandValidation.Diagnostic>());
+    }
+
+    private static MusicXmlCommandValidation.Diagnostic findInvalidNoteDiagnostic(Element root,
+            boolean ignoreMissingVoice) {
+        for (Element part : directChildren(root, "part")) {
+            for (Element measure : directChildren(part, "measure")) {
+                for (Element note : directChildren(measure, "note")) {
+                    String voice = directChildText(note, "voice");
+                    if (voice == null && !ignoreMissingVoice) {
+                        return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_VOICE",
+                                "Note is missing a valid <voice> value.");
+                    }
+                    Integer duration = parseIntegerOrNull(directChildText(note, "duration"));
+                    if (directChild(note, "grace") == null && (duration == null || duration.intValue() <= 0)) {
+                        return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_DURATION",
+                                "Note is missing a valid positive <duration> value.");
+                    }
+                    MusicXmlCommandValidation.Diagnostic pitchDiagnostic = validateNotePitch(note);
+                    if (pitchDiagnostic != null) {
+                        return pitchDiagnostic;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static MusicXmlCommandValidation.Diagnostic findOverfullDiagnostic(Element root) {
+        for (Element part : directChildren(root, "part")) {
+            for (Element measure : directChildren(part, "measure")) {
+                Set<String> voices = new LinkedHashSet<String>();
+                for (Element note : directChildren(measure, "note")) {
+                    String voice = directChildText(note, "voice");
+                    if (voice != null) {
+                        voices.add(voice);
+                    }
+                }
+                if (voices.isEmpty()) {
+                    continue;
+                }
+                Element firstNote = directChild(measure, "note");
+                if (firstNote == null) {
+                    continue;
+                }
+                for (String voice : voices) {
+                    MeasureTiming timing = getMeasureTimingForVoice(firstNote, voice);
+                    if (timing == null) {
+                        continue;
+                    }
+                    int tolerance = computeTupletRoundingTolerance(measure, voice);
+                    if (timing.occupied > timing.capacity + tolerance) {
+                        return new MusicXmlCommandValidation.Diagnostic("MEASURE_OVERFULL",
+                                "Occupied time " + timing.occupied + " exceeds capacity " + timing.capacity + ".");
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static int computeTupletRoundingTolerance(Element measure, String voice) {
+        int tupletOnsetCount = 0;
+        for (Element note : directChildren(measure, "note")) {
+            if (!equalsNullable(directChildText(note, "voice"), voice)) {
+                continue;
+            }
+            if (directChild(note, "chord") != null || directChild(note, "time-modification") == null) {
+                continue;
+            }
+            Integer duration = parseIntegerOrNull(directChildText(note, "duration"));
+            if (duration != null && duration.intValue() > 0) {
+                tupletOnsetCount++;
+            }
+        }
+        return tupletOnsetCount <= 0 ? 0 : tupletOnsetCount / 2;
+    }
+
+    private static MusicXmlCommandValidation.Diagnostic validateNotePitch(Element note) {
+        boolean hasRest = directChild(note, "rest") != null;
+        boolean hasChord = directChild(note, "chord") != null;
+        Element pitch = directChild(note, "pitch");
+        if (hasRest && hasChord) {
+            return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_PITCH",
+                    "Note must not contain both <rest> and <chord>.");
+        }
+        if (hasRest && pitch != null) {
+            return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_PITCH",
+                    "Rest note must not contain <pitch>.");
+        }
+        if (hasChord && pitch == null) {
+            return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_PITCH",
+                    "Chord note must contain a valid <pitch>.");
+        }
+        if (pitch == null) {
+            if (hasRest) {
+                return null;
+            }
+            return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_PITCH",
+                    "Non-rest note is missing a valid <pitch>.");
+        }
+        String step = directChildText(pitch, "step");
+        if (!("A".equals(step) || "B".equals(step) || "C".equals(step) || "D".equals(step) || "E".equals(step)
+                || "F".equals(step) || "G".equals(step))) {
+            return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_PITCH", "Pitch step is invalid.");
+        }
+        if (parseIntegerOrNull(directChildText(pitch, "octave")) == null) {
+            return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_PITCH", "Pitch octave is invalid.");
+        }
+        String alterText = directChildText(pitch, "alter");
+        if (alterText != null) {
+            Integer alter = parseIntegerOrNull(alterText);
+            if (alter == null || alter.intValue() < -2 || alter.intValue() > 2) {
+                return new MusicXmlCommandValidation.Diagnostic("MVP_INVALID_NOTE_PITCH", "Pitch alter is invalid.");
+            }
+        }
+        return null;
     }
 
     private static IndexedNote resolveCommandTarget(Map<String, Object> command, List<IndexedNote> indexedNotes) {
@@ -481,6 +613,12 @@ public final class MusicXmlState {
             upsertSimpleChild(note, "accidental", accidentalFromAlter(alter.intValue()));
         }
         upsertSimpleChild(pitchElement, "octave", MusicXmlCommandJson.intValue(pitch, "octave").toString());
+    }
+
+    private static void ensureCommandVoice(Element note, String voice) {
+        if (voice != null && directChildText(note, "voice") == null) {
+            upsertSimpleChild(note, "voice", voice);
+        }
     }
 
     private static void setDurationValue(Element note, int duration) {

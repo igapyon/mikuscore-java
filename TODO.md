@@ -548,6 +548,79 @@
   - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports common C-clef headers and roundtrips them`
   - 期待値: MusicXML C clef line 3 / 4 を ABC `clef=alto` / `clef=tenor` として出力し、roundtrip 後に MusicXML C clef line 3 / 4 として復元する
   - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の slash length / numerator-slash import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses slash length shorthand including //`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses numerator-slash shorthand in notes, chords, and grace groups`
+  - 期待値: `C/` は 240、`C//` は 120、`C2` は 960 duration として出力され、`3/` shorthand は note / chord / grace group で有効
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の tempo Q header roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `roundtrip preserves tempo via ABC Q header`
+  - 期待値: MusicXML tempo が ABC `Q:1/4=220` として出力され、ABC import 後に `<sound tempo="220"/>` として復元される
+  - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の tempo beat-unit / leading tempo export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports metronome beat unit into Q header`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC prefers the last leading tempo in measure 1 when multiple tempo directions exist`
+  - 期待値: `beat-unit=half` / `per-minute=72` は ABC `Q:1/2=72` として出力され、import 後は `<sound tempo="144"/>` になる。先頭 note 前に複数 tempo がある場合は最後の tempo を採用する
+  - 実装方針: `musicXmlToAbc` の tempo header 解決を `AbcTempoHeader` に分離し、focused `AbcIoTest` で固定する
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の same-staff multi-voice roundtrip overfull regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `roundtrip of same-staff multi-voice score should not trigger MEASURE_OVERFULL`
+  - 期待値: 同一 staff 内の voice 1 / voice 2 を MusicXML -> ABC -> MusicXML roundtrip しても save-time `MEASURE_OVERFULL` にならない
+  - 実装方針: Java 版は roundtrip 後に voice lane を別 part として表現して overfull を避ける既存挙動を許容し、`MusicXmlState.validateMusicXmlForSave` と no-overfull invariant で固定する。同一 staff / backup レイアウト復元は将来の追加 parity 候補
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC import clef inference / bare V clef shorthand regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import infers bass clef from low notes when clef is omitted`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import accepts bare clef names in V: directives`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import keeps same-line body text after a bare V: clef shorthand`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import accepts bare V: clef aliases c3 and c4`
+  - 期待値: 低音域のみの ABC voice は clef 省略時に F4 bass clef へ推定され、`V:` tail の `treble` / `bass` / `c3` / `c4` は clef shorthand として解釈される。bare clef shorthand 後の同一行 body text は note として保持される
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC import V directive tail diagnostics / transpose regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import warns on unsupported bare V: tail words instead of parsing them as notes`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import applies supported V: transpose property as chromatic transpose`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import warns on unsupported standard V: properties instead of treating them as supported metadata`
+  - 期待値: 未対応 bare `V:` tail token は note として解釈されず diagnostic になり、`transpose=-3` は MusicXML `<transpose><chromatic>-3</chromatic></transpose>` に反映される。未対応 standard V properties は個別 diagnostic になる
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-14 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC import overfull compatibility public regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import reflows overfull measure content to avoid MEASURE_OVERFULL`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC import can disable overfull compatibility reflow`
+  - 期待値: 既定 import では overfull ABC measure を後続 measure に reflow し、`OVERFULL_REFLOWED` diagnostic を MusicXML miscellaneous に記録して save validation が通る。`overfullCompatibilityMode=false` では reflow せず、save validation が `MEASURE_OVERFULL` を返す
+  - 実装方針: 既存 `musicXmlFromAbc` public facade と `MusicXmlState.validateMusicXmlForSave` の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-15 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC import inline field / continued header regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `records ABC parser fallback warnings into diag:* fields`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports inline [K:...] field changes`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts continued body lines with standalone K: field changes`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML warns and skips unsupported continued header-field text instead of parsing it as body`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports inline [M:...] field changes`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML applies inline [L:...] field changes to subsequent note durations`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports inline [Q:...] field changes`
+  - 期待値: import warning は `ABC_IMPORT_WARNING` diagnostic として MusicXML に保存され、inline `[K:]` / `[M:]` / `[L:]` / `[Q:]` と standalone `K:` は後続 measure の key / meter / duration / tempo に反映される。unsupported continued header field text は note として誤解釈されず diagnostic になる
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-15 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC import quoted annotation / chord harmony regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML preserves quoted annotations as direction words`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML maps simple quoted chord symbols to MusicXML harmony`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML maps common extended quoted chord symbols to MusicXML harmony`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML maps richer quoted chord symbols including slash chords to MusicXML harmony`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML keeps unsupported quoted chord-like text as annotation instead of forcing harmony`
+  - 期待値: supported quoted chord symbols は MusicXML `<harmony>` に変換され、annotation text は `<direction><words>` に残る。未対応 chord-like quoted text は消さずに annotation として残す
+  - 実装方針: `musicXmlFromAbc` public facade の regression coverage を追加し、quoted text が chord-like でも `buildHarmonyXmlFromChordSymbol` で実際に変換できない場合は pending annotation に回す
+- [x] 2026-05-15 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML to ABC quoted annotation / harmony export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports direction words as quoted annotations`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC->MusicXML keeps unsupported chord-like quoted text as annotation`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports harmony as quoted chord symbols`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports common extended harmony kinds as quoted chord symbols`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports richer harmony kinds and slash chords as quoted chord symbols`
+  - 期待値: MusicXML direction words は quoted annotation として ABC note prefix に出力され、unsupported chord-like words は roundtrip 後も `<words>` として残る。MusicXML harmony は supported chord symbols として ABC quoted chord に出力される
+  - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-15 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML to ABC rehearsal decoration roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports rehearsal direction as mikuscore rehearsal decoration and roundtrips it`
+  - 期待値: MusicXML `<rehearsal>A1</rehearsal>` は ABC `!rehearsal:A1!` として出力され、ABC import 後に rehearsal direction として復元される
+  - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-15 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC lyric `w:` import/export and hyphenated roundtrip regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML maps w: lyrics onto subsequent notes`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports lyrics as w: lines`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports hyphenated w: lyrics with syllabic markers`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC->MusicXML roundtrips common hyphenated lyrics in the bounded subset`
+  - 期待値: ABC `w:` lyrics は subsequent pitched notes の MusicXML `<lyric>` に付与され、hyphenated tokens は begin / middle / end syllabic として保持される。MusicXML lyric は ABC `w:` line として出力され、bounded subset で roundtrip する
+  - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
 - [x] 2026-05-14 再開 slice: upstream `tests/fixtures/with_following_rest.musicxml` の ABC golden fixture expansion
   - upstream 位置: `workplace/mikuscore/tests/fixtures/with_following_rest.musicxml`
   - 期待値: note / note / rest / note を含む 1 measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
@@ -572,6 +645,38 @@
   - upstream 位置: `workplace/mikuscore/tests/fixtures/inherited_attributes.musicxml`
   - 期待値: measure 2 が measure 1 の divisions / time signature を継承する fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
   - 実装方針: Java test resource `src/test/resources/abc-roundtrip/inherited_attributes.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/mixed_voices.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/mixed_voices.musicxml`
+  - 期待値: 1 measure 内に voice 1 / voice 2 が混在する fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/mixed_voices.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/with_backup.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/with_backup.musicxml`
+  - 期待値: backup / forward を含む same-measure voice layout fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/with_backup.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/with_unknown.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/with_unknown.musicxml`
+  - 期待値: unknown-tag を含む fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/with_unknown.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/underfull.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/underfull.musicxml`
+  - 期待値: 4/4 measure に 3 quarter notes の underfull fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/underfull.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/overfull.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/overfull.musicxml`
+  - 期待値: 4/4 measure に quarter 3 個 + half 1 個を含む overfull fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、roundtrip 後 overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/overfull.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/roundtrip_moonlight_m13_m16_like.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/roundtrip_moonlight_m13_m16_like.musicxml`
+  - 期待値: tuplets / backup voice / accidentals を含む 2-measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、roundtrip 後 overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/roundtrip_moonlight_m13_m16_like.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/roundtrip_triplet_m1_m4_like.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/roundtrip_triplet_m1_m4_like.musicxml`
+  - 期待値: triplet eighth run / backup voice を含む 4-measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、roundtrip 後 overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/roundtrip_triplet_m1_m4_like.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
+- [x] 2026-05-14 再開 slice: upstream `tests/fixtures/roundtrip_sample6_m1_m2.musicxml` の ABC golden fixture expansion
+  - upstream 位置: `workplace/mikuscore/tests/fixtures/roundtrip_sample6_m1_m2.musicxml`
+  - 期待値: multi-staff / chord / rest / dynamics を含む 2-measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、tempo、duration sum、roundtrip 後 overfull 不在を維持する
+  - 実装方針: Java test resource `src/test/resources/abc-roundtrip/roundtrip_sample6_m1_m2.musicxml` を追加し、既存 `roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc` の fixture list に加える
 - [ ] 次回再開時は `igapyon-miku-soft-developer` を適用し、straight conversion として小さな focused slice 単位で続ける
 - [ ] 次回再開時の第一候補は upstream format spec のうち、まだ末尾到達していない MEI / MuseScore / ABC fixture / LilyPond broader parity から小さく切り出せる regression を確認する
   - MIDI に戻る場合は `tests/unit/midi-io.spec.ts` の新規 upstream 追加が無いかだけ確認し、既存 coverage と重複する regression は追加しない
@@ -593,7 +698,7 @@
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/abc/AbcIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/abc/AbcIoTest.java`
   - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
-  - 最新完了 slice: upstream `tests/fixtures/inherited_attributes.musicxml` の ABC golden fixture expansion
+  - 最新完了 slice: upstream `tests/fixtures/roundtrip_sample6_m1_m2.musicxml` の ABC golden fixture expansion
   - 最新 focused 検証: `mvn test -Dtest=AbcIoTest` 成功、90 tests / 0 failures / 0 errors
   - 最新 full 検証: `mvn test` 成功、638 tests / 0 failures / 0 errors
   - 最新 diff 検証: `git diff --check` 問題なし
@@ -603,6 +708,17 @@
     - `rg -n "TODO|pending|it\\(" workplace/mikuscore/tests/unit/abc-io.spec.ts`
     - `mvn test -Dtest=AbcIoTest`
     - 最後に `mvn test`
+- [x] 2026-05-15 再開ポイント更新
+  - skill: `igapyon-miku-soft-developer`
+  - 方針: upstream Node/TypeScript 版 `https://github.com/igapyon/mikuscore` の straight conversion を Java 1.8 / Maven へ小さい slice 単位で継続
+  - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/abc/AbcIo.java`
+  - 対応テスト: `src/test/java/jp/igapyon/mikuscore/abc/AbcIoTest.java`
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+  - 最新完了 slice: upstream `tests/unit/abc-io.spec.ts` の ABC lyric `w:` import/export and hyphenated roundtrip regression
+  - 最新 focused 検証: `mvn test -Dtest=AbcIoTest` 成功、118 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、693 tests / 0 failures / 0 errors
+  - 最新 diff 検証: `git diff --check` 問題なし
+  - 次回第一候補: upstream `tests/unit/abc-io.spec.ts` の次セクション `ABC->MusicXML supports inline [V:...] voice switches in body text` を Java public regression として小さく確認する
 - [x] 2026-05-11 終了時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/midi/MidiIoTest.java`
@@ -1423,7 +1539,7 @@
   - initial state command slice は hardened DOM parse / JAXP serialize を使う
 - [x] `state summarize` 用の MusicXML DOM parse / summary 生成を追加する
 - [ ] `ScoreCore` 相当の Java class group を作る
-  - basic command catalog、overfull validation、structural boundary subset は `MusicXmlState` に partial 移植済み
+  - basic command catalog、overfull validation、structural boundary subset、non-primary voice edit regression、insert voice/lane rejection no-target regression、backup/forward boundary no-target regression、backup/forward boundary allowed regression、insert stable regression、invalid payload no-target regression、failed-command atomicity regression、save-time integrity validation subset、delete-to-rest preservation regression、delete-to-rest node-id stability、unsupported note-kind no-target rejection、unknown-element preservation、beam preservation、grace-note-without-duration save allowance、missing-voice no-op save and edit recovery、grand-staff same-voice backup save allowance は `MusicXmlState` に partial 移植済み
 - [ ] bounded command model を Java へ移す
   - JSON payload driven subset は移植済み
   - typed command class group は未作成
@@ -1488,6 +1604,7 @@
 - [x] `mvn test` が空で通る foundation を作る
 - [x] upstream fixture を Java test resources へどう持つか決める
   - 小型 fixture は `src/test/resources/abc-roundtrip/` に purpose-specific copy として保持する
+  - core save integrity fixture は `src/test/resources/musicxml-state/` に purpose-specific copy として保持する
 - [ ] upstream test intent -> Java test mapping を作る
 - [x] core command / validation / state inspection の JUnit tests を追加する
 - [x] `state summarize` の JUnit tests を追加する
