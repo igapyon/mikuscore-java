@@ -69,11 +69,125 @@ completed slice history remains below.
 - Latest completed LilyPond event metadata export slice: `exportMusicXmlDomToLilyPond` emits `%@mks articul`, `%@mks accidental`, and `%@mks grace` metadata for roundtrip handoff.
 - Latest completed LilyPond tuplet / octave-shift / trill metadata export slice: `exportMusicXmlDomToLilyPond` emits `%@mks tuplet`, `%@mks octshift`, and `%@mks trill` metadata for roundtrip handoff.
 - Latest completed LilyPond backup-lane / chord-token export slice: backup-lane roundtrip stays valid, dense same-staff backup voices export the denser chord lane, and chord-follow notes export as a single LilyPond chord token.
-- Latest focused verification: `mvn test -Dtest=LilyPondIoTest` passed with 67 tests / 0 failures / 0 errors.
-- Latest full verification: `mvn test` passed with 559 tests / 0 failures / 0 errors.
+- Latest completed LilyPond multi-staff / clef export slice: pitched multi-staff MusicXML exports as `\new PianoStaff` with per-staff blocks, non-voice1 notes on a staff are preserved, rest-only staffs are omitted, and F4 clef exports as `\clef bass`.
+- Latest completed LilyPond low-staff clef inference export slice: multi-staff MusicXML without explicit clef numbers infers bass clef for low pitched staff output.
+- Latest focused verification: `mvn test -Dtest=LilyPondIoTest` passed with 72 tests / 0 failures / 0 errors.
+- Latest full verification: `mvn test` passed with 564 tests / 0 failures / 0 errors.
+- Latest completed MIDI import metadata / Viola clef regression slice: public `convertMidiToMusicXml` coverage now locks MKS text metadata restore, standard title/composer precedence, explicit track-name precedence, and Viola/Vla alto-clef single-staff behavior.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 108 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI metadata slice: `mvn test` passed with 569 tests / 0 failures / 0 errors.
+- Latest completed MIDI import note notation regression slice: public `convertMidiToMusicXml` coverage now locks no false staccato inference for detached MIDI notes and beam splitting across rests / beat boundaries.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 111 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI note-notation slice: `mvn test` passed with 572 tests / 0 failures / 0 errors.
+- Latest completed MIDI import note pairing / part split regression slice: public `convertMidiToMusicXml` coverage now locks same-pitch retrigger pairing, overlapping-note voice split, same-channel cross-track part split, and channel 10 drum part separation.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 115 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI note pairing / part split slice: `mvn test` passed with 576 tests / 0 failures / 0 errors.
+- Latest completed MIDI import key/time/quantize regression slice: public `convertMidiToMusicXml` coverage now locks FF59 key signature import, FF58 leading-pickup normalization, and triplet-aware divisions for triplet-like timing.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 118 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI key/time/quantize slice: `mvn test` passed with 579 tests / 0 failures / 0 errors.
+- Latest completed MIDI import auto-grid / pickup metadata / key inference regression slice: public `convertMidiToMusicXml` coverage now locks auto grid selection, MKS pickup-ticks restoration, inferred key warning, and natural accidental emission against key-signature contradiction.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 123 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI auto-grid / pickup metadata / key inference slice: `mvn test` passed with 584 tests / 0 failures / 0 errors.
+- Latest completed MIDI import accidental spelling / staff layout regression slice: public `convertMidiToMusicXml` coverage now locks C# lower-neighbor spelling, grand-staff split hysteresis, no phantom staff for one-sided melody, and no full-rest-only inactive voice in a measure that already has notes.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 127 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI accidental spelling / staff layout slice: `mvn test` passed with 588 tests / 0 failures / 0 errors.
+- Latest completed MIDI import tempo / dynamics / duration regression slice: public `convertMidiToMusicXml` coverage now locks tempo meta import to MusicXML direction/sound tempo, velocity-to-dynamics import with repeat suppression, and non-notatable duration splitting into tied typed notes.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 130 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI tempo / dynamics / duration slice: `mvn test` passed with 591 tests / 0 failures / 0 errors.
+- Latest completed MIDI import debug/source/SysEx metadata regression slice: public `convertMidiToMusicXml` coverage now locks debug MIDI meta miscellaneous fields, raw source metadata, MKS SysEx metadata import, and debug metadata disable option.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 134 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI debug/source/SysEx metadata slice: `mvn test` passed with 595 tests / 0 failures / 0 errors.
+- Latest completed MIDI import warning diagnostics / source metadata option regression slice: public `convertMidiToMusicXml` coverage now locks warning diagnostics in `mks:diag:*` miscellaneous fields and raw source metadata suppression with `sourceMetadata=false`.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 136 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI warning diagnostics / source metadata option slice: `mvn test` passed with 597 tests / 0 failures / 0 errors.
+- Latest completed MusicXML -> MIDI key/time signature export regression slice: `collectMidiKeySignatureEventsFromMusicXmlDoc`, `collectMidiTimeSignatureEventsFromMusicXmlDoc`, and pickup time-signature normalization now have upstream-aligned coverage for FF59 / FF58 export timing.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 138 tests / 0 failures / 0 errors.
+- Latest full verification after MusicXML -> MIDI key/time signature export slice: `mvn test` passed with 599 tests / 0 failures / 0 errors.
+- Latest completed raw MIDI text metadata export regression slice: raw writer output now has coverage for suppressing `mks:` text metadata, still emitting standard `title:` metadata, and preserving FF03 note-track names.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 141 tests / 0 failures / 0 errors.
+- Latest full verification after raw MIDI text metadata export slice: `mvn test` passed with 602 tests / 0 failures / 0 errors.
+- Latest completed MIDI playback timeline regression slice: public `buildPlaybackEventsFromXml` coverage now locks full non-implicit measure advance and avoids double-counting an underfull bar before an implicit pickup.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 146 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI playback timeline slice: `mvn test` passed with 607 tests / 0 failures / 0 errors.
+- Latest completed MIDI classical-equal grace timing regression slice: public `buildPlaybackEventsFromXml` coverage now locks `graceTimingMode=classical_equal`, where grace and principal notes split the beat nearly equally.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 147 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI classical-equal grace timing slice: `mvn test` passed with 608 tests / 0 failures / 0 errors.
+- Latest completed MIDI tied-note playback merge regression slice: public `buildPlaybackEventsFromXml` coverage now locks sustained tie merge and channel/pitch fallback when a continuation note omits voice.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 149 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI tied-note playback merge slice: `mvn test` passed with 610 tests / 0 failures / 0 errors.
+- Latest completed MIDI slur playback merge boundary regression slice: playback-like mode with tie/slur processing now merges repeated same-pitch notes inside a slur, while slur-start boundary repeated notes still retrigger.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 151 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI slur playback merge boundary slice: `mvn test` passed with 612 tests / 0 failures / 0 errors.
+- Latest completed MIDI slur-stop / articulation retrigger regression slice: public `buildPlaybackEventsFromXml` coverage now locks no slur-stop extension into a following same-pitch note and keeps staccato / tenuto repeated slur notes retriggering in playback-like mode.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 154 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI slur-stop / articulation retrigger slice: `mvn test` passed with 615 tests / 0 failures / 0 errors.
+- Latest completed MIDI underfull timeline / metric accent regression slice: public `buildPlaybackEventsFromXml` coverage now locks underfull + implicit + regular-underfull timeline stability and 6/8 / 5/4 metric accent velocity patterns.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 156 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI underfull timeline / metric accent slice: `mvn test` passed with 617 tests / 0 failures / 0 errors.
 - 2026-05-11 end-of-day resume point: continue from `src/ts/midi-io.ts` around `buildPlaybackEventsFromMusicXmlDoc`; Java-side focus is `MidiIo` / `MidiIoTest`. Latest focused verification is `mvn test -Dtest=MidiIoTest` with 103 tests / 0 failures / 0 errors, and latest full verification is `mvn test` with 484 tests / 0 failures / 0 errors.
 - Resume with `igapyon-miku-soft-developer` and continue straight-conversion slices from upstream `workplace/mikuscore` commit `cc776ecd0df61e66aefce60e5bdffb07e49dbbbd`.
-- Suggested next step: continue scanning upstream LilyPond export regressions after the chord-token / backup-lane slice, with multi-staff `PianoStaff` export as the next larger candidate; otherwise return to broader MIDI export/import parity in small pieces where it fits the existing helper boundary. Do not duplicate pedal controller extraction; it is already covered by `collectMidiControlEventsFromMusicXmlDoc`.
+- Latest completed MIDI metric accent profile regression slice: public `buildPlaybackEventsFromXml` coverage now locks 3-beat / fallback meter accent behavior and subtle / balanced / strong metric accent profiles.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 158 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI metric accent profile slice: `mvn test` passed with 619 tests / 0 failures / 0 errors.
+- Latest completed MIDI in-score tempo / pedal / drum playback regression slice: public coverage now locks in-score tempo tick positions, CC64 pedal change off/on events, and drum playback note mapping via `midi-unpitched` plus instrument-name hints.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 161 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI in-score tempo / pedal / drum playback slice: `mvn test` passed with 622 tests / 0 failures / 0 errors.
+- Latest completed MIDI import empty-channel / expression regression slice: public `convertMidiToMusicXml` coverage now locks that program-only channels do not create empty parts and CC11 expression changes affect imported dynamics estimation.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 163 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI import empty-channel / expression slice: `mvn test` passed with 624 tests / 0 failures / 0 errors.
+- Latest completed MIDI import pretty-print regression slice: public `convertMidiToMusicXml` coverage now locks pretty-printed output when debug metadata is enabled; Java has no separate `debugPrettyPrint` option and continues to pretty-print import output unconditionally.
+- Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 164 tests / 0 failures / 0 errors.
+- Latest full verification after MIDI import pretty-print slice: `mvn test` passed with 625 tests / 0 failures / 0 errors.
+- Latest MIDI spec scan: upstream `tests/unit/midi-io.spec.ts` was checked through the end; remaining export / roundtrip metadata candidates in that file are already represented in `MidiIoTest` / mapping docs.
+- Latest completed ABC grace missing-voice lane regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks that a voice-less grace note stays in the current lane, does not create `V:P1_v2`, and roundtrips as one part with a grace note.
+- Latest ABC focused verification: `mvn test -Dtest=AbcIoTest` passed with 78 tests / 0 failures / 0 errors.
+- Latest full verification after ABC grace missing-voice lane slice: `mvn test` passed with 626 tests / 0 failures / 0 errors.
+- Latest completed ABC repeat times metadata regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks `times=3` repeat metadata export and import restoration; `%@mks measure ... times=N` is treated as backward-repeat supplemental metadata.
+- Latest ABC focused verification after repeat times slice: `mvn test -Dtest=AbcIoTest` passed with 80 tests / 0 failures / 0 errors.
+- Latest full verification after ABC repeat times slice: `mvn test` passed with 628 tests / 0 failures / 0 errors.
+- Latest completed ABC discontinue ending metadata regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks discontinue ending export and import restoration; notation metadata and `%@mks measure` metadata are merged so ending start and discontinue stop both survive.
+- Latest ABC focused verification after discontinue ending slice: `mvn test -Dtest=AbcIoTest` passed with 82 tests / 0 failures / 0 errors.
+- Latest full verification after ABC discontinue ending slice: `mvn test` passed with 630 tests / 0 failures / 0 errors.
+- Latest completed ABC tuplet shorthand / explicit ratio import regression slice: public `musicXmlFromAbc` coverage now locks common `(3` shorthand as 3:2 MusicXML tuplet import and explicit `(5:4:5` ratio import as 5:4.
+- Latest ABC focused verification after tuplet shorthand / explicit ratio slice: `mvn test -Dtest=AbcIoTest` passed with 84 tests / 0 failures / 0 errors.
+- Latest full verification after ABC tuplet shorthand / explicit ratio slice: `mvn test` passed with 632 tests / 0 failures / 0 errors.
+- Latest completed ABC per-part key signature roundtrip regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks per-part initial keys and measure key changes through standard `K:` / `[K:]` fields without `%@mks key`.
+- Latest ABC focused verification after per-part key signature slice: `mvn test -Dtest=AbcIoTest` passed with 85 tests / 0 failures / 0 errors.
+- Latest full verification after ABC per-part key signature slice: `mvn test` passed with 633 tests / 0 failures / 0 errors.
+- Latest completed ABC duplicate key hint import regression slice: public `musicXmlFromAbc` coverage now locks first-wins behavior when duplicate `%@mks key` hints exist for the same voice and measure.
+- Latest ABC focused verification after duplicate key hint slice: `mvn test -Dtest=AbcIoTest` passed with 86 tests / 0 failures / 0 errors.
+- Latest full verification after ABC duplicate key hint slice: `mvn test` passed with 634 tests / 0 failures / 0 errors.
+- Latest completed ABC shared header K export regression slice: public `musicXmlToAbc` coverage now locks common initial keys into one standard ABC header `K:` field without `%@mks key` or voice-local `[K:]`.
+- Latest ABC focused verification after shared header K slice: `mvn test -Dtest=AbcIoTest` passed with 87 tests / 0 failures / 0 errors.
+- Latest full verification after ABC shared header K slice: `mvn test` passed with 635 tests / 0 failures / 0 errors.
+- Latest completed ABC natural against lane key signature export regression slice: public `musicXmlToAbc` coverage now locks natural marker emission such as A major G natural -> `=G`.
+- Latest ABC focused verification after natural key-signature slice: `mvn test -Dtest=AbcIoTest` passed with 88 tests / 0 failures / 0 errors.
+- Latest full verification after ABC natural key-signature slice: `mvn test` passed with 636 tests / 0 failures / 0 errors.
+- Latest completed ABC per-part initial key accidental emission regression slice: public `musicXmlToAbc` coverage now locks target-part key usage for accidental emission, including P3 A major G natural -> `=G`.
+- Latest ABC focused verification after per-part accidental slice: `mvn test -Dtest=AbcIoTest` passed with 89 tests / 0 failures / 0 errors.
+- Latest full verification after ABC per-part accidental slice: `mvn test` passed with 637 tests / 0 failures / 0 errors.
+- Latest completed ABC common C-clef header roundtrip regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks MusicXML C clef line 3 / 4 export as ABC `clef=alto` / `clef=tenor` and import restoration as C clef line 3 / 4.
+- Latest ABC focused verification after C-clef slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after ABC C-clef slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `with_following_rest.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after ABC fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `with_rest_tail.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after rest-tail fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after rest-tail fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `full_with_half.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after full-with-half fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after full-with-half fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `inherited_time_changed.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after inherited-time fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after inherited-time fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `inherited_divisions_changed.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after inherited-divisions fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after inherited-divisions fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Latest completed ABC fixture expansion slice: `inherited_attributes.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
+- Latest ABC focused verification after inherited-attributes fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
+- Latest full verification after inherited-attributes fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
+- Suggested next step: add one more small ABC fixture, or move to MEI, MuseScore, or another upstream format spec in small pieces. If returning to MIDI tests, first check only for new upstream additions and avoid duplicate regressions.
 - Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 
 ### Highest Priority Format Work
@@ -88,7 +202,23 @@ completed slice history remains below.
   - remaining work is broader end-to-end conversion parity against upstream behavior
 - [ ] Continue broader ABC body import parity
   - many parser/import/export helper slices and initial golden roundtrip fixtures are migrated
-  - remaining work is broader fixture-based parity expansion
+  - latest tail regression locks grace notes without voice staying on the current ABC lane
+  - latest repeat metadata regression locks `times=N` restoration from `%@mks measure`
+  - latest ending metadata regression locks discontinue ending restoration from `%@mks measure`
+  - latest tuplet import regression locks `(3` shorthand and `(5:4:5` explicit-ratio restoration to MusicXML time-modification / tuplet notations
+  - latest per-part key regression locks standard `K:` / `[K:]` roundtrip without `%@mks key`
+  - latest duplicate key hint regression locks first-wins `%@mks key` import behavior
+  - latest shared header key regression locks common initial key export to header `K:`
+  - latest natural key-signature regression locks A-major G-natural export as `=G`
+  - latest per-part accidental regression locks target-part key usage for accidental emission
+  - latest C-clef regression locks `clef=alto` / `clef=tenor` export and MusicXML C-clef restoration
+  - latest fixture expansion adds `with_following_rest.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `with_rest_tail.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `full_with_half.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `inherited_time_changed.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `inherited_divisions_changed.musicxml` to Java ABC golden resources
+  - latest fixture expansion adds `inherited_attributes.musicxml` to Java ABC golden resources
+  - remaining work is broader fixture-based parity expansion and other format parity slices
 
 ### Not Started Format Work
 

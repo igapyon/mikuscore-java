@@ -297,8 +297,8 @@ public final class LilyPondIo {
 
     public static String exportMusicXmlDomToLilyPond(Document doc) {
         String partName = firstMusicXmlPartName(doc);
-        String staffName = partName.isEmpty() ? "P1" : partName;
         String firstPartId = firstMusicXmlPartId(doc);
+        String staffName = firstPartId.isEmpty() ? "P1" : firstPartId;
         StringBuilder out = new StringBuilder();
         out.append("\\version \"2.24.0\"\n");
         out.append("\\header {\n");
@@ -316,27 +316,56 @@ public final class LilyPondIo {
         if (!transposeMetadata.isEmpty()) {
             out.append("% ").append(transposeMetadata).append('\n');
         }
+        Element firstPart = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        List<String> activeStaffNumbers = musicXmlActivePitchedStaffNumbers(firstPart);
         out.append("\\score {\n");
-        out.append("  \\new Staff = \"").append(lilyQuoted(staffName)).append("\"");
-        if (!partName.isEmpty()) {
-            out.append(" \\with { instrumentName = \"").append(lilyQuoted(partName)).append("\" }");
-        }
-        out.append(" {");
         String timeSignature = firstMusicXmlTimeSignature(doc);
-        if (!timeSignature.isEmpty()) {
-            out.append(" \\time ").append(timeSignature);
-        }
-        List<String> notes = firstMusicXmlPartLilyNotes(doc);
-        if (notes.isEmpty()) {
-            out.append(" r4");
-        } else {
-            for (String note : notes) {
-                out.append(' ').append(note);
+        if (activeStaffNumbers.size() > 1) {
+            String partId = firstPartId.isEmpty() ? "P1" : firstPartId;
+            out.append("  \\new PianoStaff <<\n");
+            for (String staffNumber : activeStaffNumbers) {
+                out.append("    \\new Staff = \"").append(lilyQuoted(partId + "_s" + staffNumber)).append("\"");
+                if (!partName.isEmpty()) {
+                    out.append(" \\with { instrumentName = \"").append(lilyQuoted(partName)).append("\" }");
+                }
+                out.append(" {");
+                appendMusicXmlStaffPrelude(out, timeSignature, firstMusicXmlClefForStaff(doc, staffNumber));
+                appendMusicXmlStaffNotes(out, firstMusicXmlPartLilyNotes(doc, staffNumber));
+                out.append(" }\n");
             }
+            out.append("  >>\n");
+        } else {
+            String staffNumber = activeStaffNumbers.isEmpty() ? "" : activeStaffNumbers.get(0);
+            out.append("  \\new Staff = \"").append(lilyQuoted(staffName)).append("\"");
+            if (!partName.isEmpty()) {
+                out.append(" \\with { instrumentName = \"").append(lilyQuoted(partName)).append("\" }");
+            }
+            out.append(" {");
+            appendMusicXmlStaffPrelude(out, timeSignature, firstMusicXmlClefForStaff(doc, staffNumber));
+            appendMusicXmlStaffNotes(out, firstMusicXmlPartLilyNotes(doc, staffNumber));
+            out.append(" }\n");
         }
-        out.append(" }\n");
         out.append("}\n");
         return out.toString();
+    }
+
+    private static void appendMusicXmlStaffPrelude(StringBuilder out, String timeSignature, String clef) {
+        if (clef != null && !clef.isEmpty()) {
+            out.append(" \\clef ").append(clef);
+        }
+        if (timeSignature != null && !timeSignature.isEmpty()) {
+            out.append(" \\time ").append(timeSignature);
+        }
+    }
+
+    private static void appendMusicXmlStaffNotes(StringBuilder out, List<String> notes) {
+        if (notes == null || notes.isEmpty()) {
+            out.append(" r4");
+            return;
+        }
+        for (String note : notes) {
+            out.append(' ').append(note);
+        }
     }
 
     private static String firstMusicXmlTimeSignature(Document doc) {
@@ -392,6 +421,35 @@ public final class LilyPondIo {
             return meta.toString();
         }
         return "";
+    }
+
+    private static String inferMusicXmlClefForStaff(Element part, String staffNumber) {
+        int pitchCount = 0;
+        int octaveSum = 0;
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            for (Element note : directChildren((Element) measureNode, "note")) {
+                String noteStaffNumber = directChildText(note, "staff");
+                if (noteStaffNumber.isEmpty()) {
+                    noteStaffNumber = "1";
+                }
+                if (!staffNumber.equals(noteStaffNumber)) {
+                    continue;
+                }
+                Element pitch = firstDirectChild(note, "pitch");
+                if (pitch == null) {
+                    continue;
+                }
+                octaveSum += parseIntegerText(directChildText(pitch, "octave"), 4);
+                pitchCount++;
+            }
+        }
+        if (pitchCount == 0) {
+            return "";
+        }
+        return octaveSum / pitchCount <= 3 ? "bass" : "";
     }
 
     private static void appendMksMeasureMetadata(StringBuilder out, Document doc, String voiceId) {
@@ -702,7 +760,7 @@ public final class LilyPondIo {
         return directChildText(scorePart, "part-name");
     }
 
-    private static List<String> firstMusicXmlPartLilyNotes(Document doc) {
+    private static List<String> firstMusicXmlPartLilyNotes(Document doc, String staffNumber) {
         List<String> notes = new ArrayList<String>();
         Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
         if (part == null) {
@@ -713,17 +771,18 @@ public final class LilyPondIo {
                 continue;
             }
             Element measure = (Element) measureNode;
-            notes.addAll(musicXmlMeasureLilyNotes(measure));
+            notes.addAll(musicXmlMeasureLilyNotes(measure, staffNumber));
         }
         return notes;
     }
 
-    private static List<String> musicXmlMeasureLilyNotes(Element measure) {
+    private static List<String> musicXmlMeasureLilyNotes(Element measure, String staffNumber) {
         List<Element> allNotes = directChildren(measure, "note");
-        String selectedVoice = selectedMusicXmlVoiceForLilyExport(measure, allNotes);
+        List<Element> staffNotes = filterMusicXmlNotesForStaff(allNotes, staffNumber);
+        String selectedVoice = selectedMusicXmlVoiceForLilyExport(measure, staffNotes);
         List<String> out = new ArrayList<String>();
         List<Element> chordGroup = new ArrayList<Element>();
-        for (Element note : allNotes) {
+        for (Element note : staffNotes) {
             if (!selectedVoice.isEmpty() && !selectedVoice.equals(directChildText(note, "voice"))) {
                 continue;
             }
@@ -739,6 +798,81 @@ public final class LilyPondIo {
         }
         appendMusicXmlChordGroupToken(out, chordGroup);
         return out;
+    }
+
+    private static List<Element> filterMusicXmlNotesForStaff(List<Element> notes, String staffNumber) {
+        List<Element> out = new ArrayList<Element>();
+        if (staffNumber == null || staffNumber.isEmpty()) {
+            out.addAll(notes);
+            return out;
+        }
+        for (Element note : notes) {
+            String noteStaffNumber = directChildText(note, "staff");
+            if (noteStaffNumber.isEmpty()) {
+                noteStaffNumber = "1";
+            }
+            if (staffNumber.equals(noteStaffNumber)) {
+                out.add(note);
+            }
+        }
+        return out;
+    }
+
+    private static List<String> musicXmlActivePitchedStaffNumbers(Element part) {
+        List<String> out = new ArrayList<String>();
+        if (part == null) {
+            return out;
+        }
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            for (Element note : directChildren((Element) measureNode, "note")) {
+                if (firstDirectChild(note, "pitch") == null) {
+                    continue;
+                }
+                String staffNumber = directChildText(note, "staff");
+                if (staffNumber.isEmpty()) {
+                    staffNumber = "1";
+                }
+                if (!out.contains(staffNumber)) {
+                    out.add(staffNumber);
+                }
+            }
+        }
+        return out;
+    }
+
+    private static String firstMusicXmlClefForStaff(Document doc, String staffNumber) {
+        Element part = firstDirectChild(doc == null ? null : doc.getDocumentElement(), "part");
+        if (part == null) {
+            return "";
+        }
+        String targetStaff = staffNumber == null || staffNumber.isEmpty() ? "1" : staffNumber;
+        for (Node measureNode = part.getFirstChild(); measureNode != null; measureNode = measureNode.getNextSibling()) {
+            if (!(measureNode instanceof Element) || !"measure".equals(((Element) measureNode).getTagName())) {
+                continue;
+            }
+            Element attributes = firstDirectChild((Element) measureNode, "attributes");
+            for (Element clef : directChildren(attributes, "clef")) {
+                String number = clef.getAttribute("number");
+                if (number == null || number.isEmpty()) {
+                    number = "1";
+                }
+                if (targetStaff.equals(number)) {
+                    String sign = directChildText(clef, "sign");
+                    String line = directChildText(clef, "line");
+                    if ("F".equalsIgnoreCase(sign) && "4".equals(line)) {
+                        return "bass";
+                    }
+                    if ("G".equalsIgnoreCase(sign) && "2".equals(line)) {
+                        return "treble";
+                    }
+                    return "";
+                }
+            }
+        }
+        return inferMusicXmlClefForStaff(part, targetStaff);
     }
 
     private static String selectedMusicXmlVoiceForLilyExport(Element measure, List<Element> notes) {

@@ -2119,10 +2119,295 @@ public class AbcIoTest {
     }
 
     @Test
+    public void doesNotSplitSeparateAbcLaneForGraceNotesMissingVoice() throws Exception {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"3.1\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Part 1</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><grace/><pitch><step>D</step><octave>5</octave></pitch><type>eighth</type></note>"
+                + "<note><pitch><step>C</step><octave>5</octave></pitch><duration>1920</duration>"
+                + "<voice>1</voice><type>half</type></note>"
+                + "<note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>"
+                + "</measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        assertEquals(true, abc.contains("{d}"));
+        assertEquals(false, abc.contains("V:P1_v2"));
+
+        String roundtripXml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        Element root = parseElement(roundtripXml);
+        assertEquals(1, directChildren(root, "part").size());
+        assertEquals(true, roundtripXml.contains("<grace"));
+    }
+
+    @Test
+    public void exportsAbcRepeatTimesMetadataOnlyWhenStandardRepeatIsInsufficient() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"3.1\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Part 1</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<barline location=\"left\"><repeat direction=\"forward\"/></barline>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>3840</duration>"
+                + "<voice>1</voice><type>whole</type></note></measure>"
+                + "<measure number=\"2\"><note><pitch><step>D</step><octave>4</octave></pitch>"
+                + "<duration>3840</duration><voice>1</voice><type>whole</type></note>"
+                + "<barline location=\"right\"><repeat direction=\"backward\" times=\"3\"/></barline>"
+                + "</measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        assertEquals(true, abc.contains("|:"));
+        assertEquals(true, abc.contains(":|"));
+        assertEquals(true, abc.contains("%@mks measure voice=P1 measure=2 number=2 implicit=0 times=3"));
+    }
+
+    @Test
+    public void restoresAbcRepeatTimesFromMeasureMetadataWhenStandardRepeatIsInsufficient() {
+        String abc = "X:1\nT:Repeat times restore\nM:4/4\nL:1/4\nK:C\nV:P1\n"
+                + "|: C D E F | G A B c :|\n"
+                + "%@mks measure voice=P1 measure=1 number=1 implicit=0\n"
+                + "%@mks measure voice=P1 measure=2 number=2 implicit=0 times=3\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<repeat direction=\"backward\" winged=\"none\" times=\"3\"/>"));
+    }
+
+    @Test
+    public void exportsAbcDiscontinueEndingMetadataWhenStandardSurfaceIsInsufficient() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"3.1\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Part 1</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<barline location=\"left\"><ending number=\"1\" type=\"start\"/></barline>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>3840</duration>"
+                + "<voice>1</voice><type>whole</type></note>"
+                + "<barline location=\"right\"><ending number=\"1\" type=\"discontinue\"/></barline>"
+                + "</measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        assertEquals(true, abc.contains("[1"));
+        assertEquals(true,
+                abc.contains("%@mks measure voice=P1 measure=1 number=1 implicit=0 ending-stop=1 ending-type=discontinue"));
+    }
+
+    @Test
+    public void restoresAbcDiscontinueEndingTypeFromMeasureMetadata() {
+        String abc = "X:1\nT:Ending discontinue restore\nM:4/4\nL:1/4\nK:C\nV:P1\n"
+                + "[1 C D E F |\n"
+                + "%@mks measure voice=P1 measure=1 number=1 implicit=0 ending-stop=1 ending-type=discontinue\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<ending number=\"1\" type=\"start\"/>"), xml);
+        assertEquals(true, xml.contains("<ending number=\"1\" type=\"discontinue\"/>"), xml);
+    }
+
+    @Test
+    public void importsAbcCommonTupletShorthandAsMusicXmlTuplet() {
+        String abc = "X:1\nT:Tuplet shorthand\nM:3/4\nL:1/8\nK:C\nV:1\n(3 DEF z2 |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<actual-notes>3</actual-notes>"));
+        assertEquals(true, xml.contains("<normal-notes>2</normal-notes>"));
+        assertEquals(true, xml.contains("<tuplet type=\"start\"/>"));
+        assertEquals(true, xml.contains("<tuplet type=\"stop\"/>"));
+    }
+
+    @Test
+    public void importsAbcExplicitTupletRatioAsMusicXmlTuplet() {
+        String abc = "X:1\nT:Tuplet explicit ratio\nM:4/4\nL:1/8\nK:C\nV:1\n(5:4:5 C D E F G z2 |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, xml.contains("<actual-notes>5</actual-notes>"));
+        assertEquals(true, xml.contains("<normal-notes>4</normal-notes>"));
+        assertEquals(true, xml.contains("<tuplet type=\"start\"/>"));
+        assertEquals(true, xml.contains("<tuplet type=\"stop\"/>"));
+    }
+
+    @Test
+    public void roundtripsPerPartKeySignaturesViaStandardAbcKeyFields() throws Exception {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"3.1\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Top</part-name></score-part>"
+                + "<score-part id=\"P2\"><part-name>Bottom</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>3</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><pitch><step>A</step><octave>4</octave></pitch><duration>2880</duration>"
+                + "<voice>1</voice><type>half</type></note></measure>"
+                + "<measure number=\"2\"><attributes><key><fifths>0</fifths></key></attributes>"
+                + "<note><pitch><step>C</step><octave>5</octave></pitch><duration>2880</duration>"
+                + "<voice>1</voice><type>half</type></note></measure></part>"
+                + "<part id=\"P2\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>0</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>F</sign><line>4</line></clef></attributes>"
+                + "<note><pitch><step>C</step><octave>3</octave></pitch><duration>2880</duration>"
+                + "<voice>1</voice><type>half</type></note></measure>"
+                + "<measure number=\"2\"><attributes><key><fifths>3</fifths></key></attributes>"
+                + "<note><pitch><step>A</step><octave>2</octave></pitch><duration>2880</duration>"
+                + "<voice>1</voice><type>half</type></note></measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        assertEquals(false, abc.contains("%@mks key"), abc);
+        assertEquals(true, abc.contains("K:A"), abc);
+        assertEquals(true, abc.contains("V:P1"), abc);
+        assertEquals(true, abc.contains("V:P2"), abc);
+        assertEquals(true, abc.contains("[K:C]"), abc);
+        assertEquals(true, abc.contains("[K:A]"), abc);
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        List<Element> parts = directChildren(root, "part");
+        assertEquals(2, parts.size());
+        List<Element> part1Measures = directChildren(parts.get(0), "measure");
+        List<Element> part2Measures = directChildren(parts.get(1), "measure");
+        assertEquals("3", directChildText(directChild(directChild(part1Measures.get(0), "attributes"), "key"), "fifths"));
+        assertEquals("0", directChildText(directChild(directChild(part1Measures.get(1), "attributes"), "key"), "fifths"));
+        assertEquals("0", directChildText(directChild(directChild(part2Measures.get(0), "attributes"), "key"), "fifths"));
+        assertEquals("3", directChildText(directChild(directChild(part2Measures.get(1), "attributes"), "key"), "fifths"));
+    }
+
+    @Test
+    public void keepsFirstAbcKeyHintWhenDuplicateHintsExistForSameVoiceAndMeasure() throws Exception {
+        String abc = "X:1\nT:Duplicate key hint\nM:3/4\nL:1/8\nK:C\n"
+                + "V:P1 name=\"clarinet in A\" clef=treble\n"
+                + "V:P2 name=\"violino I\" clef=treble\n"
+                + "V:P1\nc2 d2 e2 |\n"
+                + "V:P2\nz6 |\n"
+                + "%@mks key voice=P1 measure=1 fifths=0\n"
+                + "%@mks key voice=P2 measure=1 fifths=3\n"
+                + "%@mks key voice=P2 measure=1 fifths=0\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        List<Element> parts = directChildren(root, "part");
+        assertEquals(2, parts.size());
+        Element part1Measure1 = directChildren(parts.get(0), "measure").get(0);
+        Element part2Measure1 = directChildren(parts.get(1), "measure").get(0);
+        assertEquals("0", directChildText(directChild(directChild(part1Measure1, "attributes"), "key"), "fifths"));
+        assertEquals("3", directChildText(directChild(directChild(part2Measure1, "attributes"), "key"), "fifths"));
+    }
+
+    @Test
+    public void exportsSharedHeaderKeyWhenAllLanesStartWithSameKey() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"3.1\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Upper</part-name></score-part>"
+                + "<score-part id=\"P2\"><part-name>Lower</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>1</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><pitch><step>G</step><octave>4</octave></pitch><duration>3840</duration>"
+                + "<voice>1</voice><type>whole</type></note></measure></part>"
+                + "<part id=\"P2\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>1</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>F</sign><line>4</line></clef></attributes>"
+                + "<note><pitch><step>G</step><octave>2</octave></pitch><duration>3840</duration>"
+                + "<voice>1</voice><type>whole</type></note></measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        assertEquals(true, abc.contains("K:G"), abc);
+        assertEquals(false, abc.contains("%@mks key"), abc);
+        assertEquals(false, abc.contains("[K:G]"), abc);
+    }
+
+    @Test
+    public void exportsNaturalAgainstLaneKeySignature() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"3.1\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Part 1</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>3</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><pitch><step>G</step><octave>4</octave></pitch><duration>2880</duration>"
+                + "<voice>1</voice><type>half</type></note></measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        assertEquals(true, abc.contains("=G"), abc);
+    }
+
+    @Test
+    public void usesPerPartInitialKeyForAccidentalEmission() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"3.1\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Part 1</part-name></score-part>"
+                + "<score-part id=\"P2\"><part-name>Part 2</part-name></score-part>"
+                + "<score-part id=\"P3\"><part-name>Part 3</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>0</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><rest/><duration>2880</duration><voice>1</voice><type>half</type></note></measure></part>"
+                + "<part id=\"P2\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>3</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><rest/><duration>2880</duration><voice>1</voice><type>half</type></note></measure></part>"
+                + "<part id=\"P3\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>3</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch>"
+                + "<duration>1920</duration><voice>1</voice><type>half</type></note>"
+                + "<note><pitch><step>G</step><octave>4</octave></pitch><duration>960</duration>"
+                + "<voice>1</voice><type>quarter</type><accidental>natural</accidental></note>"
+                + "</measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        String[] lines = abc.split("\\R");
+        int p3Index = -1;
+        for (int index = 0; index < lines.length; index++) {
+            if ("V:P3".equals(lines[index].trim())) {
+                p3Index = index;
+                break;
+            }
+        }
+        assertEquals(true, p3Index >= 0, abc);
+        StringBuilder p3Block = new StringBuilder();
+        for (int index = p3Index; index < lines.length && index < p3Index + 3; index++) {
+            p3Block.append(lines[index]).append('\n');
+        }
+        assertEquals(true, p3Block.toString().contains("=G"), abc);
+    }
+
+    @Test
+    public void exportsCommonCClefHeadersAndRoundtripsThem() throws Exception {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"4.0\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Alto staff</part-name></score-part>"
+                + "<score-part id=\"P2\"><part-name>Tenor staff</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>C</sign><line>3</line></clef></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>960</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure></part>"
+                + "<part id=\"P2\"><measure number=\"1\"><attributes><divisions>960</divisions>"
+                + "<key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>C</sign><line>4</line></clef></attributes>"
+                + "<note><pitch><step>D</step><octave>3</octave></pitch><duration>960</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        assertEquals(true, abc.contains("V:P1 name=\"Alto staff\" clef=alto"), abc);
+        assertEquals(true, abc.contains("V:P2 name=\"Tenor staff\" clef=tenor"), abc);
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        List<Element> parts = directChildren(root, "part");
+        assertEquals(2, parts.size());
+        Element part1Attributes = directChild(directChildren(parts.get(0), "measure").get(0), "attributes");
+        Element part2Attributes = directChild(directChildren(parts.get(1), "measure").get(0), "attributes");
+        assertEquals("C", directChildText(directChild(part1Attributes, "clef"), "sign"));
+        assertEquals("3", directChildText(directChild(part1Attributes, "clef"), "line"));
+        assertEquals("C", directChildText(directChild(part2Attributes, "clef"), "sign"));
+        assertEquals("4", directChildText(directChild(part2Attributes, "clef"), "line"));
+    }
+
+    @Test
     public void roundtripsBundledAbcGoldenFixturesThroughMusicXmlToAbc() throws Exception {
         for (String fixture : Arrays.asList("base.musicxml", "with_rest.musicxml", "interleaved_voices.musicxml",
                 "roundtrip_piano_tempo.musicxml", "with_backup_safe.musicxml", "with_beam.musicxml",
-                "with_chord_timing.musicxml")) {
+                "with_chord_timing.musicxml", "with_following_rest.musicxml", "with_rest_tail.musicxml",
+                "full_with_half.musicxml", "inherited_time_changed.musicxml",
+                "inherited_divisions_changed.musicxml", "inherited_attributes.musicxml")) {
             String srcXml = loadFixtureText("abc-roundtrip/" + fixture);
             String abc = AbcIo.musicXmlToAbc(srcXml);
             assertEquals(true, abc.contains("V:"));
