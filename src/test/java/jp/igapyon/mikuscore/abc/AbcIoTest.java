@@ -1029,6 +1029,54 @@ public class AbcIoTest {
     }
 
     @Test
+    public void abcImportSupportsInlineVoiceSwitchesInBodyText() throws Exception {
+        String abc = "X:1\nT:Inline voice switch\nM:4/4\nL:1/8\nK:C\n"
+                + "V:1 name=\"Upper\"\n"
+                + "V:2 name=\"Lower\"\n"
+                + "[V:1] C D | [V:2] E F |\n"
+                + "[V:1] G A | [V:2] B c |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        List<Element> parts = directChildren(root, "part");
+        List<Element> scoreParts = directChildren(directChild(root, "part-list"), "score-part");
+
+        assertEquals(2, parts.size());
+        assertEquals("Upper", directChildText(scoreParts.get(0), "part-name"));
+        assertEquals("Lower", directChildText(scoreParts.get(1), "part-name"));
+        assertEquals(Arrays.asList("C", "D", "G", "A"), pitchSteps(parts.get(0)));
+        assertEquals(Arrays.asList("E", "F", "B", "C"), pitchSteps(parts.get(1)));
+        assertEquals(false, AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()).contains("mks:diag:count"));
+    }
+
+    @Test
+    public void abcImportMapsScoreGroupedVoicesIntoOneMultiStaffPart() throws Exception {
+        String abc = "X:1\nT:Grand staff from %%score\nM:4/4\nL:1/4\nK:C\n"
+                + "%%score (1 2)\n"
+                + "V:1 name=\"Upper\" clef=treble\n"
+                + "V:2 name=\"Lower\" clef=bass\n"
+                + "[V:1] C D E F |\n"
+                + "[V:2] C, D, E, F, |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        Element root = parseElement(xml);
+        List<Element> parts = directChildren(root, "part");
+        Element measure = directChildren(parts.get(0), "measure").get(0);
+        Element attributes = directChild(measure, "attributes");
+
+        assertEquals(1, parts.size(), xml);
+        assertEquals("Upper / Lower", directChildText(
+                directChildren(directChild(root, "part-list"), "score-part").get(0), "part-name"));
+        assertEquals("2", directChildText(attributes, "staves"));
+        assertEquals("G", directChildText(directChildren(attributes, "clef").get(0), "sign"));
+        assertEquals("1", directChildren(attributes, "clef").get(0).getAttribute("number"));
+        assertEquals("F", directChildText(directChildren(attributes, "clef").get(1), "sign"));
+        assertEquals("2", directChildren(attributes, "clef").get(1).getAttribute("number"));
+        assertEquals("3840", directChildText(directChild(measure, "backup"), "duration"));
+        assertEquals(Arrays.asList("1", "1", "1", "1", "2", "2", "2", "2"), staffNumbers(measure));
+        assertEquals(false, xml.contains("mks:diag:count"), xml);
+    }
+
+    @Test
     public void convertsMusicXmlToAbcGraceTieAndSlur() {
         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<score-partwise version=\"4.0\">"
@@ -3121,6 +3169,27 @@ public class AbcIoTest {
     private static String directChildText(Element parent, String tagName) {
         Element child = directChild(parent, tagName);
         return child == null ? "" : child.getTextContent().trim();
+    }
+
+    private static List<String> pitchSteps(Element part) {
+        List<String> result = new ArrayList<String>();
+        for (Element measure : directChildren(part, "measure")) {
+            for (Element note : directChildren(measure, "note")) {
+                Element pitch = directChild(note, "pitch");
+                if (pitch != null) {
+                    result.add(directChildText(pitch, "step"));
+                }
+            }
+        }
+        return result;
+    }
+
+    private static List<String> staffNumbers(Element measure) {
+        List<String> result = new ArrayList<String>();
+        for (Element note : directChildren(measure, "note")) {
+            result.add(directChildText(note, "staff"));
+        }
+        return result;
     }
 
     private static void assertClef(Element part, String sign, String line) {

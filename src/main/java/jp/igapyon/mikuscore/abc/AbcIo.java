@@ -2539,8 +2539,8 @@ public final class AbcIo {
             normalizeAbcVoiceStoresToMeasureCapacity(voiceStores, measureCapacityDiv(meter), diagnostics);
         }
 
-        List<AbcParsedPart> parts = buildSimpleAbcParsedParts(voiceRegistry, voiceStores, keyHintFifthsByKey,
-                measureMetaByKey, transposeHintByVoiceId);
+        List<AbcParsedPart> parts = buildAbcParsedParts(voiceRegistry, voiceStores, keyHintFifthsByKey,
+                measureMetaByKey, transposeHintByVoiceId, lineState.getScoreDirective());
         int measureCount = 0;
         for (AbcParsedPart part : parts) {
             measureCount = Math.max(measureCount, part.getMeasures().size());
@@ -4828,6 +4828,78 @@ public final class AbcIo {
         void setSfz(boolean sfz) {
             this.sfz = sfz;
         }
+    }
+
+    private static List<AbcParsedPart> buildAbcParsedParts(AbcImportVoiceRegistry voiceRegistry,
+            AbcVoiceStores voiceStores, Map<String, Integer> keyHintFifthsByKey,
+            Map<String, AbcMeasureMeta> measureMetaByKey, Map<String, AbcTransposeMeta> transposeHintByVoiceId,
+            String scoreDirective) {
+        List<AbcParsedPart> simpleParts = buildSimpleAbcParsedParts(voiceRegistry, voiceStores, keyHintFifthsByKey,
+                measureMetaByKey, transposeHintByVoiceId);
+        List<String> groupedVoiceIds = parseAbcScoreGroupedVoiceIds(scoreDirective);
+        if (groupedVoiceIds.size() < 2) {
+            return simpleParts;
+        }
+        List<AbcParsedStaffVoice> staffVoices = new ArrayList<AbcParsedStaffVoice>();
+        List<String> partNames = new ArrayList<String>();
+        AbcParsedPart firstPart = null;
+        for (String voiceId : groupedVoiceIds) {
+            AbcParsedPart part = findAbcParsedPartByVoiceId(simpleParts, voiceId);
+            if (part == null) {
+                return simpleParts;
+            }
+            if (firstPart == null) {
+                firstPart = part;
+            }
+            int staff = staffVoices.size() + 1;
+            staffVoices.add(new AbcParsedStaffVoice(voiceId, staff, part.getClef(), part.getMeasures()));
+            partNames.add(trimToEmpty(part.getPartName()).length() == 0 ? "Voice " + voiceId : part.getPartName());
+        }
+        AbcParsedPart base = firstPart == null ? simpleParts.get(0) : firstPart;
+        List<AbcParsedPart> result = new ArrayList<AbcParsedPart>();
+        result.add(new AbcParsedPart("P1", joinStringsWithSeparator(partNames, " / "), base.getVoiceId(),
+                base.getClef(), base.getTranspose(), staffVoices, base.getMeasures(), base.getKeyByMeasure(),
+                base.getMeterByMeasure(), base.getTempoByMeasure(), base.getMeasureMetaByIndex()));
+        for (AbcParsedPart part : simpleParts) {
+            if (!groupedVoiceIds.contains(part.getVoiceId())) {
+                result.add(new AbcParsedPart("P" + (result.size() + 1), part.getPartName(), part.getVoiceId(),
+                        part.getClef(), part.getTranspose(), part.getStaffVoices(), part.getMeasures(),
+                        part.getKeyByMeasure(), part.getMeterByMeasure(), part.getTempoByMeasure(),
+                        part.getMeasureMetaByIndex()));
+            }
+        }
+        return result;
+    }
+
+    private static List<String> parseAbcScoreGroupedVoiceIds(String scoreDirective) {
+        List<String> result = new ArrayList<String>();
+        String normalized = trimToEmpty(scoreDirective);
+        if (normalized.length() == 0) {
+            return result;
+        }
+        Matcher groupMatcher = Pattern.compile("[({]\\s*([^(){}]+?)\\s*[)}]").matcher(normalized);
+        String groupText = groupMatcher.find() ? groupMatcher.group(1) : normalized;
+        String cleaned = groupText.replaceAll("[\\[\\]{}()|]", " ");
+        for (String token : cleaned.split("\\s+")) {
+            String voiceId = trimToEmpty(token);
+            if (voiceId.length() > 0 && !result.contains(voiceId)) {
+                result.add(voiceId);
+            }
+        }
+        return result;
+    }
+
+    private static AbcParsedPart findAbcParsedPartByVoiceId(List<AbcParsedPart> parts, String voiceId) {
+        String normalized = trimToEmpty(voiceId);
+        if (parts == null || normalized.length() == 0) {
+            return null;
+        }
+        for (AbcParsedPart part : parts) {
+            if (part != null && normalized.equals(part.getVoiceId())) {
+                return part;
+            }
+        }
+        return null;
     }
 
     private static List<AbcParsedPart> buildSimpleAbcParsedParts(AbcImportVoiceRegistry voiceRegistry,

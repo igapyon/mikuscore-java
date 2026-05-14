@@ -621,6 +621,14 @@
   - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC->MusicXML roundtrips common hyphenated lyrics in the bounded subset`
   - 期待値: ABC `w:` lyrics は subsequent pitched notes の MusicXML `<lyric>` に付与され、hyphenated tokens は begin / middle / end syllabic として保持される。MusicXML lyric は ABC `w:` line として出力され、bounded subset で roundtrip する
   - 実装方針: 既存 `musicXmlToAbc` / `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-15 再開 slice: upstream `tests/unit/abc-io.spec.ts` の inline `[V:...]` voice switch public regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports inline [V:...] voice switches in body text`
+  - 期待値: body text 内の `[V:1]` / `[V:2]` voice switch により、Upper / Lower の 2 part に note sequence が振り分けられ、diagnostic は出ない
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-15 再開 slice: upstream `tests/unit/abc-io.spec.ts` の `%%score` grouped voices multi-staff import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML maps %%score grouped voices into one multi-staff part`
+  - 期待値: `%%score (1 2)` は 2 voice を 1 part / 2 staves として出力し、part-name は `Upper / Lower`、staff は 1 / 2、backup duration は 3840、diagnostic は出ない
+  - 実装方針: 既存 grouped-staff render helper を `musicXmlFromAbc` public import path に接続し、focused `AbcIoTest` で固定する
 - [x] 2026-05-14 再開 slice: upstream `tests/fixtures/with_following_rest.musicxml` の ABC golden fixture expansion
   - upstream 位置: `workplace/mikuscore/tests/fixtures/with_following_rest.musicxml`
   - 期待値: note / note / rest / note を含む 1 measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
@@ -714,11 +722,11 @@
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/abc/AbcIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/abc/AbcIoTest.java`
   - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
-  - 最新完了 slice: upstream `tests/unit/abc-io.spec.ts` の ABC lyric `w:` import/export and hyphenated roundtrip regression
-  - 最新 focused 検証: `mvn test -Dtest=AbcIoTest` 成功、118 tests / 0 failures / 0 errors
-  - 最新 full 検証: `mvn test` 成功、693 tests / 0 failures / 0 errors
+  - 最新完了 slice: upstream `tests/unit/abc-io.spec.ts` の `%%score` grouped voices multi-staff import regression
+  - 最新 focused 検証: `mvn test -Dtest=AbcIoTest` 成功、120 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、695 tests / 0 failures / 0 errors
   - 最新 diff 検証: `git diff --check` 問題なし
-  - 次回第一候補: upstream `tests/unit/abc-io.spec.ts` の次セクション `ABC->MusicXML supports inline [V:...] voice switches in body text` を Java public regression として小さく確認する
+  - 次回第一候補: upstream `tests/unit/abc-io.spec.ts` の次セクション `ABC->MusicXML keeps %%score grouped voices aligned across multiple measures` を Java public regression として小さく確認する
 - [x] 2026-05-11 終了時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/midi/MidiIoTest.java`
