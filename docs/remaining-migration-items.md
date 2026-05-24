@@ -236,7 +236,173 @@ completed slice history remains below.
 - Latest completed ABC unsupported body warning regression slice: public `musicXmlFromAbc` coverage now locks unsupported inline / standalone field, abcjs wrapper, unsupported directive, stray continuation, unsupported word token, and same-line `K:` compatibility behavior.
 - Latest ABC focused verification after unsupported body warning slice: `mvn test -Dtest=AbcIoTest` passed with 143 tests / 0 failures / 0 errors.
 - Latest full verification after unsupported body warning slice: `mvn test` passed with 718 tests / 0 failures / 0 errors.
-- Suggested next step: continue the next upstream `abc-io.spec.ts` unsupported octave range regression, add one more small ABC fixture, or move to MEI, MuseScore, or another upstream format spec in small pieces. If returning to MIDI tests, first check only for new upstream additions and avoid duplicate regressions.
+- Latest completed ABC unsupported octave range regression slice: public `musicXmlFromAbc` coverage now locks warning-and-skip behavior for out-of-range single notes and chord notes instead of failing the parse; grace-note behavior was already aligned.
+- Latest ABC focused verification after unsupported octave range slice: `mvn test -Dtest=AbcIoTest` passed with 145 tests / 0 failures / 0 errors.
+- Latest full verification after ABC unsupported octave range slice: `mvn test` passed with 720 tests / 0 failures / 0 errors.
+- Latest completed ABC invalid-length regression slice: public `musicXmlFromAbc` coverage now locks warning-and-skip behavior for invalid single-note, chord, and grace-note lengths instead of failing the parse.
+- Latest ABC focused verification after invalid-length slice: `mvn test -Dtest=AbcIoTest` passed with 148 tests / 0 failures / 0 errors.
+- Latest full verification after ABC invalid-length slice: `mvn test` passed with 723 tests / 0 failures / 0 errors.
+- Latest completed ABC malformed accidental / body punctuation regression slice: public `musicXmlFromAbc` coverage now locks malformed accidental diagnostics for body / grace contexts and bounded unsupported punctuation diagnostics for `;`, backtick, `?`, `@`, `#`, and `$` body tokens.
+- Latest ABC focused verification after malformed accidental / body punctuation slice: `mvn test -Dtest=AbcIoTest` passed with 153 tests / 0 failures / 0 errors.
+- Latest full verification after ABC malformed accidental / body punctuation slice: `mvn test` passed with 728 tests / 0 failures / 0 errors.
+- Latest completed ABC stray punctuation / overlay public regression slice: public `musicXmlFromAbc` coverage now additionally locks `*` unsupported punctuation, stray body number diagnostics, and public overlay part / later-measure overlay note placement.
+- Latest ABC focused verification after stray punctuation / overlay public slice: `mvn test -Dtest=AbcIoTest` passed with 157 tests / 0 failures / 0 errors.
+- Latest full verification after ABC stray punctuation / overlay public slice: `mvn test` passed with 732 tests / 0 failures / 0 errors.
+- Latest completed ABC ornament / trill alias public regression slice: public `musicXmlFromAbc` coverage now locks grace-note plus principal trill behavior and `!tr!` / `!triller!` aliases.
+- Latest ABC focused verification after ornament / trill alias slice: `mvn test -Dtest=AbcIoTest` passed with 160 tests / 0 failures / 0 errors.
+- Latest full verification after ABC ornament / trill alias slice: `mvn test` passed with 735 tests / 0 failures / 0 errors.
+- Latest completed ABC repeat / ending public regression slice: public `musicXmlFromAbc` coverage now locks standard repeat barline restoration, bracketed alternate endings, and `|1` / `:|2` style ending markers.
+- Latest completed ABC turn public regression slice: public `musicXmlFromAbc` coverage now locks grace slash plus `!turn!`, `!lowerturn!` inverted-turn alias, and slashed `!turnx!` / `!invertedturnx!` variants.
+- Latest ABC focused verification after repeat / ending and turn slices: `mvn test -Dtest=AbcIoTest` passed with 166 tests / 0 failures / 0 errors.
+- Latest completed ABC spanner / tremolo ornament public regression slice: public `musicXmlFromAbc` coverage now locks delayed turn variants, long trill wavy-line start / stop, tremolo single / start / stop, glissando and slide start / stop, and standard `!slide!` as slide start.
+- Latest ABC focused verification after spanner / tremolo ornament slice: `mvn test -Dtest=AbcIoTest` passed with 171 tests / 0 failures / 0 errors.
+- Latest full verification after ABC spanner / tremolo ornament slice: `mvn test` passed with 746 tests / 0 failures / 0 errors.
+- Latest completed ABC phrase / articulation alias public regression slice: public `musicXmlFromAbc` coverage now locks phrase marks, staccato aliases, accent / tenuto / stress / unstress / fermata, accent aliases, inverted fermata aliases, marcato / breath aliases, caesura, and staccatissimo aliases distinctly from staccato.
+- Latest ABC focused verification after phrase / articulation alias slice: `mvn test -Dtest=AbcIoTest` passed with 177 tests / 0 failures / 0 errors.
+- Latest full verification after ABC phrase / articulation alias slice: `mvn test` passed with 752 tests / 0 failures / 0 errors.
+- Latest completed ABC bowing / technical alias public regression slice: public `musicXmlFromAbc` coverage now locks bowing aliases, double / triple tongue aliases, heel / toe aliases, fingering / string / pluck decorations, open-string / snap-pizzicato aliases, stopped aliases, and thumb-position aliases.
+- Latest ABC focused verification after bowing / technical alias slice: `mvn test -Dtest=AbcIoTest` passed with 182 tests / 0 failures / 0 errors.
+- Latest full verification after ABC bowing / technical alias slice: `mvn test` passed with 757 tests / 0 failures / 0 errors.
+- Latest completed ABC mordent / arpeggiate / navigation direction public regression slice: public `musicXmlFromAbc` coverage now locks mordent / inverted-mordent aliases, arpeggiate aliases, schleifer / shake ornaments, segno / coda, fine, dacoda, and dacapo / dalsegno / tocoda aliases.
+- Latest ABC focused verification after mordent / arpeggiate / navigation direction slice: `mvn test -Dtest=AbcIoTest` passed with 186 tests / 0 failures / 0 errors.
+- Latest full verification after ABC mordent / arpeggiate / navigation direction slice: `mvn test` passed with 761 tests / 0 failures / 0 errors.
+- Latest completed ABC wedge / dynamics public regression slice: public `musicXmlFromAbc` coverage now locks crescendo / diminuendo wedge aliases and common / extreme dynamics directions from `pppp` through `ffff`, including `fp`, `fz`, `rfz`, `sf`, `sfp`, and `sfz`.
+- Latest ABC focused verification after wedge / dynamics slice: `mvn test -Dtest=AbcIoTest` passed with 188 tests / 0 failures / 0 errors.
+- Latest full verification after ABC wedge / dynamics slice: `mvn test` passed with 763 tests / 0 failures / 0 errors.
+- Latest completed ABC beam public regression slice: public `musicXmlFromAbc` coverage now locks beat-boundary beam splitting and whitespace beam-break hints; `musicXmlToAbc` coverage documents that exact beam grouping is not preserved as ABC spacing.
+- Latest ABC focused verification after beam public slice: `mvn test -Dtest=AbcIoTest` passed with 191 tests / 0 failures / 0 errors.
+- Latest LilyPond focused verification after ABC beam public slice: `mvn test -Dtest=LilyPondIoTest` passed with 72 tests / 0 failures / 0 errors.
+- Latest full verification after ABC beam public slice: `mvn test` passed with 766 tests / 0 failures / 0 errors.
+- Latest completed ABC ornament canonical roundtrip public regression slice: public `musicXmlFromAbc` / `musicXmlToAbc` coverage now locks `!tr!` / `!triller!` canonicalization to `!trill!`, `!lowerturn!` canonicalization to `!invertedturn!`, and MusicXML turn slash / delayed-turn variant export and roundtrip.
+- Latest ABC focused verification after ornament canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 194 tests / 0 failures / 0 errors.
+- Latest full verification after ABC ornament canonical roundtrip slice: `mvn test` passed with 769 tests / 0 failures / 0 errors.
+- Latest completed ABC spanner export roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks tremolo single / start / stop, glissando start / stop, and slide start / stop export tokens and roundtrip restoration.
+- Latest ABC focused verification after spanner export roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 195 tests / 0 failures / 0 errors.
+- Latest full verification after ABC spanner export roundtrip slice: `mvn test` passed with 770 tests / 0 failures / 0 errors.
+- Latest completed ABC articulation canonical roundtrip public regression slice: public `musicXmlFromAbc` / `musicXmlToAbc` coverage now locks `!stacc!` / `!stac!` canonicalization to `!staccato!`, `!>!` / `!emphasis!` canonicalization to `!accent!`, and `!inverted fermata!` canonicalization to `!invertedfermata!`.
+- Latest ABC focused verification after articulation canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 198 tests / 0 failures / 0 errors.
+- Latest full verification after ABC articulation canonical roundtrip slice: `mvn test` passed with 773 tests / 0 failures / 0 errors.
+- Latest completed ABC articulation export roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks stress / unstress / marcato / breath / caesura export tokens and roundtrip restoration.
+- Latest ABC focused verification after articulation export roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 199 tests / 0 failures / 0 errors.
+- Latest full verification after ABC articulation export roundtrip slice: `mvn test` passed with 774 tests / 0 failures / 0 errors.
+- Latest completed ABC articulation alias canonical roundtrip public regression slice: public `musicXmlFromAbc` / `musicXmlToAbc` coverage now locks marcato aliases to `!marcato!`, breath aliases to `!breath!`, and `!spiccato!` to canonical `!wedge!`.
+- Latest ABC focused verification after articulation alias canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 202 tests / 0 failures / 0 errors.
+- Latest full verification after ABC articulation alias canonical roundtrip slice: `mvn test` passed with 777 tests / 0 failures / 0 errors.
+- Latest completed ABC wedge export / canonical roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks crescendo / diminuendo start-stop export tokens, roundtrip restoration, and symbolic wedge aliases canonicalizing to named decorations.
+- Latest ABC focused verification after wedge export / canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 204 tests / 0 failures / 0 errors.
+- Latest full verification after ABC wedge export / canonical roundtrip slice: `mvn test` passed with 779 tests / 0 failures / 0 errors.
+- Latest completed ABC dynamics export roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks MusicXML dynamics export tokens and roundtrip restoration for `pppp` through `ffff`, plus `fp`, `fz`, `rfz`, `sf`, `sfp`, and `sfz`.
+- Latest ABC focused verification after dynamics export roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 205 tests / 0 failures / 0 errors.
+- Latest full verification after ABC dynamics export roundtrip slice: `mvn test` passed with 780 tests / 0 failures / 0 errors.
+- Latest completed ABC bowing / tongue / heel / toe export and canonical roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks bowing, double / triple tongue, heel, and toe MusicXML technical export tokens, roundtrip restoration, and spaced / hyphenated alias canonicalization.
+- Latest ABC focused verification after bowing / tongue / heel / toe export and canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 208 tests / 0 failures / 0 errors.
+- Latest full verification after ABC bowing / tongue / heel / toe export and canonical roundtrip slice: `mvn test` passed with 783 tests / 0 failures / 0 errors.
+- Latest completed ABC fingering / string / pluck / open / snap export and canonical roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks fingering, string, pluck, open-string, and snap-pizzicato MusicXML technical export tokens, roundtrip restoration, and open / snap alias canonicalization.
+- Latest ABC focused verification after fingering / string / pluck / open / snap export and canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 211 tests / 0 failures / 0 errors.
+- Latest full verification after ABC fingering / string / pluck / open / snap export and canonical roundtrip slice: `mvn test` passed with 786 tests / 0 failures / 0 errors.
+- Latest completed ABC harmonic / stopped / thumb export and canonical roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks harmonic, stopped, and thumb-position MusicXML technical export tokens, roundtrip restoration, and stopped / thumb alias canonicalization.
+- Latest ABC focused verification after harmonic / stopped / thumb export and canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 213 tests / 0 failures / 0 errors.
+- Latest full verification after ABC harmonic / stopped / thumb export and canonical roundtrip slice: `mvn test` passed with 788 tests / 0 failures / 0 errors.
+- Latest completed ABC mordent / arpeggiate / schleifer / shake export and canonical roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks mordent, inverted-mordent, arpeggiate, schleifer, and shake MusicXML export tokens, roundtrip restoration, and mordent / arpeggiate alias canonicalization.
+- Latest ABC focused verification after mordent / arpeggiate / schleifer / shake export and canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 215 tests / 0 failures / 0 errors.
+- Latest full verification after ABC mordent / arpeggiate / schleifer / shake export and canonical roundtrip slice: `mvn test` passed with 790 tests / 0 failures / 0 errors.
+- Latest completed ABC navigation direction export and canonical roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks segno, coda, fine, dacapo, dalsegno, tocoda, and combined dacapo+tocoda export / roundtrip behavior plus spaced / hyphenated navigation alias canonicalization.
+- Latest ABC focused verification after navigation direction export and canonical roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 217 tests / 0 failures / 0 errors.
+- Latest full verification after ABC navigation direction export and canonical roundtrip slice: `mvn test` passed with 792 tests / 0 failures / 0 errors.
+- Latest completed ABC slur / tie export and roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks slur start / stop export, single-note tie export, and chord tie export / roundtrip restoration across all chord notes.
+- Latest ABC focused verification after slur / tie export and roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 220 tests / 0 failures / 0 errors.
+- Latest full verification after ABC slur / tie export and roundtrip slice: `mvn test` passed with 795 tests / 0 failures / 0 errors.
+- Latest completed ABC editorial / courtesy accidental export and roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks MusicXML editorial and cautionary accidentals as `!editorial!` / `!courtesy!` ABC prefixes and restores the corresponding MusicXML accidental attributes.
+- Latest ABC focused verification after editorial / courtesy accidental export and roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 222 tests / 0 failures / 0 errors.
+- Latest full verification after ABC editorial / courtesy accidental export and roundtrip slice: `mvn test` passed with 797 tests / 0 failures / 0 errors.
+- Latest completed ABC accidental emission boundary public regression slice: public `musicXmlToAbc` coverage now locks explicit accidental preservation when the lane key is unknown and redundant natural suppression in C major.
+- Latest ABC focused verification after accidental emission boundary slice: `mvn test -Dtest=AbcIoTest` passed with 224 tests / 0 failures / 0 errors.
+- Latest full verification after ABC accidental emission boundary slice: `mvn test` passed with 799 tests / 0 failures / 0 errors.
+- Latest completed ABC stopped symbol alias canonical regression expansion: the existing stopped / thumb canonical roundtrip public regression now also locks `!+!` as a stopped alias canonicalized back to `!stopped!`.
+- Latest ABC focused verification after stopped symbol alias canonical expansion: `mvn test -Dtest=AbcIoTest` passed with 224 tests / 0 failures / 0 errors.
+- Latest full verification after stopped symbol alias canonical expansion: `mvn test` passed with 799 tests / 0 failures / 0 errors.
+- Latest completed ABC grace-without-ornament export and roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks plain grace and slash grace MusicXML notes preserving ABC grace groups without adding trill / turn ornament notation.
+- Latest ABC focused verification after grace-without-ornament export and roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 226 tests / 0 failures / 0 errors.
+- Latest full verification after ABC grace-without-ornament export and roundtrip slice: `mvn test` passed with 801 tests / 0 failures / 0 errors.
+- Latest completed ABC turn with slash grace export and roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks slash grace preservation when the principal note also carries a turn ornament.
+- Latest ABC focused verification after turn with slash grace export and roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 227 tests / 0 failures / 0 errors.
+- Latest full verification after ABC turn with slash grace export and roundtrip slice: `mvn test` passed with 802 tests / 0 failures / 0 errors.
+- Latest completed ABC turn / inverted-turn export and roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks plain MusicXML turn and inverted-turn ornament export tokens and roundtrip restoration.
+- Latest ABC focused verification after turn / inverted-turn export and roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 228 tests / 0 failures / 0 errors.
+- Latest full verification after ABC turn / inverted-turn export and roundtrip slice: `mvn test` passed with 803 tests / 0 failures / 0 errors.
+- Latest completed ABC wavy-line start export public regression slice: public `musicXmlToAbc` coverage now locks wavy-line start without `trill-mark` as canonical `!trill!`, while preserving long-trill `!trill(!` for `trill-mark` plus wavy-line start.
+- Latest ABC focused verification after wavy-line start export slice: `mvn test -Dtest=AbcIoTest` passed with 229 tests / 0 failures / 0 errors.
+- Latest full verification after ABC wavy-line start export slice: `mvn test` passed with 804 tests / 0 failures / 0 errors.
+- Latest completed ABC phrase mark export and roundtrip public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks MusicXML `shortphrase`, `mediumphrase`, and `longphrase` other-articulation export tokens and roundtrip restoration.
+- Latest ABC focused verification after phrase mark export and roundtrip slice: `mvn test -Dtest=AbcIoTest` passed with 230 tests / 0 failures / 0 errors.
+- Latest full verification after ABC phrase mark export and roundtrip slice: `mvn test` passed with 805 tests / 0 failures / 0 errors.
+- Latest completed ABC staccatissimo export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks MusicXML `staccatissimo` export as canonical `!wedge!` and roundtrip restoration without creating `staccato`.
+- Latest ABC focused verification after staccatissimo export slice: `mvn test -Dtest=AbcIoTest` passed with 231 tests / 0 failures / 0 errors.
+- Latest full verification after ABC staccatissimo export slice: `mvn test` passed with 806 tests / 0 failures / 0 errors.
+- Latest completed ABC digit fingering export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks MusicXML fingering values `0` and `5` as standard ABC `!0!` / `!5!` decorations instead of `!fingering:N!` tokens, with roundtrip restoration.
+- Latest ABC focused verification after digit fingering export slice: `mvn test -Dtest=AbcIoTest` passed with 232 tests / 0 failures / 0 errors.
+- Latest full verification after ABC digit fingering export slice: `mvn test` passed with 807 tests / 0 failures / 0 errors.
+- Latest completed ABC pluck export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks MusicXML pluck values `p`, `i`, `m`, and `a` as `!pluck:*!` ABC decorations with roundtrip restoration.
+- Latest ABC focused verification after pluck export slice: `mvn test -Dtest=AbcIoTest` passed with 233 tests / 0 failures / 0 errors.
+- Latest full verification after ABC pluck export slice: `mvn test` passed with 808 tests / 0 failures / 0 errors.
+- Latest completed ABC string export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks a single MusicXML string value `2` as `!string:2!` with roundtrip restoration.
+- Latest ABC focused verification after string export slice: `mvn test -Dtest=AbcIoTest` passed with 234 tests / 0 failures / 0 errors.
+- Latest full verification after ABC string export slice: `mvn test` passed with 809 tests / 0 failures / 0 errors.
+- Latest completed ABC harmonic export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `harmonic` technical notation export as `!harmonic!` with roundtrip restoration.
+- Latest ABC focused verification after harmonic export slice: `mvn test -Dtest=AbcIoTest` passed with 235 tests / 0 failures / 0 errors.
+- Latest full verification after ABC harmonic export slice: `mvn test` passed with 810 tests / 0 failures / 0 errors.
+- Latest completed ABC thumb-position export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `thumb-position` technical notation export as `!thumb!` with roundtrip restoration.
+- Latest ABC focused verification after thumb-position export slice: `mvn test -Dtest=AbcIoTest` passed with 236 tests / 0 failures / 0 errors.
+- Latest full verification after ABC thumb-position export slice: `mvn test` passed with 811 tests / 0 failures / 0 errors.
+- Latest completed ABC mordent export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `mordent` ornament export as `!mordent!` with roundtrip restoration.
+- Latest ABC focused verification after mordent export slice: `mvn test -Dtest=AbcIoTest` passed with 237 tests / 0 failures / 0 errors.
+- Latest full verification after ABC mordent export slice: `mvn test` passed with 812 tests / 0 failures / 0 errors.
+- Latest completed ABC inverted-mordent export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `inverted-mordent` ornament export as canonical `!pralltriller!` with roundtrip restoration.
+- Latest ABC focused verification after inverted-mordent export slice: `mvn test -Dtest=AbcIoTest` passed with 238 tests / 0 failures / 0 errors.
+- Latest full verification after ABC inverted-mordent export slice: `mvn test` passed with 813 tests / 0 failures / 0 errors.
+- Latest completed ABC arpeggiate export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks MusicXML chord arpeggiate export as canonical `!arpeggio![...]` with roundtrip restoration.
+- Latest ABC focused verification after arpeggiate export slice: `mvn test -Dtest=AbcIoTest` passed with 239 tests / 0 failures / 0 errors.
+- Latest full verification after ABC arpeggiate export slice: `mvn test` passed with 814 tests / 0 failures / 0 errors.
+- Latest completed ABC schleifer export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `schleifer` ornament export as `!schleifer!` with roundtrip restoration.
+- Latest ABC focused verification after schleifer export slice: `mvn test -Dtest=AbcIoTest` passed with 240 tests / 0 failures / 0 errors.
+- Latest full verification after ABC schleifer export slice: `mvn test` passed with 815 tests / 0 failures / 0 errors.
+- Latest completed ABC shake export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `shake` ornament export as `!shake!` with roundtrip restoration.
+- Latest ABC focused verification after shake export slice: `mvn test -Dtest=AbcIoTest` passed with 241 tests / 0 failures / 0 errors.
+- Latest full verification after ABC shake export slice: `mvn test` passed with 816 tests / 0 failures / 0 errors.
+- Latest completed ABC segno export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `segno` direction export as `!segno!` with roundtrip restoration.
+- Latest ABC focused verification after segno export slice: `mvn test -Dtest=AbcIoTest` passed with 242 tests / 0 failures / 0 errors.
+- Latest full verification after ABC segno export slice: `mvn test` passed with 817 tests / 0 failures / 0 errors.
+- Latest completed ABC coda export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `coda` direction export as `!coda!` with roundtrip restoration.
+- Latest ABC focused verification after coda export slice: `mvn test -Dtest=AbcIoTest` passed with 243 tests / 0 failures / 0 errors.
+- Latest full verification after ABC coda export slice: `mvn test` passed with 818 tests / 0 failures / 0 errors.
+- Latest completed ABC fine export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `fine` sound direction export as `!fine!` with roundtrip restoration.
+- Latest ABC focused verification after fine export slice: `mvn test -Dtest=AbcIoTest` passed with 244 tests / 0 failures / 0 errors.
+- Latest full verification after ABC fine export slice: `mvn test` passed with 819 tests / 0 failures / 0 errors.
+- Latest completed ABC dacapo export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `dacapo` sound direction export as `!dacapo!` with roundtrip restoration.
+- Latest ABC focused verification after dacapo export slice: `mvn test -Dtest=AbcIoTest` passed with 245 tests / 0 failures / 0 errors.
+- Latest full verification after ABC dacapo export slice: `mvn test` passed with 820 tests / 0 failures / 0 errors.
+- Latest completed ABC dalsegno export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `dalsegno` sound direction export as `!dalsegno!` with roundtrip restoration.
+- Latest ABC focused verification after dalsegno export slice: `mvn test -Dtest=AbcIoTest` passed with 246 tests / 0 failures / 0 errors.
+- Latest full verification after ABC dalsegno export slice: `mvn test` passed with 821 tests / 0 failures / 0 errors.
+- Latest completed ABC tocoda export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks single MusicXML `tocoda` sound direction export as `!tocoda!` with roundtrip restoration.
+- Latest ABC focused verification after tocoda export slice: `mvn test -Dtest=AbcIoTest` passed with 247 tests / 0 failures / 0 errors.
+- Latest full verification after ABC tocoda export slice: `mvn test` passed with 822 tests / 0 failures / 0 errors.
+- Latest completed ABC dacoda export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks combined MusicXML `dacapo` plus `tocoda` sound direction export as `!dacoda!` with roundtrip restoration.
+- Latest ABC focused verification after dacoda export slice: `mvn test -Dtest=AbcIoTest` passed with 248 tests / 0 failures / 0 errors.
+- Latest full verification after ABC dacoda export slice: `mvn test` passed with 823 tests / 0 failures / 0 errors.
+- Latest completed ABC words direction export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks a single MusicXML `words` direction export as a quoted ABC annotation with roundtrip restoration.
+- Latest ABC focused verification after words direction export slice: `mvn test -Dtest=AbcIoTest` passed with 249 tests / 0 failures / 0 errors.
+- Latest full verification after ABC words direction export slice: `mvn test` passed with 824 tests / 0 failures / 0 errors.
+- Latest completed ABC basic harmony export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks a single MusicXML dominant harmony export as a quoted ABC chord symbol with roundtrip restoration.
+- Latest ABC focused verification after basic harmony export slice: `mvn test -Dtest=AbcIoTest` passed with 250 tests / 0 failures / 0 errors.
+- Latest full verification after ABC basic harmony export slice: `mvn test` passed with 825 tests / 0 failures / 0 errors.
+- Latest completed ABC slash-bass harmony export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks a single MusicXML altered-root / altered-bass harmony export as a quoted ABC slash chord symbol with roundtrip restoration.
+- Latest ABC focused verification after slash-bass harmony export slice: `mvn test -Dtest=AbcIoTest` passed with 251 tests / 0 failures / 0 errors.
+- Latest full verification after ABC slash-bass harmony export slice: `mvn test` passed with 826 tests / 0 failures / 0 errors.
+- Latest completed ABC major-sixth harmony export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks a single MusicXML `major-sixth` harmony export as a quoted ABC chord symbol with roundtrip restoration.
+- Latest ABC focused verification after major-sixth harmony export slice: `mvn test -Dtest=AbcIoTest` passed with 252 tests / 0 failures / 0 errors.
+- Latest full verification after ABC major-sixth harmony export slice: `mvn test` passed with 827 tests / 0 failures / 0 errors.
+- Suggested next step: continue the next upstream `abc-io.spec.ts` remaining tail scan for small missing aliases / metadata cases, add one more small ABC fixture, or move to MEI, MuseScore, or another upstream format spec in small pieces. If returning to MIDI tests, first check only for new upstream additions and avoid duplicate regressions.
 - Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 
 ### Highest Priority Format Work
@@ -270,6 +436,61 @@ completed slice history remains below.
   - latest accidental annotation regression locks `!editorial!` / `!courtesy!` handoff to explicit accidental attributes
   - latest user-defined decoration regression locks `U:` punctuation, non-note-letter, `+...+` wrapper, and malformed syntax behavior
   - latest unsupported body warning regression locks unsupported field / directive / word-token diagnostics and same-line `K:` compatibility
+  - latest unsupported octave range regression locks out-of-range single-note / chord-note skip diagnostics without parse failure
+  - latest invalid-length regression locks invalid single-note / chord / grace-note skip diagnostics without parse failure
+  - latest malformed accidental / punctuation regression locks malformed accidental diagnostics and bounded unsupported body punctuation diagnostics
+  - latest stray punctuation / overlay public regression locks `*`, stray body number diagnostics, and public overlay voice placement
+  - latest ornament / trill alias public regression locks grace-note principal trill behavior and `!tr!` / `!triller!` aliases
+  - latest repeat / ending public regression locks standard repeats, bracketed alternate endings, and `|1` / `:|2` ending markers
+  - latest turn public regression locks grace slash plus `!turn!`, `!lowerturn!`, `!turnx!`, and `!invertedturnx!`
+  - latest phrase / articulation alias public regression locks phrase marks, staccato aliases, accent / stress / marcato / breath aliases, caesura, fermata variants, and staccatissimo aliases
+  - latest bowing / technical alias public regression locks bowing, tongue, heel / toe, fingering / string / pluck, open-string, snap-pizzicato, stopped, and thumb-position aliases
+  - latest mordent / arpeggiate / navigation direction public regression locks mordent, inverted-mordent, arpeggiate, schleifer / shake, segno / coda, fine, dacoda, dacapo, dalsegno, and tocoda aliases
+  - latest wedge / dynamics public regression locks crescendo / diminuendo aliases and common / extreme dynamics directions
+  - latest beam public regression locks beat-boundary beam splitting, whitespace beam-break hints, and MusicXML-to-ABC beam-spacing non-preservation
+  - latest ornament canonical roundtrip public regression locks trill / lowerturn canonicalization and turn slash / delayed-turn MusicXML export roundtrip
+  - latest spanner export roundtrip public regression locks tremolo, glissando, and slide MusicXML export tokens and roundtrip restoration
+  - latest articulation canonical roundtrip public regression locks staccato, accent, and inverted fermata alias canonicalization
+  - latest articulation export roundtrip public regression locks stress, unstress, marcato, breath, and caesura MusicXML export tokens
+  - latest articulation alias canonical roundtrip public regression locks marcato, breath, and spiccato canonicalization
+  - latest wedge export / canonical roundtrip public regression locks named wedge export and symbolic alias canonicalization
+  - latest dynamics export roundtrip public regression locks common / extreme MusicXML dynamics export tokens
+  - latest bowing / tongue / heel / toe export and canonical roundtrip public regression locks technical export tokens and spaced / hyphenated alias canonicalization
+  - latest fingering / string / pluck / open / snap export and canonical roundtrip public regression locks technical value tokens and open / snap alias canonicalization
+  - latest harmonic / stopped / thumb export and canonical roundtrip public regression locks technical singleton export tokens and stopped / thumb alias canonicalization
+  - latest mordent / arpeggiate / schleifer / shake export and canonical roundtrip public regression locks ornament export tokens and mordent / arpeggiate alias canonicalization
+  - latest navigation direction export and canonical roundtrip public regression locks navigation export tokens and spaced / hyphenated alias canonicalization
+  - latest slur / tie export and roundtrip public regression locks slur, single-note tie, and chord tie export restoration
+  - latest editorial / courtesy accidental export and roundtrip public regression locks accidental attribute export prefixes and restoration
+  - latest accidental emission boundary public regression locks unknown-key explicit accidental preservation and C-major redundant natural suppression
+  - latest stopped symbol alias canonical expansion locks `!+!` as a stopped alias
+  - latest grace-without-ornament export and roundtrip public regression locks plain grace and slash grace preservation without false ornaments
+  - latest turn with slash grace export and roundtrip public regression locks slash grace preservation alongside a principal turn ornament
+  - latest turn / inverted-turn export and roundtrip public regression locks plain turn ornament export and restoration
+  - latest wavy-line start export public regression locks wavy-line start without trill-mark to `!trill!`
+  - latest phrase mark export and roundtrip public regression locks `shortphrase`, `mediumphrase`, and `longphrase` export tokens and restoration
+  - latest staccatissimo export public regression locks MusicXML `staccatissimo` to canonical `!wedge!` without false `staccato`
+  - latest digit fingering export public regression locks MusicXML fingerings `0` and `5` to standard ABC digit decorations
+  - latest pluck export public regression locks MusicXML plucks `p`, `i`, `m`, and `a` to ABC `!pluck:*!` decorations
+  - latest string export public regression locks MusicXML string `2` to ABC `!string:2!`
+  - latest harmonic export public regression locks single MusicXML harmonic technical notation to ABC `!harmonic!`
+  - latest thumb-position export public regression locks single MusicXML thumb-position technical notation to ABC `!thumb!`
+  - latest mordent export public regression locks single MusicXML mordent ornament to ABC `!mordent!`
+  - latest inverted-mordent export public regression locks single MusicXML inverted-mordent ornament to ABC `!pralltriller!`
+  - latest arpeggiate export public regression locks MusicXML chord arpeggiate to ABC `!arpeggio![...]`
+  - latest schleifer export public regression locks single MusicXML schleifer ornament to ABC `!schleifer!`
+  - latest shake export public regression locks single MusicXML shake ornament to ABC `!shake!`
+  - latest segno export public regression locks single MusicXML segno direction to ABC `!segno!`
+  - latest coda export public regression locks single MusicXML coda direction to ABC `!coda!`
+  - latest fine export public regression locks single MusicXML fine sound direction to ABC `!fine!`
+  - latest dacapo export public regression locks single MusicXML dacapo sound direction to ABC `!dacapo!`
+  - latest dalsegno export public regression locks single MusicXML dalsegno sound direction to ABC `!dalsegno!`
+  - latest tocoda export public regression locks single MusicXML tocoda sound direction to ABC `!tocoda!`
+  - latest dacoda export public regression locks combined MusicXML dacapo plus tocoda sound direction to ABC `!dacoda!`
+  - latest words direction export public regression locks single MusicXML words direction to quoted ABC annotation
+  - latest basic harmony export public regression locks single MusicXML dominant harmony to quoted ABC chord symbol
+  - latest slash-bass harmony export public regression locks altered-root / altered-bass MusicXML harmony to quoted ABC slash chord symbol
+  - latest major-sixth harmony export public regression locks single MusicXML major-sixth harmony to quoted ABC chord symbol
   - latest fixture expansion adds `with_following_rest.musicxml` to Java ABC golden resources
   - latest fixture expansion adds `with_rest_tail.musicxml` to Java ABC golden resources
   - latest fixture expansion adds `full_with_half.musicxml` to Java ABC golden resources
