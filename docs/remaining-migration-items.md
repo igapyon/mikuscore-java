@@ -211,7 +211,32 @@ completed slice history remains below.
 - Latest completed ABC fixture expansion slice: `roundtrip_sample6_m1_m2.musicxml` was copied from upstream fixtures into Java test resources and added to the existing MusicXML -> ABC -> MusicXML golden invariant loop.
 - Latest ABC focused verification after sample6 fixture expansion slice: `mvn test -Dtest=AbcIoTest` passed with 90 tests / 0 failures / 0 errors.
 - Latest full verification after sample6 fixture expansion slice: `mvn test` passed with 638 tests / 0 failures / 0 errors.
-- Suggested next step: add one more small ABC fixture, or move to MEI, MuseScore, or another upstream format spec in small pieces. If returning to MIDI tests, first check only for new upstream additions and avoid duplicate regressions.
+- Latest completed ABC grouped-staff multi-measure regression slice: public `musicXmlFromAbc` coverage now locks `%%score (1 2)` alignment across multiple measures, including per-measure backup duration and staff-number sequence.
+- Latest ABC focused verification after grouped-staff multi-measure slice: `mvn test -Dtest=AbcIoTest` passed with 121 tests / 0 failures / 0 errors.
+- Latest full verification after grouped-staff multi-measure slice: `mvn test` passed with 696 tests / 0 failures / 0 errors.
+- Latest completed ABC grouped-staff repeat / ending regression slice: public `musicXmlFromAbc` coverage now locks forward / backward repeat and first / second ending marker restoration on grouped `%%score` multi-staff import.
+- Latest ABC focused verification after grouped-staff repeat / ending slice: `mvn test -Dtest=AbcIoTest` passed with 122 tests / 0 failures / 0 errors.
+- Latest full verification after grouped-staff repeat / ending slice: `mvn test` passed with 697 tests / 0 failures / 0 errors.
+- Latest completed ABC grouped-staff lyric regression slice: public `musicXmlFromAbc` coverage now locks `w:` lyric attachment to notes on grouped `%%score` staves.
+- Latest ABC focused verification after grouped-staff lyric slice: `mvn test -Dtest=AbcIoTest` passed with 123 tests / 0 failures / 0 errors.
+- Latest full verification after grouped-staff lyric slice: `mvn test` passed with 698 tests / 0 failures / 0 errors.
+- Latest completed ABC grouped-staff attribute-boundary regression slice: public `musicXmlFromAbc` coverage now locks grouped `%%score` key / meter / tempo changes at a measure boundary.
+- Latest completed ABC grouped-score layout slice: `%%score` layout parsing now handles multiple grouped blocks and mixed grouped / ungrouped ordering, matching the upstream `parseAbcScoreLayout` shape for those cases.
+- Latest ABC focused verification after grouped-score layout slice: `mvn test -Dtest=AbcIoTest` passed with 126 tests / 0 failures / 0 errors.
+- Latest full verification after grouped-score layout slice: `mvn test` passed with 701 tests / 0 failures / 0 errors.
+- Latest completed ABC grouped-score layout edge slice: public `musicXmlFromAbc` coverage now locks repeated-id de-duplication and malformed-id fallback order for `%%score`.
+- Latest ABC focused verification after grouped-score layout edge slice: `mvn test -Dtest=AbcIoTest` passed with 128 tests / 0 failures / 0 errors.
+- Latest full verification after grouped-score layout edge slice: `mvn test` passed with 703 tests / 0 failures / 0 errors.
+- Latest completed ABC accidental annotation regression slice: public `musicXmlFromAbc` coverage now locks `!editorial!` and `!courtesy!` handoff to explicit MusicXML accidental attributes.
+- Latest ABC focused verification after accidental annotation slice: `mvn test -Dtest=AbcIoTest` passed with 130 tests / 0 failures / 0 errors.
+- Latest full verification after accidental annotation slice: `mvn test` passed with 705 tests / 0 failures / 0 errors.
+- Latest completed ABC user-defined decoration regression slice: public `musicXmlFromAbc` coverage now locks `U:` punctuation, non-note-letter, `+...+` wrapper, and malformed syntax behavior.
+- Latest ABC focused verification after user-defined decoration slice: `mvn test -Dtest=AbcIoTest` passed with 134 tests / 0 failures / 0 errors.
+- Latest full verification after user-defined decoration slice: `mvn test` passed with 709 tests / 0 failures / 0 errors.
+- Latest completed ABC unsupported body warning regression slice: public `musicXmlFromAbc` coverage now locks unsupported inline / standalone field, abcjs wrapper, unsupported directive, stray continuation, unsupported word token, and same-line `K:` compatibility behavior.
+- Latest ABC focused verification after unsupported body warning slice: `mvn test -Dtest=AbcIoTest` passed with 143 tests / 0 failures / 0 errors.
+- Latest full verification after unsupported body warning slice: `mvn test` passed with 718 tests / 0 failures / 0 errors.
+- Suggested next step: continue the next upstream `abc-io.spec.ts` unsupported octave range regression, add one more small ABC fixture, or move to MEI, MuseScore, or another upstream format spec in small pieces. If returning to MIDI tests, first check only for new upstream additions and avoid duplicate regressions.
 - Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 
 ### Highest Priority Format Work
@@ -236,6 +261,15 @@ completed slice history remains below.
   - latest natural key-signature regression locks A-major G-natural export as `=G`
   - latest per-part accidental regression locks target-part key usage for accidental emission
   - latest C-clef regression locks `clef=alto` / `clef=tenor` export and MusicXML C-clef restoration
+  - latest grouped-staff regression locks `%%score (1 2)` multi-measure staff alignment and per-measure backup duration
+  - latest grouped-staff repeat regression locks repeat / ending marker restoration on grouped multi-staff import
+  - latest grouped-staff lyric regression locks `w:` lyric attachment to notes on grouped multi-staff import
+  - latest grouped-staff attribute regression locks key / meter / tempo changes at a measure boundary
+  - latest grouped-score layout regression locks multiple grouped blocks and mixed grouped / ungrouped ordering
+  - latest grouped-score edge regression locks repeated-id de-duplication and malformed-id fallback order
+  - latest accidental annotation regression locks `!editorial!` / `!courtesy!` handoff to explicit accidental attributes
+  - latest user-defined decoration regression locks `U:` punctuation, non-note-letter, `+...+` wrapper, and malformed syntax behavior
+  - latest unsupported body warning regression locks unsupported field / directive / word-token diagnostics and same-line `K:` compatibility
   - latest fixture expansion adds `with_following_rest.musicxml` to Java ABC golden resources
   - latest fixture expansion adds `with_rest_tail.musicxml` to Java ABC golden resources
   - latest fixture expansion adds `full_with_half.musicxml` to Java ABC golden resources
