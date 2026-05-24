@@ -629,6 +629,62 @@
   - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML maps %%score grouped voices into one multi-staff part`
   - 期待値: `%%score (1 2)` は 2 voice を 1 part / 2 staves として出力し、part-name は `Upper / Lower`、staff は 1 / 2、backup duration は 3840、diagnostic は出ない
   - 実装方針: 既存 grouped-staff render helper を `musicXmlFromAbc` public import path に接続し、focused `AbcIoTest` で固定する
+- [x] 2026-05-24 再開 slice: upstream `tests/unit/abc-io.spec.ts` の `%%score` grouped voices multi-measure alignment regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML keeps %%score grouped voices aligned across multiple measures`
+  - 期待値: `%%score (1 2)` の 2 measure input が 1 part / 2 measures として出力され、各 measure の staff sequence と backup duration が維持され、diagnostic は出ない
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-24 再開 slice: upstream `tests/unit/abc-io.spec.ts` の grouped `%%score` repeat / ending marker regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML restores repeat and ending markers on grouped %%score import`
+  - 期待値: grouped `%%score` import でも forward / backward repeat と first / second ending marker が 1 part / multi-staff output の measure barline に復元され、diagnostic は出ない
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-24 再開 slice: upstream `tests/unit/abc-io.spec.ts` の grouped `%%score` lyric staff attachment regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML keeps lyrics attached to their grouped %%score staves`
+  - 期待値: grouped `%%score` import で `w:` lyrics が staff 1 / staff 2 の各 note に対応順で付与され、diagnostic は出ない
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の grouped `%%score` key / meter / tempo boundary regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML keeps grouped %%score key, meter, and tempo changes at measure boundary`
+  - 期待値: grouped `%%score` import の measure 2 で `K:` / `M:` / `Q:` inline field change が key fifths 1、3/4、tempo 132、backup duration 2880 として復元され、diagnostic は出ない
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の multiple grouped `%%score` blocks regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML maps multiple %%score grouped blocks into multiple multi-staff parts`
+  - 期待値: `%%score (1 2) (3 4)` が `Upper A / Lower A` と `Upper B / Lower B` の 2 multi-staff parts として出力され、各 part は staves 2 と backup 1 件を持ち、diagnostic は出ない
+  - 実装方針: `%%score` parser を upstream `parseAbcScoreLayout` 相当に寄せ、複数 group と fallback voice ordering を扱う
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の mixed grouped / ungrouped `%%score` ordering regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML preserves mixed grouped and ungrouped %%score ordering`
+  - 期待値: `%%score (1 2) 3` が grouped `Upper / Lower` multi-staff part と ungrouped `Solo` part の順に出力され、solo part は staves / backup を持たず、diagnostic は出ない
+  - 実装方針: multiple grouped `%%score` blocks と同じ layout parser 更新で固定する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の repeated `%%score` ids de-duplication regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML de-duplicates repeated ids inside %%score groups`
+  - 期待値: `%%score (1 1 2) 2` が重複 voice id を除去して `Upper / Lower` の 1 multi-staff part として出力され、staff sequence と backup 1 件が維持され、diagnostic は出ない
+  - 実装方針: 既存の `%%score` layout parser 更新による regression coverage として固定する。追加 production 変更なし
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の malformed `%%score` ids fallback regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML ignores malformed %%score ids and appends declared voices in fallback order`
+  - 期待値: `%%score (!)` の malformed id は無視され、declared voice の `Upper` / `Lower` が fallback order の通常 2 part として出力され、staves / backup は持たず、diagnostic は出ない
+  - 実装方針: 既存の `%%score` layout parser 更新による regression coverage として固定する。追加 production 変更なし
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の explicit accidental annotation regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML applies !editorial! to the next explicit accidental`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML applies !courtesy! to the next explicit accidental`
+  - 期待値: `!editorial!^C` は `<accidental editorial="yes">sharp</accidental>`、`!courtesy!=F` は `<accidental cautionary="yes">natural</accidental>` として出力され、反対側の属性は付かない
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の `U:` user-defined decoration regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports U: user-defined decoration symbols with punctuation`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports U: user-defined decoration symbols with letters outside note names`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML supports U: user-defined decoration symbols declared with +...+ wrappers`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML ignores malformed U: user-defined symbol syntax and continues`
+  - 期待値: `U:~=!trill!` / `U:H=!fermata!` / `U:Z=+accent+` が次 note の MusicXML notation に反映され、malformed `U:~` は無視して note sequence を維持し、diagnostic は出ない
+  - 実装方針: 既存 `musicXmlFromAbc` public facade の regression coverage として固定する。既存実装で通過したため production 変更なし
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の unsupported body field / token warning regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML skips unsupported inline body fields with warning instead of failing`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML skips abcjs wrapper lines with warning instead of failing`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML warns on unsupported standalone body fields instead of treating them as header metadata`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts same-line standalone body K: tokens as inline-field compatibility`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML warns on unsupported same-line standalone body field tokens`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML warns on unsupported ABC directives instead of silently ignoring them`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML warns on stray body continuation markers instead of failing note parsing`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML warns on unsupported body word tokens instead of failing note parsing`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML warns on lower-case unsupported body word leftovers instead of failing note parsing`
+  - 期待値: unsupported inline / standalone field、abcjs wrapper、unsupported directive、stray continuation、unsupported word token は parse を継続しつつ `ABC_IMPORT_WARNING` diagnostic を出し、same-line `K:` token は inline field compatibility として扱う
+  - 実装方針: 既存 warning path に public regression coverage を追加し、stray body continuation marker だけは upstream と合わせて warning を追加する
 - [x] 2026-05-14 再開 slice: upstream `tests/fixtures/with_following_rest.musicxml` の ABC golden fixture expansion
   - upstream 位置: `workplace/mikuscore/tests/fixtures/with_following_rest.musicxml`
   - 期待値: note / note / rest / note を含む 1 measure fixture が MusicXML -> ABC -> MusicXML roundtrip invariant を満たし、note/rest/pitch count、meter、duration sum、overfull 不在を維持する
@@ -716,17 +772,17 @@
     - `rg -n "TODO|pending|it\\(" workplace/mikuscore/tests/unit/abc-io.spec.ts`
     - `mvn test -Dtest=AbcIoTest`
     - 最後に `mvn test`
-- [x] 2026-05-15 再開ポイント更新
+- [x] 2026-05-24 再開ポイント更新
   - skill: `igapyon-miku-soft-developer`
   - 方針: upstream Node/TypeScript 版 `https://github.com/igapyon/mikuscore` の straight conversion を Java 1.8 / Maven へ小さい slice 単位で継続
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/abc/AbcIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/abc/AbcIoTest.java`
   - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
-  - 最新完了 slice: upstream `tests/unit/abc-io.spec.ts` の `%%score` grouped voices multi-staff import regression
-  - 最新 focused 検証: `mvn test -Dtest=AbcIoTest` 成功、120 tests / 0 failures / 0 errors
-  - 最新 full 検証: `mvn test` 成功、695 tests / 0 failures / 0 errors
+  - 最新完了 slice: upstream `tests/unit/abc-io.spec.ts` の unsupported body field / token warning regression
+  - 最新 focused 検証: `mvn test -Dtest=AbcIoTest` 成功、143 tests / 0 failures / 0 errors
+  - 最新 full 検証: `mvn test` 成功、718 tests / 0 failures / 0 errors
   - 最新 diff 検証: `git diff --check` 問題なし
-  - 次回第一候補: upstream `tests/unit/abc-io.spec.ts` の次セクション `ABC->MusicXML keeps %%score grouped voices aligned across multiple measures` を Java public regression として小さく確認する
+  - 次回第一候補: upstream `tests/unit/abc-io.spec.ts` の次セクション `ABC->MusicXML warns on unsupported octave range in a single note instead of failing the parse` を Java public regression として小さく確認する
 - [x] 2026-05-11 終了時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/midi/MidiIoTest.java`
