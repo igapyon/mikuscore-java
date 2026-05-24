@@ -1397,9 +1397,10 @@ public final class AbcIo {
                 || "stop".equals(tremoloTypeRaw) ? tremoloTypeRaw : "";
         int tremoloMarks = Math.max(1, Math.min(8, parseInt(elementText(tremoloNode), 0)));
         String trillAccidentalText = directChildText(ornaments, "accidental-mark").trim();
-        return new AbcMusicXmlNoteOrnaments(hasTrill, hasWavyLineStart, hasWavyLineStop, trillAccidentalText, turnType,
-                hasTurnSlash, hasDelayedTurn, mordentType, tremoloType, Integer.valueOf(tremoloMarks), hasGlissandoStart,
-                hasGlissandoStop, hasSlideStart, hasSlideStop, hasSchleifer, hasShake, hasArpeggiate);
+        return new AbcMusicXmlNoteOrnaments(hasTrill, hasTrillMark, hasWavyLineStart, hasWavyLineStop,
+                trillAccidentalText, turnType, hasTurnSlash, hasDelayedTurn, mordentType, tremoloType,
+                Integer.valueOf(tremoloMarks), hasGlissandoStart, hasGlissandoStop, hasSlideStart, hasSlideStop,
+                hasSchleifer, hasShake, hasArpeggiate);
     }
 
     public static AbcMusicXmlPitchToken resolveMusicXmlNotePitchToken(Element note, Map<String, Integer> keyAlterByStep,
@@ -1457,7 +1458,7 @@ public final class AbcIo {
             return "";
         }
         String trillPrefix = ornaments.isWavyLineStop() ? "!trill)!"
-                : (ornaments.isTrill() && ornaments.isWavyLineStart()
+                : (ornaments.hasTrillMark() && ornaments.isWavyLineStart()
                         ? "!trill(!"
                         : (ornaments.isTrill() ? "!trill!" : ""));
         String turnPrefix;
@@ -2554,6 +2555,10 @@ public final class AbcIo {
         return buildMusicXmlFromAbcParsed(parseForMusicXml(source, options), source, options);
     }
 
+    private static boolean isUnsupportedBodyPunctuation(char ch) {
+        return ";`?@#$*".indexOf(ch) >= 0;
+    }
+
     public static String musicXmlToAbc(String source) {
         Element root = parseMusicXmlRootElement(source);
         if (root == null) {
@@ -3060,6 +3065,9 @@ public final class AbcIo {
         List<String> pendingChordSymbols = new ArrayList<String>();
         List<String> pendingAnnotations = new ArrayList<String>();
         List<Integer> lastEventNoteIndices = new ArrayList<Integer>();
+        String pendingBeamMode = "";
+        int lastPlayableEndIdx = -1;
+        boolean beamRunHasAdjacentNotes = false;
         while (idx < text.length()) {
             char ch = text.charAt(idx);
             if (ch == '\\') {
@@ -3068,6 +3076,10 @@ public final class AbcIo {
                 continue;
             }
             if (ch == ' ' || ch == '\t' || ch == ',' || ch == '\'') {
+                if (beamRunHasAdjacentNotes && (ch == ' ' || ch == '\t')) {
+                    pendingBeamMode = "begin";
+                    beamRunHasAdjacentNotes = false;
+                }
                 idx++;
                 continue;
             }
@@ -3088,6 +3100,11 @@ public final class AbcIo {
             }
             AbcParser.AbcParsedBodyEntry bodyEntry = AbcParser.parseAbcBodyEntryAt(text, idx);
             if (bodyEntry == null) {
+                if (isUnsupportedBodyPunctuation(ch)) {
+                    warnings.add("line " + lineNo + ": Skipped unsupported body punctuation: " + ch);
+                    idx++;
+                    continue;
+                }
                 throw new IllegalArgumentException("line " + lineNo + ": Failed to parse note/rest: "
                         + text.substring(idx, Math.min(text.length(), idx + 12)));
             }
@@ -3114,6 +3131,9 @@ public final class AbcIo {
                     measures.add(currentMeasure);
                     measureAccidentals.clear();
                     eventNo = 0;
+                    pendingBeamMode = "";
+                    lastPlayableEndIdx = -1;
+                    beamRunHasAdjacentNotes = false;
                 }
                 if (bareRepeatEndingMarker != null) {
                     int nextMeasureNo = Math.max(1, measures.size());
@@ -3294,9 +3314,21 @@ public final class AbcIo {
                             }
                         }
                         int duration = durationInDivisions(absoluteLength, 960);
+                        if (duration <= 0) {
+                            warnings.add("line " + lineNo + ": Skipped "
+                                    + invalidPlayableLengthKind(playableEvent) + " with invalid length.");
+                            idx = playableEvent.getNextIdx();
+                            continue;
+                        }
+                        boolean adjacentToPreviousPlayable = idx == lastPlayableEndIdx;
                         List<AbcMeasureNote> notes = buildAbcPlayableNotes(playableEvent, voiceId, absoluteLength,
                                 duration, lineNo, activeKeySignatureAccidentals, measureAccidentals, tupletEvent,
-                                pendingDecoration);
+                                pendingDecoration, pendingBeamMode, warnings);
+                        pendingBeamMode = "";
+                        if (notes.isEmpty()) {
+                            idx = playableEvent.getNextIdx();
+                            continue;
+                        }
                         applyAbcPendingQuotedStringsToEvent(notes, pendingChordSymbols, pendingAnnotations);
                         eventNo++;
                         applyAbcTrillHintToEvent(notes, trillWidthHintByKey, voiceId, measures.size(), eventNo);
@@ -3313,6 +3345,10 @@ public final class AbcIo {
                         currentMeasure.addAll(notes);
                         lastEventNoteIndices = eventNoteIndices(eventStartIndex, notes.size());
                         noteCount += notes.size();
+                        if (adjacentToPreviousPlayable) {
+                            beamRunHasAdjacentNotes = true;
+                        }
+                        lastPlayableEndIdx = playableEvent.getNextIdx();
                         idx = playableEvent.getNextIdx();
                         continue;
                     }
@@ -3320,9 +3356,20 @@ public final class AbcIo {
                 idx++;
                 continue;
             }
+            if (isUnsupportedBodyPunctuation(ch)) {
+                warnings.add("line " + lineNo + ": Skipped unsupported body punctuation: " + ch);
+                idx++;
+                continue;
+            }
             if ("playable-event".equals(bodyEntry.getKind())) {
                 AbcParser.AbcParsedPlayableEvent playableEvent = bodyEntry.getPlayableEvent();
                 if (!"playable".equals(playableEvent.getKind())) {
+                    if ("malformed-accidental".equals(playableEvent.getKind())) {
+                        warnings.add("line " + lineNo + ": Skipped malformed accidental token: "
+                                + playableEvent.getAccidentalText());
+                        idx = Math.max(idx + 1, playableEvent.getNextIdx());
+                        continue;
+                    }
                     warnings.add("line " + lineNo + ": Skipped malformed playable token.");
                     idx = Math.max(idx + 1, playableEvent.getNextIdx());
                     continue;
@@ -3349,13 +3396,20 @@ public final class AbcIo {
                 }
                 int duration = durationInDivisions(absoluteLength, 960);
                 if (duration <= 0) {
-                    warnings.add("line " + lineNo + ": Skipped note with invalid length.");
+                    warnings.add("line " + lineNo + ": Skipped "
+                            + invalidPlayableLengthKind(playableEvent) + " with invalid length.");
                     idx = playableEvent.getNextIdx();
                     continue;
                 }
+                boolean adjacentToPreviousPlayable = idx == lastPlayableEndIdx;
                 List<AbcMeasureNote> notes = buildAbcPlayableNotes(playableEvent, voiceId, absoluteLength,
                         duration, lineNo, activeKeySignatureAccidentals, measureAccidentals, tupletEvent,
-                        pendingDecoration);
+                        pendingDecoration, pendingBeamMode, warnings);
+                pendingBeamMode = "";
+                if (notes.isEmpty()) {
+                    idx = playableEvent.getNextIdx();
+                    continue;
+                }
                 applyAbcPendingQuotedStringsToEvent(notes, pendingChordSymbols, pendingAnnotations);
                 eventNo++;
                 applyAbcTrillHintToEvent(notes, trillWidthHintByKey, voiceId, measures.size(), eventNo);
@@ -3372,6 +3426,10 @@ public final class AbcIo {
                 currentMeasure.addAll(notes);
                 lastEventNoteIndices = eventNoteIndices(eventStartIndex, notes.size());
                 noteCount += notes.size();
+                if (adjacentToPreviousPlayable) {
+                    beamRunHasAdjacentNotes = true;
+                }
+                lastPlayableEndIdx = playableEvent.getNextIdx();
                 idx = playableEvent.getNextIdx();
                 continue;
             }
@@ -3697,17 +3755,31 @@ public final class AbcIo {
     private static List<AbcMeasureNote> buildAbcPlayableNotes(AbcParser.AbcParsedPlayableEvent playableEvent,
             String voiceId, Fraction absoluteLength, int duration, int lineNo,
             Map<String, Integer> keySignatureAccidentals, Map<String, Integer> measureAccidentals,
-            AbcTupletEvent tupletEvent, AbcPendingBodyDecorationState pendingDecoration) {
+            AbcTupletEvent tupletEvent, AbcPendingBodyDecorationState pendingDecoration, String beamMode,
+            List<String> warnings) {
         List<AbcMeasureNote> notes = new ArrayList<AbcMeasureNote>();
         List<AbcParser.AbcParsedPitchSource> pitchSources = playableEvent.getPitchSources();
         for (int index = 0; index < pitchSources.size(); index++) {
             AbcParser.AbcParsedPitchSource pitchSource = pitchSources.get(index);
-            notes.add(buildAbcNoteData(voiceId, pitchSource.getPitchChar(), pitchSource.getAccidentalText(),
-                    pitchSource.getOctaveShift(), absoluteLength, duration, lineNo, keySignatureAccidentals,
-                    measureAccidentals, index > 0, index == 0 ? tupletEvent : null,
-                    index == 0 ? pendingDecoration : null));
+            try {
+                notes.add(buildAbcNoteData(voiceId, pitchSource.getPitchChar(), pitchSource.getAccidentalText(),
+                        pitchSource.getOctaveShift(), absoluteLength, duration, lineNo, keySignatureAccidentals,
+                        measureAccidentals, index > 0, index == 0 ? tupletEvent : null,
+                        index == 0 ? pendingDecoration : null, index == 0 ? beamMode : ""));
+            } catch (IllegalArgumentException ex) {
+                if (ex.getMessage() != null && ex.getMessage().matches("(?i).*Octave out of range.*")) {
+                    String kind = pitchSources.size() > 1 ? "chord note" : "note";
+                    warnings.add("line " + lineNo + ": Skipped " + kind + " with unsupported octave range.");
+                    return new ArrayList<AbcMeasureNote>();
+                }
+                throw ex;
+            }
         }
         return notes;
+    }
+
+    private static String invalidPlayableLengthKind(AbcParser.AbcParsedPlayableEvent playableEvent) {
+        return playableEvent != null && playableEvent.getPitchSources().size() > 1 ? "chord" : "note";
     }
 
     private static AbcMeasureNote buildAbcGraceNoteData(String voiceId, String pitchChar, String accidental,
@@ -3715,7 +3787,7 @@ public final class AbcIo {
             Map<String, Integer> keySignatureAccidentals, Map<String, Integer> measureAccidentals,
             boolean graceSlash) {
         AbcMeasureNote note = buildAbcNoteData(voiceId, pitchChar, accidental, octaveShift, absoluteLength, duration,
-                lineNo, keySignatureAccidentals, measureAccidentals, false, null, null);
+                lineNo, keySignatureAccidentals, measureAccidentals, false, null, null, "");
         return new AbcMeasureNote(note.getVoice(), note.getDuration(), false, true, note.isRest(), note.getStep(),
                 note.getOctave(), note.getAlter(), note.getType(), note.getStaff(), note.getAccidentalText(),
                 note.isAccidentalEditorial(), note.isAccidentalCautionary(), note.isTieStart(), note.isTieStop(),
@@ -3725,7 +3797,7 @@ public final class AbcIo {
     private static AbcMeasureNote buildAbcNoteData(String voiceId, String pitchChar, String accidental,
             String octaveShift, Fraction absoluteLength, int duration, int lineNo,
             Map<String, Integer> keySignatureAccidentals, Map<String, Integer> measureAccidentals, boolean chord,
-            AbcTupletEvent tupletEvent, AbcPendingBodyDecorationState pendingDecoration) {
+            AbcTupletEvent tupletEvent, AbcPendingBodyDecorationState pendingDecoration, String beamMode) {
         String pitch = trimToEmpty(pitchChar);
         boolean rest = pitch.matches("[zZxX]");
         String type = typeFromFraction(absoluteLength);
@@ -3791,8 +3863,8 @@ public final class AbcIo {
         return new AbcMeasureNote(voiceId, duration, chord, false, false, step, Integer.valueOf(octave), alter,
                 type, null, accidentalText,
                 appliedDecoration.isEditorialAccidental() && accidentalText.length() > 0,
-                appliedDecoration.isCourtesyAccidental() && accidentalText.length() > 0, false, false, false, "",
-                "", "single", false,
+                appliedDecoration.isCourtesyAccidental() && accidentalText.length() > 0, false, false, false,
+                trimToEmpty(beamMode), "", "single", false,
                 timeModificationActual, timeModificationNormal, new ArrayList<String>(), appliedDecoration.isSegno(),
                 appliedDecoration.isCoda(), appliedDecoration.getRehearsalMark(), appliedDecoration.isFine(),
                 appliedDecoration.isDaCapo(), appliedDecoration.isDalSegno(), appliedDecoration.isToCoda(),
@@ -9255,6 +9327,7 @@ public final class AbcIo {
 
     public static final class AbcMusicXmlNoteOrnaments {
         private final boolean trill;
+        private final boolean trillMark;
         private final boolean wavyLineStart;
         private final boolean wavyLineStop;
         private final String trillAccidentalText;
@@ -9272,11 +9345,13 @@ public final class AbcIo {
         private final boolean shake;
         private final boolean arpeggiate;
 
-        public AbcMusicXmlNoteOrnaments(boolean trill, boolean wavyLineStart, boolean wavyLineStop,
+        public AbcMusicXmlNoteOrnaments(boolean trill, boolean trillMark, boolean wavyLineStart, boolean wavyLineStop,
                 String trillAccidentalText, String turnType, boolean turnSlash, boolean delayedTurn,
-                String mordentType, String tremoloType, Integer tremoloMarks, boolean glissandoStart, boolean glissandoStop, boolean slideStart,
-                boolean slideStop, boolean schleifer, boolean shake, boolean arpeggiate) {
+                String mordentType, String tremoloType, Integer tremoloMarks, boolean glissandoStart,
+                boolean glissandoStop, boolean slideStart, boolean slideStop, boolean schleifer, boolean shake,
+                boolean arpeggiate) {
             this.trill = trill;
+            this.trillMark = trillMark;
             this.wavyLineStart = wavyLineStart;
             this.wavyLineStop = wavyLineStop;
             this.trillAccidentalText = trimToEmpty(trillAccidentalText);
@@ -9297,6 +9372,10 @@ public final class AbcIo {
 
         public boolean isTrill() {
             return trill;
+        }
+
+        public boolean hasTrillMark() {
+            return trillMark;
         }
 
         public boolean isWavyLineStart() {
