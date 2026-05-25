@@ -783,6 +783,589 @@
   - 最新 full 検証: `mvn test` 成功、718 tests / 0 failures / 0 errors
   - 最新 diff 検証: `git diff --check` 問題なし
   - 次回第一候補: upstream `tests/unit/abc-io.spec.ts` の次セクション `ABC->MusicXML warns on unsupported octave range in a single note instead of failing the parse` を Java public regression として小さく確認する
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の fz / common / extreme dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses fz decoration as dynamics direction`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses common dynamic decorations as dynamics directions`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses pppp and ffff decorations as dynamics directions`
+  - Java 側: 既存 dynamics 実装に対して upstream-shaped focused public tests を追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、304 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、879 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の mordent alias focused import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !lowermordent! as mordent alias`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !uppermordent! as inverted-mordent alias`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !pralltrill! as inverted-mordent alias`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !invertedmordent! as inverted-mordent alias`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !inverted-mordent! as inverted-mordent alias`
+  - Java 側: 既存 mordent alias 実装に対して upstream-shaped focused public tests を追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、309 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、884 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の stopped alias focused import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses stopped decoration`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML treats !plus! as stopped decoration alias`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !stopped horn! as stopped alias`
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !stopped-horn! as stopped alias`
+  - Java 側: 既存 stopped alias 実装に対して upstream-shaped focused public tests を追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、313 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、888 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の slur notation import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses slur notation`
+  - Java 側: basic `(c2 d2)` slur start / stop restoration を public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、314 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、889 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の slur-stop warning diagnostic regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML warns when slur stop has no preceding non-rest note`
+  - Java 側: slur stop after rest の `mks:diag:count` / `mks:diag:0001` warning fields を public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、315 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、890 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の chord tie focused import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML applies chord ties to all notes in the chord`
+  - Java 側: `[CE]-[CE]` の first chord / second chord それぞれの note に `tie` / `tied` start-stop が付くことを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、316 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、891 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC trill plus grace export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports trill decoration and grace notes`
+  - Java 側: MusicXML grace note と principal `trill-mark` が ABC へ同時に export され、roundtrip で `grace` / `trill-mark` を復元し、long-trill `wavy-line` を作らないことを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、317 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、892 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC trill without grace export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports trill decoration without grace notes and roundtrips it`
+  - Java 側: MusicXML principal `trill-mark` が grace note なしで ABC `!trill!` へ export され、roundtrip で `trill-mark` を復元し、`grace` / long-trill `wavy-line` を作らないことを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、318 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、893 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC turn export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports turn and roundtrips it`
+  - Java 側: MusicXML principal `turn` ornament が ABC `!turn!` へ export され、roundtrip で MusicXML `turn` ornament を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、319 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、894 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC inverted-turn export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports inverted-turn and roundtrips it`
+  - Java 側: MusicXML principal `inverted-turn` ornament が ABC `!invertedturn!` へ export され、roundtrip で MusicXML `inverted-turn` ornament を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、320 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、895 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC turnx variants export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports turnx and invertedturnx variants and roundtrips them`
+  - Java 側: MusicXML `turn slash="yes"` / `inverted-turn slash="yes"` が ABC `!turnx!` / `!invertedturnx!` へ export され、roundtrip で slash 属性付き turn-family ornament を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、321 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、896 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC delayed turn variants export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports delayed turn variants and roundtrips them`
+  - Java 側: MusicXML `turn` / `inverted-turn` と `delayed-turn` の組み合わせが ABC `!delayedturn!` / `!delayedinvertedturn!` へ export され、roundtrip で turn-family ornament と `delayed-turn` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、322 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、897 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC delayed turn export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports delayed turn and roundtrips it`
+  - Java 側: MusicXML `turn` + `delayed-turn` が ABC `!delayedturn!` へ export され、roundtrip で `turn` と `delayed-turn` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、323 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、898 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC delayed inverted-turn export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports delayed inverted-turn and roundtrips it`
+  - Java 側: MusicXML `inverted-turn` + `delayed-turn` が ABC `!delayedinvertedturn!` へ export され、roundtrip で `inverted-turn` と `delayed-turn` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、324 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、899 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC tremolo export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports tremolo as mikuscore decorations and roundtrips it`
+  - Java 側: MusicXML `tremolo` single / start / stop が ABC `!tremolo-single-3!` / `!tremolo-start-2!` / `!tremolo-stop-2!` へ export され、roundtrip で type と marks を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、325 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、900 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single tremolo export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports single tremolo and roundtrips it`
+  - Java 側: MusicXML `tremolo type="single"` が ABC `!tremolo-single-3!` へ export され、roundtrip で type `single` と marks `3` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、326 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、901 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC tremolo start export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports tremolo start and roundtrips it`
+  - Java 側: MusicXML `tremolo type="start"` が ABC `!tremolo-start-2!` へ export され、roundtrip で type `start` と marks `2` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、327 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、902 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC tremolo stop export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports tremolo stop and roundtrips it`
+  - Java 側: MusicXML `tremolo type="stop"` が ABC `!tremolo-stop-2!` へ export され、roundtrip で type `stop` と marks `2` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、328 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、903 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC glissando / slide export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports glissando/slide as mikuscore decorations and roundtrips them`
+  - Java 側: MusicXML `glissando` / `slide` start-stop が ABC `!gliss-start!` / `!gliss-stop!` / `!slide!` / `!slide-stop!` へ export され、roundtrip で start-stop notation type を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、329 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、904 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC glissando start export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports glissando start and roundtrips it`
+  - Java 側: MusicXML `glissando type="start"` が ABC `!gliss-start!` へ export され、roundtrip で type `start` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、330 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、905 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC glissando stop export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports glissando stop and roundtrips it`
+  - Java 側: MusicXML `glissando type="stop"` が ABC `!gliss-stop!` へ export され、roundtrip で type `stop` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、331 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、906 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC slide start export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports slide start and roundtrips it`
+  - Java 側: MusicXML `slide type="start"` が ABC `!slide!` へ export され、roundtrip で type `start` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、332 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、907 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC slide stop export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports slide stop and roundtrips it`
+  - Java 側: MusicXML `slide type="stop"` が ABC `!slide-stop!` へ export され、roundtrip で type `stop` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、333 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、908 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC long trill export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports long trill start and stop decorations`
+  - Java 側: MusicXML `trill-mark` + `wavy-line type="start"` / `wavy-line type="stop"` が ABC `!trill(!` / `!trill)!` へ export され、roundtrip で `trill-mark` と wavy-line start / stop を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、334 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、909 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC staccato export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports staccato decoration and roundtrips it`
+  - Java 側: MusicXML `staccato` articulation が ABC `!staccato!` へ export され、roundtrip で MusicXML `staccato` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、335 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、910 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC accent / tenuto / fermata export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports accent, tenuto, and fermata decorations and roundtrips them`
+  - Java 側: MusicXML `accent` / `tenuto` / normal `fermata` が ABC `!accent!` / `!tenuto!` / `!fermata!` へ export され、roundtrip で MusicXML notations を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、336 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、911 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC accent export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports accent decoration and roundtrips it`
+  - Java 側: MusicXML `accent` articulation が ABC `!accent!` へ export され、roundtrip で MusicXML `accent` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、337 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、912 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC tenuto export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports tenuto decoration and roundtrips it`
+  - Java 側: MusicXML `tenuto` articulation が ABC `!tenuto!` へ export され、roundtrip で MusicXML `tenuto` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、338 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、913 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC fermata export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports fermata decoration and roundtrips it`
+  - Java 側: MusicXML normal `fermata` が ABC `!fermata!` へ export され、roundtrip で MusicXML `fermata` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、339 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、914 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC stress / unstress export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports stress and unstress decorations and roundtrips them`
+  - Java 側: MusicXML `stress` / `unstress` articulations が ABC `!stress!` / `!unstress!` へ export され、roundtrip で MusicXML articulations を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、340 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、915 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC stress export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports stress decoration and roundtrips it`
+  - Java 側: MusicXML `stress` articulation が ABC `!stress!` へ export され、roundtrip で MusicXML `stress` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、341 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、916 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC unstress export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports unstress decoration and roundtrips it`
+  - Java 側: MusicXML `unstress` articulation が ABC `!unstress!` へ export され、roundtrip で MusicXML `unstress` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、342 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、917 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC inverted fermata export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports inverted fermata and roundtrips it`
+  - Java 側: MusicXML inverted `fermata` が ABC `!invertedfermata!` へ export され、roundtrip で MusicXML inverted `fermata` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、343 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、918 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC inverted fermata alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC inverted fermata alias !inverted fermata! roundtrips back to canonical !invertedfermata!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsInvertedFermataAliasToCanonicalInvertedFermata` が `!inverted fermata!` import と canonical `!invertedfermata!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、343 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、918 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC marcato / breath / caesura export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports marcato, breath, and caesura decorations and roundtrips them`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsStressMarcatoBreathAndCaesuraAndRoundtrips` が MusicXML `strong-accent` / `breath-mark` / `caesura` の canonical ABC export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、343 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、918 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC marcato export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports marcato decoration and roundtrips it`
+  - Java 側: MusicXML `strong-accent` articulation が ABC `!marcato!` へ export され、roundtrip で MusicXML `strong-accent` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、344 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、919 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC marcato `!strong accent!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC marcato alias !strong accent! roundtrips back to canonical !marcato!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsMarcatoAliasesToCanonicalMarcato` が `!strong accent!` import と canonical `!marcato!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、344 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、919 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC marcato `!strongaccent!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC marcato alias !strongaccent! roundtrips back to canonical !marcato!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsMarcatoAliasesToCanonicalMarcato` が `!strongaccent!` import と canonical `!marcato!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、344 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、919 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC marcato `!strong-accent!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC marcato alias !strong-accent! roundtrips back to canonical !marcato!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsMarcatoAliasesToCanonicalMarcato` が `!strong-accent!` import と canonical `!marcato!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、344 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、919 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC breath export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports breath decoration and roundtrips it`
+  - Java 側: MusicXML `breath-mark` articulation が ABC `!breath!` へ export され、roundtrip で MusicXML `breath-mark` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、345 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、920 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC breath-mark `!breathmark!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC breath-mark alias !breathmark! roundtrips back to canonical !breath!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsBreathAliasesToCanonicalBreath` が `!breathmark!` import と canonical `!breath!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、345 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、920 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC breath-mark `!breath mark!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC breath-mark alias !breath mark! roundtrips back to canonical !breath!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsBreathAliasesToCanonicalBreath` が `!breath mark!` import と canonical `!breath!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、345 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、920 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC breath-mark `!breath-mark!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC breath-mark alias !breath-mark! roundtrips back to canonical !breath!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsBreathAliasesToCanonicalBreath` が `!breath-mark!` import と canonical `!breath!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、345 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、920 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC caesura export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports caesura decoration and roundtrips it`
+  - Java 側: MusicXML `caesura` articulation が ABC `!caesura!` へ export され、roundtrip で MusicXML `caesura` を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、346 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、921 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC staccatissimo export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports staccatissimo as !wedge! and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsStaccatissimoAsWedgeAndRoundtrips` が MusicXML `staccatissimo` の canonical ABC `!wedge!` export、roundtrip 復元、かつ `staccato` 化しないことをすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、346 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、921 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC staccatissimo `!spiccato!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC staccatissimo alias !spiccato! roundtrips back to canonical !wedge!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsSpiccatoAliasToCanonicalWedge` が `!spiccato!` import、`staccato` 化しないこと、canonical `!wedge!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、346 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、921 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC wedge directions export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports wedge directions as ABC wedge decorations and roundtrips them`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsWedgeDirectionsAndRoundtrips` が MusicXML crescendo / stop / diminuendo / stop wedge directions の canonical ABC export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、346 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、921 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC pppp / ffff dynamics export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports pppp and ffff dynamics and roundtrips them`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsDynamicsAndRoundtrips` が MusicXML `pppp` / `ffff` dynamics の canonical ABC export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、346 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、921 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC crescendo wedge start export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports crescendo wedge start and roundtrips it`
+  - Java 側: MusicXML crescendo wedge start が ABC `!crescendo(!` へ export され、roundtrip で MusicXML crescendo wedge を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、347 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、922 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC wedge `!<(!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC wedge alias !<(! roundtrips back to canonical !crescendo(!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsWedgeAliasesToCanonicalDecorations` が `!<(!` import と canonical `!crescendo(!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、347 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、922 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC wedge stop export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports wedge stop and roundtrips it`
+  - Java 側: MusicXML wedge stop が ABC stop decoration へ export され、roundtrip で MusicXML wedge stop を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、348 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、923 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC diminuendo wedge start export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports diminuendo wedge start and roundtrips it`
+  - Java 側: MusicXML diminuendo wedge start が ABC `!diminuendo(!` へ export され、roundtrip で MusicXML diminuendo wedge を復元することを public focused test として追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC wedge `!>(!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC wedge alias !>(! roundtrips back to canonical !diminuendo(!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsWedgeAliasesToCanonicalDecorations` が `!>(!` import と canonical `!diminuendo(!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC wedge `!<)!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC wedge alias !<)! roundtrips back to canonical !crescendo)!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsWedgeAliasesToCanonicalDecorations` が `!<)!` import と canonical `!crescendo)!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC wedge `!>)!` alias canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC wedge alias !>)! roundtrips back to canonical !diminuendo)!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsWedgeAliasesToCanonicalDecorations` が `!>)!` import と canonical `!diminuendo)!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC up-bow / down-bow export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports up-bow/down-bow and roundtrips them`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `up-bow` / `down-bow` technical markings の canonical ABC export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single up-bow export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports up-bow and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `up-bow` technical notation の canonical `!upbow!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC bowing alias `!up bow!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC bowing alias !up bow! roundtrips back to canonical !upbow!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsBowingAliasesToCanonicalBowing` が `!up bow!` import と canonical `!upbow!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC bowing alias `!up-bow!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC bowing alias !up-bow! roundtrips back to canonical !upbow!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsBowingAliasesToCanonicalBowing` が `!up-bow!` import と canonical `!upbow!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC bowing alias `!down-bow!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC bowing alias !down-bow! roundtrips back to canonical !downbow!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsBowingAliasesToCanonicalBowing` が `!down-bow!` import と canonical `!downbow!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC bowing alias `!down bow!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC bowing alias !down bow! roundtrips back to canonical !downbow!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsBowingAliasesToCanonicalBowing` が `!down bow!` import と canonical `!downbow!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single down-bow export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports down-bow and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `down-bow` technical notation の canonical `!downbow!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC double-tongue / triple-tongue / heel / toe export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports double-tongue, triple-tongue, heel, and toe and roundtrips them`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `double-tongue` / `triple-tongue` / `heel` / `toe` technical markings の canonical ABC export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single double-tongue export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports double-tongue and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `double-tongue` technical notation の canonical `!doubletongue!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC tongue alias `!double tongue!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC tongue alias !double tongue! roundtrips back to canonical !doubletongue!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsTongueHeelAndToeAliasesToCanonicalDecorations` が `!double tongue!` import と canonical `!doubletongue!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC tongue alias `!double-tongue!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC tongue alias !double-tongue! roundtrips back to canonical !doubletongue!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsTongueHeelAndToeAliasesToCanonicalDecorations` が `!double-tongue!` import と canonical `!doubletongue!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC tongue alias `!triple tongue!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC tongue alias !triple tongue! roundtrips back to canonical !tripletongue!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsTongueHeelAndToeAliasesToCanonicalDecorations` が `!triple tongue!` import と canonical `!tripletongue!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC tongue alias `!triple-tongue!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC tongue alias !triple-tongue! roundtrips back to canonical !tripletongue!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsTongueHeelAndToeAliasesToCanonicalDecorations` が `!triple-tongue!` import と canonical `!tripletongue!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single triple-tongue export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports triple-tongue and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `triple-tongue` technical notation の canonical `!tripletongue!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single heel export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports heel and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `heel` technical notation の canonical `!heel!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC toe alias `!toe mark!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC toe alias !toe mark! roundtrips back to canonical !toe!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsTongueHeelAndToeAliasesToCanonicalDecorations` が `!toe mark!` import と canonical `!toe!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC heel alias `!heel mark!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC heel alias !heel mark! roundtrips back to canonical !heel!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsTongueHeelAndToeAliasesToCanonicalDecorations` が `!heel mark!` import と canonical `!heel!` export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single toe export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports toe and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `toe` technical notation の canonical `!toe!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC fingering / string export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports fingering and string as mikuscore decorations and roundtrips them`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsFingeringStringAndPluckDecorationsAndRoundtrips` を拡張し、MusicXML fingering `1` / `4` の standard digit decoration export と string `1` / `4` の `!string:*!` export、および roundtrip 復元を固定
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single fingering export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports a single fingering decoration and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsFingeringStringAndPluckDecorationsAndRoundtrips` が MusicXML `fingering` の standard digit decoration export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC digit fingering `0` / `5` export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports single-digit fingering 0-5 using standard decorations and roundtrips them`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsDigitFingeringsAsStandardDecorationsAndRoundtrips` が MusicXML fingering `0` / `5` の standard ABC `!0!` / `!5!` export、`!fingering:*!` 非使用、roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC string export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports string decorations and roundtrips them`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsFingeringStringAndPluckDecorationsAndRoundtrips` を拡張し、MusicXML string `3` の `!string:3!` export と roundtrip 復元を固定
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single string export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports a single string decoration and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsSingleStringDecorationAndRoundtrips` が MusicXML string `2` の `!string:2!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC pluck export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports pluck as mikuscore decorations and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsAllPluckDecorationsAndRoundtrips` が MusicXML pluck `p` / `i` / `m` / `a` の `!pluck:*!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single pluck export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports a single pluck decoration and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsAllPluckDecorationsAndRoundtrips` が MusicXML pluck `p` の `!pluck:p!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC open-string export regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports open-string and roundtrips it`
+  - Java 側: 既存 public focused test `musicXmlToAbcExportsOpenStringAndSnapPizzicatoAndRoundtrips` が MusicXML open-string の `!open!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ABC open-string alias `!openstring!` canonical regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC open-string alias !openstring! roundtrips back to canonical !open!`
+  - Java 側: 既存 public focused test `abcImportRoundtripsOpenStringAndSnapPizzicatoAliasesToCanonicalDecorations` が `!openstring!` import の MusicXML open-string 化と `!open!` canonical export をすでに固定していることを確認し、tracking docs に明示
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、349 tests / 0 failures / 0 errors
+  - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
+  - diff 検証: `git diff --check` 問題なし
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
 - [x] 2026-05-11 終了時点の再開ポイント
   - 作業中の主対象: `src/main/java/jp/igapyon/mikuscore/midi/MidiIo.java`
   - 対応テスト: `src/test/java/jp/igapyon/mikuscore/midi/MidiIoTest.java`
