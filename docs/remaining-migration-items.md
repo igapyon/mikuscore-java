@@ -402,6 +402,55 @@ completed slice history remains below.
 - Latest completed ABC major-sixth harmony export public regression slice: public `musicXmlToAbc` / `musicXmlFromAbc` coverage now locks a single MusicXML `major-sixth` harmony export as a quoted ABC chord symbol with roundtrip restoration.
 - Latest ABC focused verification after major-sixth harmony export slice: `mvn test -Dtest=AbcIoTest` passed with 252 tests / 0 failures / 0 errors.
 - Latest full verification after ABC major-sixth harmony export slice: `mvn test` passed with 827 tests / 0 failures / 0 errors.
+- Latest completed ABC standard digit fingering import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!0!` through `!5!` shorthand decorations as MusicXML `<fingering>` values.
+- Latest completed ABC harmonic import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!harmonic!` as MusicXML technical harmonic notation.
+- Latest completed ABC thumb-position import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!thumb!` as MusicXML technical thumb-position notation.
+- Latest completed ABC thumb-position compact alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!thumbpos!` as MusicXML technical thumb-position notation.
+- Latest completed ABC thumb-position spaced alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!thumb pos!` as MusicXML technical thumb-position notation.
+- Latest completed ABC thumb-position long spaced alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!thumb position!` as MusicXML technical thumb-position notation.
+- Latest completed ABC thumb-position compact long alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!thumbposition!` as MusicXML technical thumb-position notation.
+- Latest completed ABC thumb-position hyphen alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!thumb-position!` as MusicXML technical thumb-position notation.
+- Latest completed ABC mordent import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!mordent!` as MusicXML mordent ornament notation.
+- Latest completed ABC pralltriller import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!pralltriller!` as MusicXML inverted-mordent ornament notation.
+- Latest completed ABC roll arpeggiate import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!roll!` chord decoration as MusicXML arpeggiate notation.
+- Latest completed ABC arpeggio alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!arpeggio!` chord decoration as MusicXML arpeggiate notation.
+- Latest completed ABC arpeggiate alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!arpeggiate!` chord decoration as MusicXML arpeggiate notation.
+- Latest completed ABC schleifer import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!schleifer!` as MusicXML schleifer ornament notation.
+- Latest completed ABC shake import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!shake!` as MusicXML shake ornament notation.
+- Latest completed ABC segno import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!segno!` as a MusicXML segno direction.
+- Latest completed ABC coda import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!coda!` as a MusicXML coda direction.
+- Latest completed ABC fine import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!fine!` as a MusicXML sound direction with `fine="yes"`.
+- Latest completed ABC dacapo import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!dacapo!` as a MusicXML sound direction with `dacapo="yes"`.
+- Latest completed ABC da capo alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!da capo!` as a MusicXML sound direction with `dacapo="yes"`.
+- Latest completed ABC da-capo alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!da-capo!` as a MusicXML sound direction with `dacapo="yes"`.
+- Latest completed ABC D.C. alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!D.C.!` as a MusicXML sound direction with `dacapo="yes"`.
+- Latest completed ABC dalsegno import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!dalsegno!` as a MusicXML sound direction with `dalsegno="segno"`.
+- Latest completed ABC dal segno alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!dal segno!` as a MusicXML sound direction with `dalsegno="segno"`.
+- Latest completed ABC dal-segno alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!dal-segno!` as a MusicXML sound direction with `dalsegno="segno"`.
+- Latest completed ABC D.S. alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!D.S.!` as a MusicXML sound direction with `dalsegno="segno"`.
+- Latest completed ABC tocoda import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!tocoda!` as a MusicXML sound direction with `tocoda="coda"`.
+- Latest completed ABC to coda alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!to coda!` as a MusicXML sound direction with `tocoda="coda"`.
+- Latest completed ABC to-coda alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!to-coda!` as a MusicXML sound direction with `tocoda="coda"`.
+- Latest completed ABC dacoda import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!dacoda!` as MusicXML sound directions with `dacapo="yes"` and `tocoda="coda"`.
+- Latest completed ABC crescendo / diminuendo wedge import public regression slice: public `musicXmlFromAbc` coverage now locks ABC wedge start / stop decorations as MusicXML crescendo, diminuendo, and stop wedge directions.
+- Latest completed ABC cresc / dim / decresc wedge alias import public regression slice: public `musicXmlFromAbc` coverage now locks shorthand wedge aliases as MusicXML crescendo, diminuendo, and stop wedge directions.
+- Latest completed ABC symbolic wedge alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC symbolic wedge aliases as MusicXML crescendo, diminuendo, and stop wedge directions.
+- Latest completed ABC decrescendo wedge alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!decrescendo(!` / `!decrescendo)!` as MusicXML diminuendo and stop wedge directions.
+- Latest completed ABC decresc start wedge alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!decresc(!` as a MusicXML diminuendo wedge direction.
+- Latest completed ABC dim stop wedge alias import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!dim)!` as a MusicXML stop wedge direction.
+- Latest completed ABC sfz dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!sfz!` as a MusicXML `sfz` dynamics direction.
+- Latest completed ABC sf dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!sf!` as a MusicXML `sf` dynamics direction.
+- Latest completed ABC sfp dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!sfp!` as a MusicXML `sfp` dynamics direction.
+- Latest completed ABC rfz dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!rfz!` as a MusicXML `rfz` dynamics direction.
+- Latest completed ABC p dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!p!` as a MusicXML `p` dynamics direction.
+- Latest completed ABC pp dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!pp!` as a MusicXML `pp` dynamics direction.
+- Latest completed ABC ff dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!ff!` as a MusicXML `ff` dynamics direction.
+- Latest completed ABC f dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!f!` as a MusicXML `f` dynamics direction.
+- Latest completed ABC fff dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!fff!` as a MusicXML `fff` dynamics direction.
+- Latest completed ABC fp dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!fp!` as a MusicXML `fp` dynamics direction.
+- Latest completed ABC ppp dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!ppp!` as a MusicXML `ppp` dynamics direction.
+- Latest completed ABC mp dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!mp!` as a MusicXML `mp` dynamics direction.
+- Latest completed ABC mf dynamics import public regression slice: public `musicXmlFromAbc` coverage now locks ABC `!mf!` as a MusicXML `mf` dynamics direction.
 - Suggested next step: continue the next upstream `abc-io.spec.ts` remaining tail scan for small missing aliases / metadata cases, add one more small ABC fixture, or move to MEI, MuseScore, or another upstream format spec in small pieces. If returning to MIDI tests, first check only for new upstream additions and avoid duplicate regressions.
 - Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 

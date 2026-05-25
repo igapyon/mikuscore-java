@@ -108,6 +108,55 @@ This document maps upstream `mikuscore` test intent to Java tests.
 - 2026-05-25: `tests/unit/abc-io.spec.ts` basic harmony export public regression is covered in `AbcIoTest`: single MusicXML dominant harmony exports as a quoted ABC chord symbol and roundtrips back as harmony.
 - 2026-05-25: `tests/unit/abc-io.spec.ts` slash-bass harmony export public regression is covered in `AbcIoTest`: altered-root / altered-bass MusicXML harmony exports as a quoted ABC slash chord symbol and roundtrips back as harmony.
 - 2026-05-25: `tests/unit/abc-io.spec.ts` major-sixth harmony export public regression is covered in `AbcIoTest`: single MusicXML major-sixth harmony exports as a quoted ABC chord symbol and roundtrips back as harmony.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` standard digit fingering import public regression is covered in `AbcIoTest`: ABC `!0!` through `!5!` shorthand decorations import as MusicXML fingering values.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` harmonic import public regression is covered in `AbcIoTest`: ABC `!harmonic!` imports as MusicXML technical harmonic notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` thumb-position import public regression is covered in `AbcIoTest`: ABC `!thumb!` imports as MusicXML technical thumb-position notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` thumb-position compact alias import public regression is covered in `AbcIoTest`: ABC `!thumbpos!` imports as MusicXML technical thumb-position notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` thumb-position spaced alias import public regression is covered in `AbcIoTest`: ABC `!thumb pos!` imports as MusicXML technical thumb-position notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` thumb-position long spaced alias import public regression is covered in `AbcIoTest`: ABC `!thumb position!` imports as MusicXML technical thumb-position notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` thumb-position compact long alias import public regression is covered in `AbcIoTest`: ABC `!thumbposition!` imports as MusicXML technical thumb-position notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` thumb-position hyphen alias import public regression is covered in `AbcIoTest`: ABC `!thumb-position!` imports as MusicXML technical thumb-position notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` mordent import public regression is covered in `AbcIoTest`: ABC `!mordent!` imports as MusicXML mordent ornament notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` pralltriller import public regression is covered in `AbcIoTest`: ABC `!pralltriller!` imports as MusicXML inverted-mordent ornament notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` roll arpeggiate import public regression is covered in `AbcIoTest`: ABC `!roll!` on a chord imports as MusicXML arpeggiate notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` arpeggio alias import public regression is covered in `AbcIoTest`: ABC `!arpeggio!` on a chord imports as MusicXML arpeggiate notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` arpeggiate alias import public regression is covered in `AbcIoTest`: ABC `!arpeggiate!` on a chord imports as MusicXML arpeggiate notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` schleifer import public regression is covered in `AbcIoTest`: ABC `!schleifer!` imports as MusicXML schleifer ornament notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` shake import public regression is covered in `AbcIoTest`: ABC `!shake!` imports as MusicXML shake ornament notation.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` segno import public regression is covered in `AbcIoTest`: ABC `!segno!` imports as a MusicXML segno direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` coda import public regression is covered in `AbcIoTest`: ABC `!coda!` imports as a MusicXML coda direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` fine import public regression is covered in `AbcIoTest`: ABC `!fine!` imports as a MusicXML sound direction with `fine="yes"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` dacapo import public regression is covered in `AbcIoTest`: ABC `!dacapo!` imports as a MusicXML sound direction with `dacapo="yes"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` da capo alias import public regression is covered in `AbcIoTest`: ABC `!da capo!` imports as a MusicXML sound direction with `dacapo="yes"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` da-capo alias import public regression is covered in `AbcIoTest`: ABC `!da-capo!` imports as a MusicXML sound direction with `dacapo="yes"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` D.C. alias import public regression is covered in `AbcIoTest`: ABC `!D.C.!` imports as a MusicXML sound direction with `dacapo="yes"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` dalsegno import public regression is covered in `AbcIoTest`: ABC `!dalsegno!` imports as a MusicXML sound direction with `dalsegno="segno"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` dal segno alias import public regression is covered in `AbcIoTest`: ABC `!dal segno!` imports as a MusicXML sound direction with `dalsegno="segno"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` dal-segno alias import public regression is covered in `AbcIoTest`: ABC `!dal-segno!` imports as a MusicXML sound direction with `dalsegno="segno"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` D.S. alias import public regression is covered in `AbcIoTest`: ABC `!D.S.!` imports as a MusicXML sound direction with `dalsegno="segno"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` tocoda import public regression is covered in `AbcIoTest`: ABC `!tocoda!` imports as a MusicXML sound direction with `tocoda="coda"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` to coda alias import public regression is covered in `AbcIoTest`: ABC `!to coda!` imports as a MusicXML sound direction with `tocoda="coda"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` to-coda alias import public regression is covered in `AbcIoTest`: ABC `!to-coda!` imports as a MusicXML sound direction with `tocoda="coda"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` dacoda import public regression is covered in `AbcIoTest`: ABC `!dacoda!` imports as MusicXML sound directions with `dacapo="yes"` and `tocoda="coda"`.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` crescendo / diminuendo wedge import public regression is covered in `AbcIoTest`: ABC `!crescendo(!`, `!crescendo)!`, `!diminuendo(!`, and `!diminuendo)!` import as MusicXML wedge directions.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` cresc / dim / decresc wedge alias import public regression is covered in `AbcIoTest`: ABC shorthand wedge aliases import as MusicXML crescendo, diminuendo, and stop wedge directions.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` symbolic wedge alias import public regression is covered in `AbcIoTest`: ABC `!<(!`, `!<)!`, `!>(!`, and `!>)!` import as MusicXML wedge directions.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` decrescendo wedge alias import public regression is covered in `AbcIoTest`: ABC `!decrescendo(!` / `!decrescendo)!` imports as MusicXML diminuendo and stop wedge directions.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` decresc start wedge alias import public regression is covered in `AbcIoTest`: ABC `!decresc(!` imports as a MusicXML diminuendo wedge direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` dim stop wedge alias import public regression is covered in `AbcIoTest`: ABC `!dim)!` imports as a MusicXML stop wedge direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` sfz dynamics import public regression is covered in `AbcIoTest`: ABC `!sfz!` imports as a MusicXML `sfz` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` sf dynamics import public regression is covered in `AbcIoTest`: ABC `!sf!` imports as a MusicXML `sf` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` sfp dynamics import public regression is covered in `AbcIoTest`: ABC `!sfp!` imports as a MusicXML `sfp` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` rfz dynamics import public regression is covered in `AbcIoTest`: ABC `!rfz!` imports as a MusicXML `rfz` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` p dynamics import public regression is covered in `AbcIoTest`: ABC `!p!` imports as a MusicXML `p` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` pp dynamics import public regression is covered in `AbcIoTest`: ABC `!pp!` imports as a MusicXML `pp` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` ff dynamics import public regression is covered in `AbcIoTest`: ABC `!ff!` imports as a MusicXML `ff` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` f dynamics import public regression is covered in `AbcIoTest`: ABC `!f!` imports as a MusicXML `f` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` fff dynamics import public regression is covered in `AbcIoTest`: ABC `!fff!` imports as a MusicXML `fff` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` fp dynamics import public regression is covered in `AbcIoTest`: ABC `!fp!` imports as a MusicXML `fp` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` ppp dynamics import public regression is covered in `AbcIoTest`: ABC `!ppp!` imports as a MusicXML `ppp` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` mp dynamics import public regression is covered in `AbcIoTest`: ABC `!mp!` imports as a MusicXML `mp` dynamics direction.
+- 2026-05-25: `tests/unit/abc-io.spec.ts` mf dynamics import public regression is covered in `AbcIoTest`: ABC `!mf!` imports as a MusicXML `mf` dynamics direction.
 - 2026-05-14: `tests/fixtures/with_following_rest.musicxml` is now included in the Java ABC golden fixture loop, covering a note / note / rest / note measure roundtrip invariant.
 - 2026-05-14: `tests/fixtures/with_rest_tail.musicxml` is now included in the Java ABC golden fixture loop, covering a note followed by tail rests in one measure.
 - 2026-05-14: `tests/fixtures/full_with_half.musicxml` is now included in the Java ABC golden fixture loop, covering mixed half / quarter durations in one measure.

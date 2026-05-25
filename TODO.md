@@ -1234,6 +1234,202 @@
   - [x] grace-note occupancy exclusion
   - [x] slur-stop warning diagnostics
   - [x] focused JUnit tests を追加する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の standard digit fingering decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses standard fingering decorations !0! to !5!`
+  - 期待値: ABC `!0!` から `!5!` までの shorthand decoration が MusicXML `<technical><fingering>` 値として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の harmonic decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses harmonic decoration`
+  - 期待値: ABC `!harmonic!` decoration が MusicXML `<technical><harmonic/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の thumb decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses thumb decoration`
+  - 期待値: ABC `!thumb!` decoration が MusicXML `<technical><thumb-position/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の thumbpos alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !thumbpos! as thumb-position alias`
+  - 期待値: ABC `!thumbpos!` decoration が MusicXML `<technical><thumb-position/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の thumb pos alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !thumb pos! as thumb-position alias`
+  - 期待値: ABC `!thumb pos!` decoration が MusicXML `<technical><thumb-position/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の thumb position alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !thumb position! as thumb-position alias`
+  - 期待値: ABC `!thumb position!` decoration が MusicXML `<technical><thumb-position/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の thumbposition alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !thumbposition! as thumb-position alias`
+  - 期待値: ABC `!thumbposition!` decoration が MusicXML `<technical><thumb-position/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の thumb-position alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !thumb-position! as thumb-position alias`
+  - 期待値: ABC `!thumb-position!` decoration が MusicXML `<technical><thumb-position/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の mordent decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses mordent and pralltriller decorations`
+  - 期待値: ABC `!mordent!` decoration が MusicXML `<ornaments><mordent/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の pralltriller decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses mordent and pralltriller decorations`
+  - 期待値: ABC `!pralltriller!` decoration が MusicXML `<ornaments><inverted-mordent/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の roll arpeggiate import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses roll decoration as arpeggiate`
+  - 期待値: ABC chord の `!roll!` decoration が MusicXML `<arpeggiate/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の arpeggio alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !arpeggio! and !arpeggiate! as roll aliases`
+  - 期待値: ABC chord の `!arpeggio!` decoration が MusicXML `<arpeggiate/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の arpeggiate alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !arpeggio! and !arpeggiate! as roll aliases`
+  - 期待値: ABC chord の `!arpeggiate!` decoration が MusicXML `<arpeggiate/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の schleifer decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses schleifer and shake decorations`
+  - 期待値: ABC `!schleifer!` decoration が MusicXML `<ornaments><schleifer/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の shake decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses schleifer and shake decorations`
+  - 期待値: ABC `!shake!` decoration が MusicXML `<ornaments><shake/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の segno decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses segno and coda decorations as directions`
+  - 期待値: ABC `!segno!` decoration が MusicXML `<direction-type><segno/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の coda decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses segno and coda decorations as directions`
+  - 期待値: ABC `!coda!` decoration が MusicXML `<direction-type><coda/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の fine decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses fine decoration as sound direction`
+  - 期待値: ABC `!fine!` decoration が MusicXML `<sound fine="yes"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の dacapo decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses dacapo decoration as sound direction`
+  - 期待値: ABC `!dacapo!` decoration が MusicXML `<sound dacapo="yes"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の da capo alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !da capo! as dacapo alias`
+  - 期待値: ABC `!da capo!` decoration が MusicXML `<sound dacapo="yes"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の da-capo alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !da-capo! as dacapo alias`
+  - 期待値: ABC `!da-capo!` decoration が MusicXML `<sound dacapo="yes"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の D.C. alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !D.C.! as dacapo alias`
+  - 期待値: ABC `!D.C.!` decoration が MusicXML `<sound dacapo="yes"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の dalsegno decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses dalsegno decoration as sound direction`
+  - 期待値: ABC `!dalsegno!` decoration が MusicXML `<sound dalsegno="segno"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の dal segno alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !dal segno! as dalsegno alias`
+  - 期待値: ABC `!dal segno!` decoration が MusicXML `<sound dalsegno="segno"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の dal-segno alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !dal-segno! as dalsegno alias`
+  - 期待値: ABC `!dal-segno!` decoration が MusicXML `<sound dalsegno="segno"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の D.S. alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !D.S.! as dalsegno alias`
+  - 期待値: ABC `!D.S.!` decoration が MusicXML `<sound dalsegno="segno"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の tocoda decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses tocoda decoration as sound direction`
+  - 期待値: ABC `!tocoda!` decoration が MusicXML `<sound tocoda="coda"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の to coda alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !to coda! as tocoda alias`
+  - 期待値: ABC `!to coda!` decoration が MusicXML `<sound tocoda="coda"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の to-coda alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !to-coda! as tocoda alias`
+  - 期待値: ABC `!to-coda!` decoration が MusicXML `<sound tocoda="coda"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の dacoda decoration import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses dacoda decoration as dacapo plus tocoda`
+  - 期待値: ABC `!dacoda!` decoration が MusicXML `<sound dacapo="yes"/>` と `<sound tocoda="coda"/>` として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の crescendo / diminuendo wedge import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses crescendo and diminuendo wedge decorations as directions`
+  - 期待値: ABC `!crescendo(!` / `!crescendo)!` / `!diminuendo(!` / `!diminuendo)!` が MusicXML wedge directions として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の cresc / dim / decresc wedge alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts wedge decoration aliases cresc/dim/decresc`
+  - 期待値: ABC `!cresc(!` / `!cresc)!` / `!dim(!` / `!decresc)!` が MusicXML wedge directions として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の symbolic wedge alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts symbolic wedge decoration aliases <( <) >( >)`
+  - 期待値: ABC `!<(!` / `!<)!` / `!>(!` / `!>)!` が MusicXML wedge directions として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の decrescendo wedge alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts wedge decoration alias decrescendo`
+  - 期待値: ABC `!decrescendo(!` / `!decrescendo)!` が MusicXML diminuendo / stop wedge directions として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の decresc start wedge alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !decresc(! as diminuendo-start alias`
+  - 期待値: ABC `!decresc(!` が MusicXML diminuendo wedge direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の dim stop wedge alias import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML accepts !dim)! as diminuendo-stop alias`
+  - 期待値: ABC `!dim)!` が MusicXML stop wedge direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の sfz dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses sfz decoration as dynamics direction`
+  - 期待値: ABC `!sfz!` が MusicXML `sfz` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の sf dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses sf decoration as dynamics direction`
+  - 期待値: ABC `!sf!` が MusicXML `sf` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の sfp dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses sfp decoration as dynamics direction`
+  - 期待値: ABC `!sfp!` が MusicXML `sfp` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の rfz dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses rfz decoration as dynamics direction`
+  - 期待値: ABC `!rfz!` が MusicXML `rfz` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の p dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses p decoration as dynamics direction`
+  - 期待値: ABC `!p!` が MusicXML `p` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の pp dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses pp decoration as dynamics direction`
+  - 期待値: ABC `!pp!` が MusicXML `pp` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ff dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses ff decoration as dynamics direction`
+  - 期待値: ABC `!ff!` が MusicXML `ff` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の f dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses f decoration as dynamics direction`
+  - 期待値: ABC `!f!` が MusicXML `f` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の fff dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses fff decoration as dynamics direction`
+  - 期待値: ABC `!fff!` が MusicXML `fff` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の fp dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses fp decoration as dynamics direction`
+  - 期待値: ABC `!fp!` が MusicXML `fp` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の ppp dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses ppp decoration as dynamics direction`
+  - 期待値: ABC `!ppp!` が MusicXML `ppp` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の mp dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses mp decoration as dynamics direction`
+  - 期待値: ABC `!mp!` が MusicXML `mp` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
+- [x] 2026-05-25 再開 slice: upstream `tests/unit/abc-io.spec.ts` の mf dynamics import regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `ABC->MusicXML parses mf decoration as dynamics direction`
+  - 期待値: ABC `!mf!` が MusicXML `mf` dynamics direction として import される
+  - 実装方針: 既存 import 実装を public `AbcIoTest` で単独固定し、tracking docs に反映する
 - [ ] `src/ts/abc-io.ts` の broader ABC body import parity を継続する
   - broader golden fixtures / fixture-based parity expansion
 - [x] `mvn test` を primary verification として通す

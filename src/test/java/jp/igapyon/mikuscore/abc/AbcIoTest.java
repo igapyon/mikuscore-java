@@ -3716,6 +3716,21 @@ public class AbcIoTest {
     }
 
     @Test
+    public void abcImportParsesStandardDigitFingeringDecorations() throws Exception {
+        String abc = "X:1\nT:Standard fingering decorations\nM:6/4\nL:1/4\nK:C\n"
+                + "!0!C !1!D !2!E !3!F !4!G !5!A |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        List<String> fingerings = new ArrayList<String>();
+        for (Element note : directChildren(directChildren(directChild(root, "part"), "measure").get(0), "note")) {
+            fingerings.add(directChildText(directChild(directChild(note, "notations"), "technical"),
+                    "fingering"));
+        }
+
+        assertEquals(Arrays.asList("0", "1", "2", "3", "4", "5"), fingerings);
+    }
+
+    @Test
     public void musicXmlToAbcExportsFingeringStringAndPluckDecorationsAndRoundtrips() throws Exception {
         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<score-partwise version=\"3.1\"><part-list>"
@@ -3923,6 +3938,96 @@ public class AbcIoTest {
     }
 
     @Test
+    public void abcImportParsesHarmonicDecoration() throws Exception {
+        String abc = "X:1\nT:Harmonic\nM:4/4\nL:1/4\nK:C\n"
+                + "!harmonic!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "technical"), "harmonic"));
+    }
+
+    @Test
+    public void abcImportParsesThumbDecoration() throws Exception {
+        String abc = "X:1\nT:Thumb position\nM:4/4\nL:1/4\nK:C\n"
+                + "!thumb!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "technical"),
+                "thumb-position"));
+    }
+
+    @Test
+    public void abcImportAcceptsThumbposAlias() throws Exception {
+        String abc = "X:1\nT:Thumb alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!thumbpos!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "technical"),
+                "thumb-position"));
+    }
+
+    @Test
+    public void abcImportAcceptsThumbPosAlias() throws Exception {
+        String abc = "X:1\nT:Thumb spaced alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!thumb pos!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "technical"),
+                "thumb-position"));
+    }
+
+    @Test
+    public void abcImportAcceptsThumbPositionAlias() throws Exception {
+        String abc = "X:1\nT:Thumb position alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!thumb position!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "technical"),
+                "thumb-position"));
+    }
+
+    @Test
+    public void abcImportAcceptsThumbpositionAlias() throws Exception {
+        String abc = "X:1\nT:Thumbposition alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!thumbposition!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "technical"),
+                "thumb-position"));
+    }
+
+    @Test
+    public void abcImportAcceptsThumbHyphenPositionAlias() throws Exception {
+        String abc = "X:1\nT:Thumb-position alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!thumb-position!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "technical"),
+                "thumb-position"));
+    }
+
+    @Test
     public void musicXmlToAbcExportsHarmonicStoppedAndThumbPositionAndRoundtrips() throws Exception {
         String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<score-partwise version=\"3.1\"><part-list>"
@@ -4026,6 +4131,31 @@ public class AbcIoTest {
     }
 
     @Test
+    public void abcImportParsesMordentDecoration() throws Exception {
+        String abc = "X:1\nT:Mordent\nM:4/4\nL:1/4\nK:C\n"
+                + "!mordent!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "ornaments"), "mordent"));
+    }
+
+    @Test
+    public void abcImportParsesPralltrillerDecoration() throws Exception {
+        String abc = "X:1\nT:Pralltriller\nM:4/4\nL:1/4\nK:C\n"
+                + "!pralltriller!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "ornaments"),
+                "inverted-mordent"));
+    }
+
+    @Test
     public void abcImportAcceptsMordentAliases() throws Exception {
         String abc = "X:1\nT:Mordent aliases\nM:7/4\nL:1/4\nK:C\n"
                 + "!mordent!C !lowermordent!D !pralltriller!E !pralltrill!F "
@@ -4040,6 +4170,66 @@ public class AbcIoTest {
             assertNotNull(directChild(directChild(directChild(notes.get(i), "notations"), "ornaments"),
                     "inverted-mordent"));
         }
+    }
+
+    @Test
+    public void abcImportParsesRollDecorationAsArpeggiate() throws Exception {
+        String abc = "X:1\nT:Arpeggiate\nM:4/4\nL:1/4\nK:C\n"
+                + "!roll![CEG]2 z2 |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(firstNote, "notations"), "arpeggiate"));
+    }
+
+    @Test
+    public void abcImportAcceptsArpeggioAlias() throws Exception {
+        String abc = "X:1\nT:Arpeggiate alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!arpeggio![CEG]2 z2 |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(firstNote, "notations"), "arpeggiate"));
+    }
+
+    @Test
+    public void abcImportAcceptsArpeggiateAlias() throws Exception {
+        String abc = "X:1\nT:Arpeggiate alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!arpeggiate![CEG]2 z2 |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(firstNote, "notations"), "arpeggiate"));
+    }
+
+    @Test
+    public void abcImportParsesSchleiferDecoration() throws Exception {
+        String abc = "X:1\nT:Schleifer\nM:4/4\nL:1/4\nK:C\n"
+                + "!schleifer!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "ornaments"), "schleifer"));
+    }
+
+    @Test
+    public void abcImportParsesShakeDecoration() throws Exception {
+        String abc = "X:1\nT:Shake\nM:4/4\nL:1/4\nK:C\n"
+                + "!shake!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element firstNote = directChildren(directChildren(directChild(root, "part"), "measure").get(0),
+                "note").get(0);
+
+        assertNotNull(directChild(directChild(directChild(firstNote, "notations"), "ornaments"), "shake"));
     }
 
     @Test
@@ -4241,6 +4431,382 @@ public class AbcIoTest {
         assertEquals(false, exportedAbc.contains("!inverted-mordent!"), exportedAbc);
         assertEquals(false, exportedAbc.contains("!roll!"), exportedAbc);
         assertEquals(false, exportedAbc.contains("!arpeggiate!"), exportedAbc);
+    }
+
+    @Test
+    public void abcImportParsesSegnoDecorationAsDirection() throws Exception {
+        String abc = "X:1\nT:Segno\nM:4/4\nL:1/4\nK:C\n"
+                + "!segno!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element directionType = directChild(directChild(measure, "direction"), "direction-type");
+
+        assertNotNull(directChild(directionType, "segno"));
+    }
+
+    @Test
+    public void abcImportParsesCodaDecorationAsDirection() throws Exception {
+        String abc = "X:1\nT:Coda\nM:4/4\nL:1/4\nK:C\n"
+                + "!coda!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element directionType = directChild(directChild(measure, "direction"), "direction-type");
+
+        assertNotNull(directChild(directionType, "coda"));
+    }
+
+    @Test
+    public void abcImportParsesFineDecorationAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:Fine\nM:4/4\nL:1/4\nK:C\n"
+                + "!fine!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("yes", sound.getAttribute("fine"));
+    }
+
+    @Test
+    public void abcImportParsesDacapoDecorationAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:Da Capo\nM:4/4\nL:1/4\nK:C\n"
+                + "!dacapo!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("yes", sound.getAttribute("dacapo"));
+    }
+
+    @Test
+    public void abcImportAcceptsDaCapoAliasAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:Da Capo alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!da capo!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("yes", sound.getAttribute("dacapo"));
+    }
+
+    @Test
+    public void abcImportAcceptsDaCapoHyphenAliasAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:Da Capo hyphen alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!da-capo!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("yes", sound.getAttribute("dacapo"));
+    }
+
+    @Test
+    public void abcImportAcceptsDcAliasAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:D.C. alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!D.C.!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("yes", sound.getAttribute("dacapo"));
+    }
+
+    @Test
+    public void abcImportParsesDalsegnoDecorationAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:Dal Segno\nM:4/4\nL:1/4\nK:C\n"
+                + "!dalsegno!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("segno", sound.getAttribute("dalsegno"));
+    }
+
+    @Test
+    public void abcImportAcceptsDalSegnoAliasAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:Dal Segno alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!dal segno!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("segno", sound.getAttribute("dalsegno"));
+    }
+
+    @Test
+    public void abcImportAcceptsDalSegnoHyphenAliasAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:Dal Segno hyphen alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!dal-segno!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("segno", sound.getAttribute("dalsegno"));
+    }
+
+    @Test
+    public void abcImportAcceptsDsAliasAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:D.S. alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!D.S.!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("segno", sound.getAttribute("dalsegno"));
+    }
+
+    @Test
+    public void abcImportParsesTocodaDecorationAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:To Coda\nM:4/4\nL:1/4\nK:C\n"
+                + "!tocoda!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("coda", sound.getAttribute("tocoda"));
+    }
+
+    @Test
+    public void abcImportAcceptsToCodaAliasAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:To Coda alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!to coda!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("coda", sound.getAttribute("tocoda"));
+    }
+
+    @Test
+    public void abcImportAcceptsToCodaHyphenAliasAsSoundDirection() throws Exception {
+        String abc = "X:1\nT:To Coda hyphen alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!to-coda!C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element measure = directChildren(directChild(root, "part"), "measure").get(0);
+        Element sound = directChild(directChild(measure, "direction"), "sound");
+
+        assertEquals("coda", sound.getAttribute("tocoda"));
+    }
+
+    @Test
+    public void abcImportParsesDacodaDecorationAsDacapoPlusTocodaSoundDirections() throws Exception {
+        String abc = "X:1\nT:Da Coda\nM:4/4\nL:1/4\nK:C\n"
+                + "!dacoda!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<sound dacapo=\"yes\"/>"));
+        assertEquals(true, xml.contains("<sound tocoda=\"coda\"/>"));
+    }
+
+    @Test
+    public void abcImportParsesCrescendoAndDiminuendoWedgeDecorationsAsDirections() throws Exception {
+        String abc = "X:1\nT:Wedges\nM:4/4\nL:1/4\nK:C\n"
+                + "!crescendo(!C D !crescendo)!E !diminuendo(!F | !diminuendo)!G A B c |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"crescendo\"/>"));
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"diminuendo\"/>"));
+        assertEquals(2, countOccurrences(xml, "<wedge type=\"stop\"/>"));
+    }
+
+    @Test
+    public void abcImportAcceptsCrescDimAndDecrescWedgeAliases() throws Exception {
+        String abc = "X:1\nT:Wedge aliases\nM:4/4\nL:1/4\nK:C\n"
+                + "!cresc(!C !cresc)!D !dim(!E !decresc)!F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"crescendo\"/>"));
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"diminuendo\"/>"));
+        assertEquals(2, countOccurrences(xml, "<wedge type=\"stop\"/>"));
+    }
+
+    @Test
+    public void abcImportAcceptsSymbolicWedgeAliases() throws Exception {
+        String abc = "X:1\nT:Symbolic wedge aliases\nM:4/4\nL:1/4\nK:C\n"
+                + "!<(!C !<)!D !>(!E !>)!F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"crescendo\"/>"));
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"diminuendo\"/>"));
+        assertEquals(2, countOccurrences(xml, "<wedge type=\"stop\"/>"));
+    }
+
+    @Test
+    public void abcImportAcceptsDecrescendoWedgeAlias() throws Exception {
+        String abc = "X:1\nT:Decrescendo alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!decrescendo(!C D !decrescendo)!E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"diminuendo\"/>"));
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"stop\"/>"));
+    }
+
+    @Test
+    public void abcImportAcceptsDecrescStartWedgeAlias() throws Exception {
+        String abc = "X:1\nT:Decresc start alias\nM:4/4\nL:1/4\nK:C\n"
+                + "!decresc(!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"diminuendo\"/>"));
+    }
+
+    @Test
+    public void abcImportAcceptsDimStopWedgeAlias() throws Exception {
+        String abc = "X:1\nT:Dim stop alias\nM:4/4\nL:1/4\nK:C\n"
+                + "C !dim)!D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(1, countOccurrences(xml, "<wedge type=\"stop\"/>"));
+    }
+
+    @Test
+    public void abcImportParsesSfzDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Sforzato\nM:4/4\nL:1/4\nK:C\n"
+                + "!sfz!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<sfz/>"));
+    }
+
+    @Test
+    public void abcImportParsesSfDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Sforzando\nM:4/4\nL:1/4\nK:C\n"
+                + "!sf!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<sf/>"));
+    }
+
+    @Test
+    public void abcImportParsesSfpDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Sforzando piano\nM:4/4\nL:1/4\nK:C\n"
+                + "!sfp!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<sfp/>"));
+    }
+
+    @Test
+    public void abcImportParsesRfzDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Rinforzando\nM:4/4\nL:1/4\nK:C\n"
+                + "!rfz!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<rfz/>"));
+    }
+
+    @Test
+    public void abcImportParsesPDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Piano\nM:4/4\nL:1/4\nK:C\n"
+                + "!p!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<p/>"));
+    }
+
+    @Test
+    public void abcImportParsesPpDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Pianissimo\nM:4/4\nL:1/4\nK:C\n"
+                + "!pp!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<pp/>"));
+    }
+
+    @Test
+    public void abcImportParsesFfDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Fortissimo\nM:4/4\nL:1/4\nK:C\n"
+                + "!ff!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<ff/>"));
+    }
+
+    @Test
+    public void abcImportParsesFDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Forte\nM:4/4\nL:1/4\nK:C\n"
+                + "!f!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<f/>"));
+    }
+
+    @Test
+    public void abcImportParsesFffDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Fortississimo\nM:4/4\nL:1/4\nK:C\n"
+                + "!fff!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<fff/>"));
+    }
+
+    @Test
+    public void abcImportParsesFpDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Fortepiano\nM:4/4\nL:1/4\nK:C\n"
+                + "!fp!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<fp/>"));
+    }
+
+    @Test
+    public void abcImportParsesPppDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Pianississimo\nM:4/4\nL:1/4\nK:C\n"
+                + "!ppp!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<ppp/>"));
+    }
+
+    @Test
+    public void abcImportParsesMpDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Mezzo piano\nM:4/4\nL:1/4\nK:C\n"
+                + "!mp!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<mp/>"));
+    }
+
+    @Test
+    public void abcImportParsesMfDecorationAsDynamicsDirection() throws Exception {
+        String abc = "X:1\nT:Mezzo forte\nM:4/4\nL:1/4\nK:C\n"
+                + "!mf!C D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+
+        assertEquals(true, xml.contains("<mf/>"));
     }
 
     @Test
