@@ -168,6 +168,13 @@ public class AbcParserTest {
         assertEquals(7, decoration.getNextIdx());
         assertEquals(true, decoration.isTerminated());
 
+        AbcParser.AbcParsedDecoration unterminatedDecoration = AbcParser.parseAbcDecorationAt("+unterminated", 0);
+        assertEquals("unterminated", unterminatedDecoration.getRawDecoration());
+        assertEquals("unterminated", unterminatedDecoration.getDecoration());
+        assertEquals("+", unterminatedDecoration.getDelimiter());
+        assertEquals(13, unterminatedDecoration.getNextIdx());
+        assertEquals(false, unterminatedDecoration.isTerminated());
+
         AbcParser.AbcParsedBrokenRhythm broken = AbcParser.parseAbcBrokenRhythmAt("> next", 0);
         assertEquals(">", broken.getSymbol());
         assertEquals(3, broken.getLeftScale().getNum());
@@ -175,6 +182,14 @@ public class AbcParserTest {
         assertEquals(1, broken.getRightScale().getNum());
         assertEquals(2, broken.getRightScale().getDen());
         assertEquals(1, broken.getNextIdx());
+
+        AbcParser.AbcParsedBrokenRhythm leftBroken = AbcParser.parseAbcBrokenRhythmAt("< next", 0);
+        assertEquals("<", leftBroken.getSymbol());
+        assertEquals(1, leftBroken.getLeftScale().getNum());
+        assertEquals(2, leftBroken.getLeftScale().getDen());
+        assertEquals(3, leftBroken.getRightScale().getNum());
+        assertEquals(2, leftBroken.getRightScale().getDen());
+        assertEquals(1, leftBroken.getNextIdx());
 
         AbcParser.AbcParsedSingleCharShorthand shorthand = AbcParser.parseAbcSingleCharShorthandAt("~", 0);
         assertEquals("arpeggiate", shorthand.getKind());

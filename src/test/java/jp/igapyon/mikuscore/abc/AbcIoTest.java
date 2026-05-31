@@ -1051,6 +1051,28 @@ public class AbcIoTest {
     }
 
     @Test
+    public void abcImportKeepsStandaloneInlineVoiceLineActiveForFollowingBodyLines() throws Exception {
+        String abc = "X:1\nT:April Window\nC:Codex\nM:3/4\nL:1/8\nQ:1/4=96\nK:Dm\n"
+                + "V:1 clef=treble name=\"Melody\"\n"
+                + "V:2 clef=bass name=\"Accompaniment\"\n"
+                + "\n"
+                + "[V:1]\n"
+                + "A2 d2 f2 | e2 d2 A2 |\n"
+                + "\n"
+                + "[V:2]\n"
+                + "D,2 A,2 d2 | C2 G,2 c2 |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        List<Element> parts = directChildren(root, "part");
+
+        assertEquals(2, parts.size());
+        assertEquals(Arrays.asList("A", "D", "F", "E", "D", "A"), pitchSteps(parts.get(0)));
+        assertEquals(Arrays.asList("D", "A", "D", "C", "G", "C"), pitchSteps(parts.get(1)));
+        assertEquals(0, parts.get(0).getElementsByTagName("rest").getLength());
+        assertEquals(0, parts.get(1).getElementsByTagName("rest").getLength());
+    }
+
+    @Test
     public void abcImportMapsScoreGroupedVoicesIntoOneMultiStaffPart() throws Exception {
         String abc = "X:1\nT:Grand staff from %%score\nM:4/4\nL:1/4\nK:C\n"
                 + "%%score (1 2)\n"
@@ -1628,6 +1650,23 @@ public class AbcIoTest {
         assertEquals(true, xml.contains("<miscellaneous-field name=\"mks:diag:count\">1</miscellaneous-field>"),
                 xml);
         assertEquals(true, xml.contains("Skipped chord note with unsupported octave range."), xml);
+        assertEquals(3, notes.size(), xml);
+        assertEquals(Arrays.asList("D", "E", "F"), notePitchSteps(notes));
+    }
+
+    @Test
+    public void abcImportWarnsOnUnsupportedOctaveRangeInGraceNote() throws Exception {
+        String abc = "X:1\nT:Unsupported octave grace\nM:4/4\nL:1/8\nK:C\n"
+                + "{C''''''''''} D E F |\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        Element root = parseElement(xml);
+        List<Element> notes = directChildren(directChildren(directChildren(root, "part").get(0), "measure").get(0),
+                "note");
+
+        assertEquals(true, xml.contains("<miscellaneous-field name=\"mks:diag:count\">1</miscellaneous-field>"),
+                xml);
+        assertEquals(true, xml.contains("Skipped grace note with unsupported octave range."), xml);
         assertEquals(3, notes.size(), xml);
         assertEquals(Arrays.asList("D", "E", "F"), notePitchSteps(notes));
     }
@@ -7205,6 +7244,82 @@ public class AbcIoTest {
         String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
         assertEquals(true, xml.contains("<ending number=\"1\" type=\"start\"/>"), xml);
         assertEquals(true, xml.contains("<ending number=\"1\" type=\"discontinue\"/>"), xml);
+    }
+
+    @Test
+    public void musicXmlToAbcEmitsMeasureTransposeAndTupletMetadata() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"3.1\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>Clarinet in A</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"0\" implicit=\"yes\">"
+                + "<barline location=\"left\"><repeat direction=\"forward\"/></barline>"
+                + "<attributes><divisions>960</divisions><key><fifths>0</fifths></key>"
+                + "<time><beats>3</beats><beat-type>4</beat-type></time>"
+                + "<clef><sign>G</sign><line>2</line></clef>"
+                + "<transpose><diatonic>-2</diatonic><chromatic>-3</chromatic></transpose></attributes>"
+                + "<note><pitch><step>C</step><octave>5</octave></pitch><duration>960</duration>"
+                + "<voice>1</voice><type>quarter</type></note>"
+                + "<note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>"
+                + "</measure><measure number=\"1\">"
+                + "<note><pitch><step>D</step><octave>5</octave></pitch><duration>320</duration>"
+                + "<voice>1</voice><type>16th</type>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>"
+                + "<notations><tuplet type=\"start\"/></notations></note>"
+                + "<note><pitch><step>E</step><octave>5</octave></pitch><duration>320</duration>"
+                + "<voice>1</voice><type>16th</type>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>"
+                + "<note><pitch><step>F</step><octave>5</octave></pitch><duration>320</duration>"
+                + "<voice>1</voice><type>16th</type>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>"
+                + "<notations><tuplet type=\"stop\"/></notations></note>"
+                + "<note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>"
+                + "<barline location=\"right\"><repeat direction=\"backward\" times=\"2\"/></barline>"
+                + "</measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        assertEquals(true, abc.contains("%@mks transpose voice=P1 chromatic=-3 diatonic=-2"), abc);
+        assertEquals(true, abc.contains("%@mks measure voice=P1 measure=1 number=0 implicit=1"), abc);
+        assertEquals(false, abc.contains("repeat=forward"), abc);
+        assertEquals(false, abc.contains("repeat=backward"), abc);
+        assertEquals(false, abc.contains("times=2"), abc);
+        assertEquals(true, abc.contains("|:"), abc);
+        assertEquals(true, abc.contains(":|"), abc);
+        assertEquals(true, abc.contains("(3:2:3"), abc);
+        assertEquals(true, abc.contains("(3:2:3d"), abc);
+        assertEquals(false, abc.contains("(3:2:3d2/3"), abc);
+    }
+
+    @Test
+    public void abcImportRestoresMeasureTransposeAndTupletMetadata() throws Exception {
+        String abc = "X:1\nT:Meta restore\nM:3/4\nL:1/8\nK:C\n"
+                + "V:P1 name=\"Clarinet in A\" clef=treble\nV:P1\n"
+                + "|: c2 z4 | (3:2:3 d/2 e/2 f/2 z4 :|\n"
+                + "%@mks transpose voice=P1 chromatic=-3 diatonic=-2\n"
+                + "%@mks measure voice=P1 measure=1 number=0 implicit=1\n";
+
+        String xml = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        Element part = directChildren(parseElement(xml), "part").get(0);
+        List<Element> measures = directChildren(part, "measure");
+        Element pickup = measures.get(0);
+        Element second = measures.get(1);
+        Element pickupAttributes = directChild(pickup, "attributes");
+        Element transpose = directChild(pickupAttributes, "transpose");
+        Element leftBarline = directChildren(pickup, "barline").get(0);
+        Element rightBarline = directChildren(second, "barline").get(0);
+        List<Element> secondNotes = directChildren(second, "note");
+
+        assertEquals("0", pickup.getAttribute("number"), xml);
+        assertEquals("yes", pickup.getAttribute("implicit"), xml);
+        assertEquals("forward", directChild(leftBarline, "repeat").getAttribute("direction"), xml);
+        assertEquals("backward", directChild(rightBarline, "repeat").getAttribute("direction"), xml);
+        assertEquals("", directChild(rightBarline, "repeat").getAttribute("times"), xml);
+        assertEquals("-3", directChildText(transpose, "chromatic"), xml);
+        assertEquals("-2", directChildText(transpose, "diatonic"), xml);
+        assertEquals("3", directChildText(directChild(secondNotes.get(0), "time-modification"), "actual-notes"), xml);
+        assertEquals("start", directChild(directChild(secondNotes.get(0), "notations"), "tuplet").getAttribute("type"),
+                xml);
+        assertEquals("stop", directChild(directChild(secondNotes.get(2), "notations"), "tuplet").getAttribute("type"),
+                xml);
     }
 
     @Test

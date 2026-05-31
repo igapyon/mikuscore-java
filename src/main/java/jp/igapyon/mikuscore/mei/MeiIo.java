@@ -6434,13 +6434,16 @@ public final class MeiIo {
         }
 
         public MeiPartImportState toNextPartImportState() {
+            boolean nextHasEmittedInitialAttributes = (previousPartState != null
+                    && previousPartState.hasEmittedInitialAttributes()) || hasTargetStaff;
             if (previousPartState == null) {
                 return new MeiPartImportState("", "", "", measureBeats, measureBeatType, measureTimeSymbol,
-                        measureFifths, measureClefSign, measureClefLine, measureTranspose, true);
+                        measureFifths, measureClefSign, measureClefLine, measureTranspose,
+                        nextHasEmittedInitialAttributes);
             }
             return new MeiPartImportState(previousPartState.getStaffNo(), previousPartState.getPartId(),
                     previousPartState.getLabel(), measureBeats, measureBeatType, measureTimeSymbol, measureFifths,
-                    measureClefSign, measureClefLine, measureTranspose, true);
+                    measureClefSign, measureClefLine, measureTranspose, nextHasEmittedInitialAttributes);
         }
 
         public MeiPartImportState getPreviousPartState() {
