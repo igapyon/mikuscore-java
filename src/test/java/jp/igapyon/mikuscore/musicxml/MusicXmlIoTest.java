@@ -121,6 +121,13 @@ public class MusicXmlIoTest {
     }
 
     @Test
+    public void buildsMusicXmlBeamItemsXmlFromAssignmentParts() {
+        assertEquals("<beam number=\"1\">begin</beam><beam number=\"2\">begin</beam>",
+                MusicXmlIo.buildMusicXmlBeamItemsXml("begin", Integer.valueOf(2)));
+        assertEquals("", MusicXmlIo.buildMusicXmlBeamItemsXml("end", Integer.valueOf(0)));
+    }
+
+    @Test
     public void addsFinalRightBarlineWhenMissing() {
         String normalized = MusicXmlIo.normalizeImportedMusicXmlText(minimalMusicXmlWithoutPartList("Final"));
 
@@ -156,6 +163,27 @@ public class MusicXmlIoTest {
         assertEquals("mks-n1", noteAt(bundle.getRenderDoc(), 0).getAttribute("xml:id"));
         assertEquals("mks-n2", noteAt(bundle.getRenderDoc(), 1).getAttribute("id"));
         assertEquals("", noteAt(source, 0).getAttribute("xml:id"));
+    }
+
+    @Test
+    public void preparesPreviewSvgIdMapWithDirectAndFallbackModes() {
+        Document source = MusicXmlIo.parseMusicXmlDocument(twoMeasureMusicXml());
+        MusicXmlIo.RenderDocBundle bundle = MusicXmlIo.buildRenderDocWithNodeIds(source,
+                Arrays.asList("n1", "n2"), "mks");
+
+        MusicXmlIo.PreviewSvgIdMap direct = MusicXmlIo.preparePreviewSvgIdMap(bundle,
+                Arrays.asList("n1", "n2"), Arrays.asList("mks-n1"));
+        MusicXmlIo.PreviewSvgIdMap fallback = MusicXmlIo.preparePreviewSvgIdMap(bundle,
+                Arrays.asList("n1", "n2"), Arrays.asList("vrv-note-1", "vrv-note-2"));
+        MusicXmlIo.PreviewSvgIdMap noRendered = MusicXmlIo.preparePreviewSvgIdMap(bundle,
+                Arrays.asList("n1", "n2"), Arrays.<String>asList());
+
+        assertEquals("direct", direct.getMapMode());
+        assertEquals("n1", direct.getMap().get("mks-n1"));
+        assertEquals("fallback-seq", fallback.getMapMode());
+        assertEquals("n1", fallback.getMap().get("vrv-note-1"));
+        assertEquals("n2", fallback.getMap().get("vrv-note-2"));
+        assertEquals("direct", noRendered.getMapMode());
     }
 
     @Test

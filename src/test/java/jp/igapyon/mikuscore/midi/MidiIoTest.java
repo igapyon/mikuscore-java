@@ -6,11 +6,13 @@ package jp.igapyon.mikuscore.midi;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -458,6 +460,104 @@ public class MidiIoTest {
         assertEquals("p1", normalized.get(0).getTrackId());
         assertEquals("First", normalized.get(0).getTrackName());
         assertEquals(61, normalized.get(1).getMidiNumber());
+    }
+
+    @Test
+    public void compactsDensePlaybackSchedules() {
+        List<MidiIo.RawMidiPlaybackEvent> events = new ArrayList<MidiIo.RawMidiPlaybackEvent>();
+        for (int onset = 0; onset < 120; onset++) {
+            for (int pitch = 0; pitch < 60; pitch++) {
+                events.add(new MidiIo.RawMidiPlaybackEvent(30 + (pitch % 60), onset * 10,
+                        pitch < 10 ? 1 : 64 + (pitch % 3), 1, 80, "t" + pitch, ""));
+            }
+        }
+
+        MidiIo.PlaybackScheduleCompactionResult compacted =
+                MidiIo.compactPlaybackScheduleForDensePlayback(events, 128);
+        MidiIo.PlaybackScheduleCompactionSummary summary = compacted.getSummary();
+
+        assertTrue(summary.isApplied());
+        assertEquals(7200, summary.getOriginalEventCount());
+        assertTrue(summary.getFinalEventCount() <= 4096);
+        assertEquals(1200, summary.getDroppedUltraShortCount());
+        assertEquals(240, summary.getDroppedDenseOnsetCount());
+        assertTrue(summary.getDroppedBudgetCount() > 0);
+
+        Map<Integer, Integer> countsByOnset = new LinkedHashMap<Integer, Integer>();
+        for (MidiIo.RawMidiPlaybackEvent event : compacted.getEvents()) {
+            Integer start = Integer.valueOf(event.getStartTicks());
+            Integer count = countsByOnset.get(start);
+            countsByOnset.put(start, Integer.valueOf(count == null ? 1 : count.intValue() + 1));
+            assertTrue(event.getDurTicks() >= 2);
+        }
+        int maxOnsetCount = 0;
+        for (Integer count : countsByOnset.values()) {
+            maxOnsetCount = Math.max(maxOnsetCount, count.intValue());
+        }
+        assertTrue(maxOnsetCount <= 48);
+    }
+
+    @Test
+    public void keepsProtectedSmallPlaybackOnsetsDuringCompaction() {
+        List<MidiIo.RawMidiPlaybackEvent> events = new ArrayList<MidiIo.RawMidiPlaybackEvent>();
+        for (int onset = 0; onset < 90; onset++) {
+            for (int pitch = 0; pitch < 48; pitch++) {
+                events.add(new MidiIo.RawMidiPlaybackEvent(20 + pitch, onset * 12, 48, 1, 80,
+                        "dense-" + onset + "-" + pitch, ""));
+            }
+        }
+        int[] smallChordStarts = new int[] { 9999, 10011, 10023 };
+        for (int i = 0; i < smallChordStarts.length; i++) {
+            events.add(new MidiIo.RawMidiPlaybackEvent(72 + i, smallChordStarts[i], 48, 1, 80,
+                    "small-" + i, ""));
+        }
+
+        MidiIo.PlaybackScheduleCompactionResult compacted =
+                MidiIo.compactPlaybackScheduleForDensePlayback(events, 128);
+
+        assertTrue(compacted.getSummary().isApplied());
+        for (int start : smallChordStarts) {
+            int count = 0;
+            for (MidiIo.RawMidiPlaybackEvent event : compacted.getEvents()) {
+                if (event.getStartTicks() == start) {
+                    count++;
+                }
+            }
+            assertEquals(1, count);
+        }
+    }
+
+    @Test
+    public void prioritizesOuterVoicesAndUniquePitchesInDensePlaybackOnsets() {
+        List<MidiIo.RawMidiPlaybackEvent> events = new ArrayList<MidiIo.RawMidiPlaybackEvent>();
+        for (int octave = 0; octave < 10; octave++) {
+            events.add(new MidiIo.RawMidiPlaybackEvent(24 + octave * 12, 0, 48, 1, 80,
+                    "oct-" + octave, ""));
+        }
+        for (int i = 0; i < 40; i++) {
+            events.add(new MidiIo.RawMidiPlaybackEvent(61 + i, 0, 48, 1, 80, "uniq-" + i, ""));
+        }
+        for (int i = 0; i < 2100; i++) {
+            events.add(new MidiIo.RawMidiPlaybackEvent(30 + (i % 24), 100 + i * 2, 48, 1, 80,
+                    "fill-" + i, ""));
+        }
+
+        MidiIo.PlaybackScheduleCompactionResult compacted =
+                MidiIo.compactPlaybackScheduleForDensePlayback(events, 128);
+        List<Integer> keptMidis = new ArrayList<Integer>();
+        for (MidiIo.RawMidiPlaybackEvent event : compacted.getEvents()) {
+            if (event.getStartTicks() == 0) {
+                keptMidis.add(Integer.valueOf(event.getMidiNumber()));
+            }
+        }
+
+        assertEquals(48, keptMidis.size());
+        assertTrue(keptMidis.contains(Integer.valueOf(24)));
+        assertTrue(keptMidis.contains(Integer.valueOf(132)));
+        assertTrue(keptMidis.contains(Integer.valueOf(61)));
+        assertTrue(keptMidis.contains(Integer.valueOf(100)));
+        assertFalse(keptMidis.contains(Integer.valueOf(36)));
+        assertFalse(keptMidis.contains(Integer.valueOf(48)));
     }
 
     @Test
@@ -1185,6 +1285,25 @@ public class MidiIoTest {
 
         assertEquals(true, texts.contains("Violin 1"));
         assertEquals(true, texts.contains("Violin 2"));
+    }
+
+    @Test
+    public void roundtripsGoldenFixturesThroughMidiKeepingKeyMeterTempoBaseline() {
+        for (String fixture : Arrays.asList("base.musicxml", "interleaved_voices.musicxml",
+                "roundtrip_piano_tempo.musicxml")) {
+            Document source = parseMusicXmlFixture("abc-roundtrip/" + fixture);
+            Document roundtripped = roundtripMusicXmlFixtureThroughMidi(source);
+
+            assertEquals(firstMeter(source), firstMeter(roundtripped), fixture);
+            Integer sourceFifths = firstKeyFifths(source);
+            if (sourceFifths != null) {
+                assertEquals(sourceFifths, firstKeyFifths(roundtripped), fixture);
+            }
+            Integer sourceTempo = firstTempo(source);
+            if (sourceTempo != null) {
+                assertEquals(sourceTempo, firstTempo(roundtripped), fixture);
+            }
+        }
     }
 
     @Test
@@ -3694,6 +3813,118 @@ public class MidiIoTest {
                 true, false, emitMksTextMeta, 480, Collections.<String>emptyList(), false,
                 "off_before_on", title, movementTitle, composer, pickupTicks);
         return result.getRawBytes();
+    }
+
+    private static Document roundtripMusicXmlFixtureThroughMidi(Document source) {
+        MidiIo.MidiPlaybackEventsResult playback = MidiIo.buildPlaybackEventsFromMusicXmlDoc(source, 128,
+                new MidiIo.MidiPlaybackExtractionOptions("midi"));
+        assertEquals(true, playback.getEvents().size() > 0);
+
+        MidiIo.MidiExportPlaybackBuildResult exported = MidiIo.buildMidiPlaybackExport(playback.getEvents(),
+                playback.getTempo(), "electric_piano_2", MidiIo.collectMidiProgramOverridesFromMusicXmlDoc(source),
+                MidiIo.collectMidiControlEventsFromMusicXmlDoc(source, 128),
+                MidiIo.collectMidiTempoEventsFromMusicXmlDoc(source, 128),
+                MidiIo.collectMidiTimeSignatureEventsFromMusicXmlDoc(source, 128),
+                MidiIo.collectMidiKeySignatureEventsFromMusicXmlDoc(source, 128),
+                true, true, true, 128, Collections.<String>emptyList(), false, "off_before_on",
+                "", "", "", 0);
+        MidiIo.MidiImportResult imported = MidiIo.convertMidiToMusicXml(exported.getRawBytes(),
+                new MidiIo.MidiImportOptions("1/16", null, null, null, null));
+        assertEquals(true, imported.isOk(), imported.getDiagnostics().toString());
+        Document roundtripped = MusicXmlIo.parseMusicXmlDocument(imported.getXml());
+        assertTrue(roundtripped != null);
+        return roundtripped;
+    }
+
+    private static Document parseMusicXmlFixture(String name) {
+        String xml = loadResourceText(name);
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        assertTrue(doc != null, name);
+        return doc;
+    }
+
+    private static String loadResourceText(String name) {
+        try {
+            InputStream in = MidiIoTest.class.getClassLoader().getResourceAsStream(name);
+            if (in == null) {
+                throw new IllegalArgumentException("Missing fixture: " + name);
+            }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = in.read(buffer)) >= 0) {
+                out.write(buffer, 0, read);
+            }
+            in.close();
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to load fixture: " + name, ex);
+        }
+    }
+
+    private static String firstMeter(Document doc) {
+        Element time = firstElement(doc, "time");
+        if (time == null) {
+            return "";
+        }
+        String beats = firstDirectChildText(time, "beats");
+        String beatType = firstDirectChildText(time, "beat-type");
+        return beats.length() == 0 || beatType.length() == 0 ? "" : beats + "/" + beatType;
+    }
+
+    private static Integer firstKeyFifths(Document doc) {
+        Element key = firstElement(doc, "key");
+        if (key == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(firstDirectChildText(key, "fifths"));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static Integer firstTempo(Document doc) {
+        for (int index = 0; index < doc.getElementsByTagName("sound").getLength(); index++) {
+            Element sound = (Element) doc.getElementsByTagName("sound").item(index);
+            Integer tempo = roundedPositiveInteger(sound.getAttribute("tempo"));
+            if (tempo != null) {
+                return tempo;
+            }
+        }
+        for (int index = 0; index < doc.getElementsByTagName("per-minute").getLength(); index++) {
+            Integer tempo = roundedPositiveInteger(doc.getElementsByTagName("per-minute").item(index).getTextContent());
+            if (tempo != null) {
+                return tempo;
+            }
+        }
+        return null;
+    }
+
+    private static Element firstElement(Document doc, String name) {
+        return doc.getElementsByTagName(name).getLength() == 0 ? null : (Element) doc.getElementsByTagName(name).item(0);
+    }
+
+    private static String firstDirectChildText(Element parent, String name) {
+        for (int index = 0; index < parent.getChildNodes().getLength(); index++) {
+            if (parent.getChildNodes().item(index) instanceof Element
+                    && name.equals(((Element) parent.getChildNodes().item(index)).getTagName())) {
+                return parent.getChildNodes().item(index).getTextContent().trim();
+            }
+        }
+        return "";
+    }
+
+    private static Integer roundedPositiveInteger(String text) {
+        try {
+            double value = Double.parseDouble(text == null ? "" : text.trim());
+            if (Double.isNaN(value) || Double.isInfinite(value) || value <= 0) {
+                return null;
+            }
+            return Integer.valueOf((int) Math.round(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private static List<String> collectTextMetaFromMidi(byte[] midi) {

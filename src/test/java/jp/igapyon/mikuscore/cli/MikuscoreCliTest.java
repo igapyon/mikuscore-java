@@ -362,6 +362,27 @@ public class MikuscoreCliTest {
     }
 
     @Test
+    public void convertMusicXmlToLilyPondReadsStdinAndWritesStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                MusicXmlStateTest.sampleFullMeasureMusicXml("CLI MusicXML to LilyPond")
+                        .getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musicxml", "--to", "lilypond" },
+                inBytes,
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        String out = outBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(out.contains("\\version"));
+        assertTrue(out.contains("\\score"));
+        assertTrue(out.contains("title = \"CLI MusicXML to LilyPond\""));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
     public void convertMusicXmlToMidiWritesMidiFile() throws Exception {
         Path output = Files.createTempFile("mikuscore-convert-midi-out", ".mid");
         try {
@@ -407,6 +428,79 @@ public class MikuscoreCliTest {
             assertEquals(0, exitCode);
             assertTrue(out.contains("<score-partwise"));
             assertTrue(out.contains("<pitch>"));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(input);
+        }
+    }
+
+    @Test
+    public void convertMuseScoreToMusicXmlReadsStdinAndWritesStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        String mscx = "<museScore version=\"4.0\"><Score><metaTag name=\"workTitle\">CLI MuseScore</metaTag>"
+                + "<Division>480</Division><Staff id=\"1\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(mscx.getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musescore", "--to", "musicxml" },
+                inBytes,
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        String out = outBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(out.contains("<score-partwise"));
+        assertTrue(out.contains("<work-title>CLI MuseScore</work-title>"));
+        assertTrue(out.contains("<step>C</step>"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertMusicXmlToMuseScoreWritesMsczOutputFile() throws Exception {
+        Path output = Files.createTempFile("mikuscore-convert-musescore-out", ".mscz");
+        try {
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+            ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                    MusicXmlStateTest.sampleMusicXml("CLI MusicXML to MuseScore").getBytes(StandardCharsets.UTF_8));
+
+            int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musicxml", "--to", "musescore",
+                    "--out", output.toString() }, inBytes,
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            String mscx = MxlIo.extractTextFromZipByExtensions(Files.readAllBytes(output), new String[] { ".mscx" });
+            assertEquals(0, exitCode);
+            assertEquals("", outBytes.toString("UTF-8"));
+            assertTrue(mscx.contains("<museScore version=\"4.0\">"));
+            assertTrue(mscx.contains("<metaTag name=\"workTitle\">CLI MusicXML to MuseScore</metaTag>"));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(output);
+        }
+    }
+
+    @Test
+    public void convertMuseScoreMsczToMusicXmlReadsFileAndWritesStdout() throws Exception {
+        Path input = Files.createTempFile("mikuscore-convert-musescore-in", ".mscz");
+        try {
+            String mscx = "<museScore version=\"4.0\"><Score><metaTag name=\"workTitle\">CLI MSCZ</metaTag>"
+                    + "<Division>480</Division><Staff id=\"1\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                    + "<Note><pitch>64</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+            Files.write(input, MxlIo.makeMsczBytes(mscx));
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+            int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musescore", "--to", "musicxml",
+                    "--in", input.toString() }, new ByteArrayInputStream(new byte[0]),
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            String out = outBytes.toString("UTF-8");
+            assertEquals(0, exitCode);
+            assertTrue(out.contains("<work-title>CLI MSCZ</work-title>"));
+            assertTrue(out.contains("<step>E</step>"));
             assertEquals("", errBytes.toString("UTF-8"));
         } finally {
             Files.deleteIfExists(input);

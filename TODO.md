@@ -139,6 +139,108 @@
 - [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の integer duration multiplier import を Java `LilyPondIo` / `LilyPondIoTest` に追加
   - `r4*3` style multiplier を ABC length token に反映
   - focused coverage: `LilyPondIoTest` 12 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/abc-io.spec.ts` の grace-note unsupported octave range warning regression を Java `AbcIoTest` に追加
+  - octave range 外の grace note を警告付きで skip し、後続 note は import 継続
+  - focused coverage: `AbcIoTest#abcImportWarnsOnUnsupportedOctaveRangeInGraceNote` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML-to-ABC measure / repeat / transpose / tuplet metadata export regression を Java `AbcIoTest` に追加
+  - 標準 ABC repeat surface を優先しつつ、implicit measure / transpose / tuplet syntax の出力を固定
+  - focused coverage: `AbcIoTest#musicXmlToAbcEmitsMeasureTransposeAndTupletMetadata` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/abc-io.spec.ts` の ABC-to-MusicXML measure / repeat / transpose / tuplet metadata restore regression を Java `AbcIoTest` に追加
+  - `%@mks` の implicit measure / transpose metadata と標準 repeat / tuplet tag 復元を固定
+  - focused coverage: `AbcIoTest#abcImportRestoresMeasureTransposeAndTupletMetadata` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の `staffDef` child `<label>` part-name import regression を Java `MeiIoTest` に追加
+  - MEI import public facade が `<label>Violin 1</label>` を MusicXML `part-name` に反映することを固定
+  - focused coverage: `MeiIoTest#importsPartNameFromMeiStaffDefChildLabel` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の `staffDef meter.sym="common"` time-symbol import regression を Java `MeiIoTest` に追加
+  - MEI import public facade が MusicXML `<time symbol="common">` と 4/4 を出力することを固定
+  - focused coverage: `MeiIoTest#importsMeterSymbolFromMeiStaffDefAsMusicXmlTimeSymbol` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の mid-score `scoreDef` key / time / clef import regression を Java `MeiIoTest` に追加
+  - 途中の `scoreDef` 変更が後続 MusicXML measure attributes に反映されることを固定
+  - focused coverage: `MeiIoTest#importsMidScoreScoreDefChangesIntoSubsequentMeasureAttributes` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の mid-score `staffDef` key / clef / transpose import regression を Java `MeiIoTest` に追加
+  - measure 内の target staff `staffDef` 変更が MusicXML attributes に反映されることを固定
+  - focused coverage: `MeiIoTest#importsMidScoreStaffDefChangesForTargetStaff` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の `scoreDef trans.diat/trans.semi` fallback import regression を Java `MeiIoTest` に追加
+  - `staffDef` に transposition がない場合に `scoreDef` の transposition を MusicXML へ反映することを固定
+  - focused coverage: `MeiIoTest#importsTranspositionFromScoreDefWhenStaffDefOmitsTransposition` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の staffDef-over-scoreDef transposition precedence regression を Java `MeiIoTest` に追加
+  - `scoreDef` と `staffDef` の両方に transposition がある場合、target `staffDef` 側を優先することを固定
+  - focused coverage: `MeiIoTest#prefersStaffDefTranspositionOverScoreDefTranspositionForTargetStaff` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の staffDef child `<clef>` alto-clef import regression を Java `MeiIoTest` に追加
+  - `<clef shape="C" line="3"/>` を public MEI import で MusicXML C3 clef に反映することを固定
+  - focused coverage: `MeiIoTest#importsAltoClefFromMeiStaffDefChildClef` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の later `staffDef` clef omission regression を Java `MeiIoTest` に追加
+  - 後続 `staffDef` が clef を省略しても prior alto clef C3 を維持することを固定
+  - focused coverage: `MeiIoTest#keepsPriorAltoClefWhenLaterStaffDefOmitsClef` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の measure-local `scoreDef` before staff content regression を Java `MeiIoTest` に追加
+  - measure 内で staff content より前に置かれた `scoreDef` の key / clef を同一 measure の MusicXML attributes に反映することを固定
+  - focused coverage: `MeiIoTest#appliesMeasureLocalScoreDefBeforeStaffContent` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の first target staff measure initial attributes regression を Java `MeiIoTest` に追加
+  - 対象 staff が初めて出現する measure で初期 key / time / clef / divisions を MusicXML attributes に出力することを固定
+  - focused coverage: `MeiIoTest#emitsInitialAttributesOnFirstMeasureContainingTargetStaff` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の key-signature implied accidental import regression を Java `MeiIoTest` に追加
+  - MEI `accid` が省略された音にも active key signature の pitch alter を適用し、visual accidental は出力しないことを固定
+  - focused coverage: `MeiIoTest#appliesKeySignatureImpliedAccidentalWhenAccidIsOmitted` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の same-measure explicit accidental carry regression を Java `MeiIoTest` に追加
+  - 同一 measure 内で明示 accidental の後続同音が MEI `accid` を省略しても pitch alter を維持することを固定
+  - focused coverage: `MeiIoTest#carriesExplicitAccidentalWithinSameMeasureWhenFollowingNoteOmitsAccid` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の staffDef key.sig precedence regression を Java `MeiIoTest` に追加
+  - target `staffDef key.sig` が `scoreDef key.sig` より優先され、MusicXML key fifths と pitch alter に反映されることを固定
+  - focused coverage: `MeiIoTest#prefersStaffDefKeySigOverScoreDefKeySigForTargetStaff` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の keysig alias import regression を Java `MeiIoTest` に追加
+  - dot なし `keysig` alias を `scoreDef` / `staffDef` で受け、MusicXML key fifths と implied pitch alter に反映することを固定
+  - focused coverage: `MeiIoTest#acceptsMeiKeysigAliasOnScoreDefAndStaffDef` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の key.pname/key.mode major inference regression を Java `MeiIoTest` に追加
+  - `keysig` がない場合に `key.pname=\"g\" key.mode=\"major\"` から MusicXML key fifths と implied pitch alter を推定することを固定
+  - focused coverage: `MeiIoTest#infersMajorKeyFifthsFromMeiKeyPnameAndModeWhenKeysigIsAbsent` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の key.pname/key.mode minor inference regression を Java `MeiIoTest` に追加
+  - `keysig` がない場合に `key.pname=\"d\" key.mode=\"minor\"` から MusicXML key fifths と implied pitch alter を推定することを固定
+  - focused coverage: `MeiIoTest#infersMinorKeyFifthsFromMeiKeyPnameAndModeWhenKeysigIsAbsent` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の key.pname/key.accid/key.mode inference regression を Java `MeiIoTest` に追加
+  - `keysig` がない場合に `key.pname=\"f\" key.accid=\"s\" key.mode=\"major\"` から MusicXML key fifths と implied pitch alter を推定することを固定
+  - focused coverage: `MeiIoTest#infersKeyFifthsFromMeiKeyPnameAccidAndModeWhenKeysigIsAbsent` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の first short measure implicit pickup regression を Java `MeiIoTest` に追加
+  - 先頭 measure が meter より短い場合に MusicXML `implicit=\"yes\"` として import することを固定
+  - focused coverage: `MeiIoTest#marksFirstShortMeasureAsImplicitPickupWhenDurationIsShorterThanMeter` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の meiCorpus first score-bearing child default import regression を Java `MeiIoTest` に追加
+  - `<meiCorpus>` の public import がデフォルトで最初の score-bearing `<mei>` とその title / pitch を選ぶことを固定
+  - focused coverage: `MeiIoTest#importsFirstScoreBearingMeiFromMeiCorpusByDefault` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の meiCorpus empty first child fallback regression を Java `MeiIoTest` に追加
+  - `<meiCorpus>` の先頭 `<mei>` が header-only の場合、次の score-bearing `<mei>` を import することを固定
+  - focused coverage: `MeiIoTest#skipsEmptyFirstMeiCorpusChildAndImportsNextScoreBearingMei` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の meiCorpus child index selection regression を Java `MeiIoTest` に追加
+  - `meiCorpusIndex=1` で second score の title / pitch を public import できることを固定
+  - focused coverage: `MeiIoTest#importsSelectedMeiCorpusChildByIndex` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の meiCorpusIndex out-of-range regression を Java `MeiIoTest` に追加
+  - 範囲外 `meiCorpusIndex` を public import で明示的な例外として扱うことを固定
+  - focused coverage: `MeiIoTest#rejectsOutOfRangeMeiCorpusIndex` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の staff-level `slur` / `tie` startid-endid control-event import regression を Java `MeiIoTest` に追加
+  - staff sibling の `slur` / `tie` が referenced note に MusicXML slur と tie/tied start-stop notation を付与することを固定
+  - focused coverage: `MeiIoTest#importsStaffLevelMeiSlurControlEventsById` と `MeiIoTest#importsStaffLevelMeiTieControlEventsById` 2 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の chord child note `xml:id` tie startid resolution regression を Java `MeiIoTest` に追加
+  - chord 内の child note `xml:id` を staff-level `tie startid` が参照した場合に、生成された先頭 MusicXML note へ tie start を付与することを固定
+  - focused coverage: `MeiIoTest#resolvesStaffLevelMeiTieStartIdFromChordChildNoteId` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の tie-control accidental carry regression を Java `MeiIoTest` に追加
+  - staff-level `tie startid` / `endid` により stop 側の MEI `accid` 省略時も start 側の pitch alter を保持することを固定
+  - focused coverage: `MeiIoTest#appliesStaffLevelMeiTieControlAccidentalCarry` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の staff-level `slur` / `tie` tstamp-tstamp2 control-event import regression を Java `MeiIoTest` に追加
+  - staff-level `slur` / `tie` の `tstamp` / `tstamp2` が beat timestamp から対象 note を解決し、MusicXML notation を付与することを固定
+  - focused coverage: `MeiIoTest#importsStaffLevelMeiSlurControlEventsByTstamp` と `MeiIoTest#importsStaffLevelMeiTieControlEventsByTstamp` 2 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の layer-level `slur` / `tie` startid-endid control-event import regression を Java `MeiIoTest` に追加
+  - layer body 内の `slur` / `tie` control-event が referenced note に MusicXML slur と tie/tied start-stop notation を付与することを固定
+  - focused coverage: `MeiIoTest#importsLayerLevelMeiSlurControlEventsById` と `MeiIoTest#importsLayerLevelMeiTieControlEventsById` 2 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の note-level MEI `tie` / `slur` attributes import regression を Java `MeiIoTest` に追加
+  - 同一 note pair の MEI `tie` / `slur` attributes が MusicXML tie/tied と numbered slur notation を同時に生成することを固定
+  - focused coverage: `MeiIoTest#importsNoteLevelMeiTieAndSlurAttributesTogether` 1 test 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の MEI control-event `plist` fallback / `plist+tstamp2` slur span regression を Java `MeiIoTest` に追加
+  - `startid` がない trill control-event は `plist` 先頭 target に ornament を付与し、`slur plist + tstamp2` は start / stop slur を解決することを固定
+  - focused coverage: `MeiIoTest#importsMeiControlEventUsingPlistWhenStartIdIsAbsent` と `MeiIoTest#importsMeiSlurSpanUsingPlistAndTstamp2` 2 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の MEI `accid.ges` sounding alter import regression を Java `MeiIoTest` に追加
+  - 単音の `accid.ges` は MusicXML pitch alter を出しつつ visual accidental を出さず、chord child note ごとの `accid.ges` も alter に反映することを固定
+  - focused coverage: `MeiIoTest#importsMeiAccidGesAsSoundingAlterWithoutVisualAccidental` と `MeiIoTest#importsChordNoteMeiAccidGesAsSoundingAlterForEachMember` 2 tests 成功
+- [x] 追加完了 slice: upstream `tests/unit/mei-io.spec.ts` の MEI fermata / turn-mordent / breath-caesura control-event import regression を Java `MeiIoTest` に追加
+  - `fermata tstamp place=below`、`turn` / `mordent` target id、`breath` / `caesura` tstamp が MusicXML notations に反映されることを固定
+  - focused coverage: `MeiIoTest#importsMeiFermataControlEventByTstampAsInvertedNotation`, `MeiIoTest#importsMeiTurnAndMordentControlEventsAsOrnaments`, `MeiIoTest#importsMeiBreathAndCaesuraControlEventsAsArticulations` 3 tests 成功
 - [x] 追加完了 slice: upstream `tests/unit/lilypond-io.spec.ts` の implicit beam import regression を Java `LilyPondIoTest` に追加
   - `c'8 d'8 e'8 f'8` import が implicit beam を持つことを確認
   - focused coverage: `LilyPondIoTest` 13 tests 成功
@@ -1219,6 +1321,158 @@
   - full 検証: `mvn test` 成功、924 tests / 0 failures / 0 errors
   - diff 検証: `git diff --check` 問題なし
   - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/durations.ts` / `tests/unit/score-durations.spec.ts` の first common duration helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/durations.ts`, `workplace/mikuscore/tests/unit/score-durations.spec.ts`
+  - Java 側: `ScoreDurations` / `ScoreDurationsTest` を追加し、dot-count normalization、MusicXML dot XML building、direct dot counting を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreDurationsTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/articulations.ts` / `tests/unit/score-articulations.spec.ts` の first common articulation helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/articulations.ts`, `workplace/mikuscore/tests/unit/score-articulations.spec.ts`
+  - Java 側: `ScoreArticulations` / `ScoreArticulationsTest` を追加し、supported kind normalization、stable MusicXML articulation XML building、direct articulation extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreArticulationsTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/barlines.ts` / `tests/unit/score-barlines.spec.ts` の first common barline helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/barlines.ts`, `workplace/mikuscore/tests/unit/score-barlines.spec.ts`
+  - Java 側: `ScoreBarlines` / `ScoreBarlinesTest` を追加し、MusicXML barline feature XML building、direct barline feature extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreBarlinesTest` 成功、2 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/clefs.ts` / `tests/unit/score-clefs.spec.ts` の first common clef helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/clefs.ts`, `workplace/mikuscore/tests/unit/score-clefs.spec.ts`
+  - Java 側: `ScoreClefs` / `ScoreClefsTest` を追加し、clef feature normalization、MusicXML clef XML building、direct clef extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreClefsTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/time-signatures.ts` / `tests/unit/score-time-signatures.spec.ts` の first common time signature helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/time-signatures.ts`, `workplace/mikuscore/tests/unit/score-time-signatures.spec.ts`
+  - Java 側: `ScoreTimeSignatures` / `ScoreTimeSignaturesTest` を追加し、time signature feature normalization、MusicXML time XML building、direct time signature extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreTimeSignaturesTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/key-signatures.ts` / `tests/unit/score-key-signatures.spec.ts` の first common key signature helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/key-signatures.ts`, `workplace/mikuscore/tests/unit/score-key-signatures.spec.ts`
+  - Java 側: `ScoreKeySignatures` / `ScoreKeySignaturesTest` を追加し、key signature feature normalization、MusicXML key XML building、direct key signature extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreKeySignaturesTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/transposition.ts` / `tests/unit/score-transposition.spec.ts` の first common transposition helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/transposition.ts`, `workplace/mikuscore/tests/unit/score-transposition.spec.ts`
+  - Java 側: `ScoreTranspositions` / `ScoreTranspositionsTest` を追加し、transposition feature normalization、MusicXML transpose XML building、direct transpose extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreTranspositionsTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/pitches.ts` / `tests/unit/score-pitches.spec.ts` の first common pitch helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/pitches.ts`, `workplace/mikuscore/tests/unit/score-pitches.spec.ts`
+  - Java 側: `ScorePitches` / `ScorePitchesTest` を追加し、pitch feature normalization、MusicXML pitch XML building、direct pitch extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScorePitchesTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/note-elements.ts` / `tests/unit/score-note-elements.spec.ts` の first common note element helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/note-elements.ts`, `workplace/mikuscore/tests/unit/score-note-elements.spec.ts`
+  - Java 側: `ScoreNoteElements` / `ScoreNoteElementsTest` を追加し、accidental / grace / stem / lyric / fingering / string-number / technical MusicXML helper を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreNoteElementsTest` 成功、6 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/ties.ts` / `tests/unit/score-ties.spec.ts` の first common tie helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/ties.ts`, `workplace/mikuscore/tests/unit/score-ties.spec.ts`
+  - Java 側: `ScoreTies` / `ScoreTiesTest` を追加し、sound tie XML、notation tied XML、separate MusicXML tie/tied state extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreTiesTest` 成功、2 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/slurs.ts` / `tests/unit/score-slurs.spec.ts` の first common slur helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/slurs.ts`, `workplace/mikuscore/tests/unit/score-slurs.spec.ts`
+  - Java 側: `ScoreSlurs` / `ScoreSlursTest` を追加し、slur XML building、slur list XML building、direct slur feature extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreSlursTest` 成功、2 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/tuplets.ts` / `tests/unit/score-tuplets.spec.ts` の first common tuplet helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/tuplets.ts`, `workplace/mikuscore/tests/unit/score-tuplets.spec.ts`
+  - Java 側: `ScoreTuplets` / `ScoreTupletsTest` を追加し、time-modification normalization、MusicXML time-modification XML building、direct time-modification extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreTupletsTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/ornaments.ts` / `tests/unit/score-ornaments.spec.ts` の first common ornament helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/ornaments.ts`, `workplace/mikuscore/tests/unit/score-ornaments.spec.ts`
+  - Java 側: `ScoreOrnaments` / `ScoreOrnamentsTest` を追加し、ornament kind normalization、stable MusicXML ornament XML building、tremolo normalization、direct ornament extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreOrnamentsTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/measure-flow.ts` / `tests/unit/score-measure-flow.spec.ts` の first common measure-flow helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/measure-flow.ts`, `workplace/mikuscore/tests/unit/score-measure-flow.spec.ts`
+  - Java 側: `ScoreMeasureFlow` / `ScoreMeasureFlowTest` を追加し、MusicXML backup / forward control XML helper を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreMeasureFlowTest` 成功、2 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/dynamics.ts` / `tests/unit/score-dynamics.spec.ts` の first common dynamics helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/dynamics.ts`, `workplace/mikuscore/tests/unit/score-dynamics.spec.ts`
+  - Java 側: `ScoreDynamics` / `ScoreDynamicsTest` を追加し、dynamic mark normalization、velocity-to-dynamic mapping、MusicXML direction XML build、direct dynamic / wedge extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreDynamicsTest` 成功、3 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/score-features/direction-text.ts` / `tests/unit/score-direction-text.spec.ts` の first common direction text helper
+  - upstream 位置: `workplace/mikuscore/src/ts/score-features/direction-text.ts`, `workplace/mikuscore/tests/unit/score-direction-text.spec.ts`
+  - Java 側: `ScoreDirectionText` / `ScoreDirectionTextTest` を追加し、tempo normalization / formatting、words / tempo MusicXML direction XML build、direct words / sound tempo / placement extraction を focused coverage
+  - focused 検証: `mvn test -Dtest=ScoreDirectionTextTest` 成功、4 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `tests/unit/abc-inline-voice-switch.spec.ts` の standalone inline voice switch regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-inline-voice-switch.spec.ts`
+  - Java 側: `AbcIoTest` に standalone `[V:...]` body line が後続 body line の active voice として維持される public regression を追加
+  - focused 検証: `mvn test -Dtest=AbcIoTest` 成功、350 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/beam-common.ts` / `tests/unit/beam-common.spec.ts` の MusicXML beam item builder
+  - upstream 位置: `workplace/mikuscore/src/ts/beam-common.ts`, `workplace/mikuscore/tests/unit/beam-common.spec.ts`
+  - Java 側: `MusicXmlIo.buildMusicXmlBeamItemsXml` / `MusicXmlIoTest` に beam item XML builder focused coverage を追加
+  - focused 検証: `mvn test -Dtest=MusicXmlIoTest` 成功、16 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `tests/unit/midi-roundtrip-golden.spec.ts` の key / meter / tempo baseline regression
+  - upstream 位置: `workplace/mikuscore/tests/unit/midi-roundtrip-golden.spec.ts`
+  - Java 側: `MidiIoTest` に MusicXML -> MIDI -> MusicXML の golden fixture baseline regression を追加
+  - 対象 fixture: `base.musicxml`, `interleaved_voices.musicxml`, `roundtrip_piano_tempo.musicxml`
+  - focused 検証: `mvn test -Dtest=MidiIoTest` 成功、165 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/cli-api.ts` / `tests/unit/cli-api.spec.ts` の MuseScore import/export facade
+  - upstream 位置: `workplace/mikuscore/tests/unit/cli-api.spec.ts` の `imports MuseScore to MusicXML` / `exports MusicXML to MuseScore text`
+  - Java 側: `CoreApi.importMuseScoreToMusicXml` / `CoreApi.exportMusicXmlToMuseScore` と focused `CoreApiTest` を追加
+  - focused 検証: `mvn test -Dtest=CoreApiTest` 成功、17 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/preview-flow.ts` / `tests/unit/preview-flow.spec.ts` の pure preview SVG id map helper
+  - upstream 位置: `workplace/mikuscore/tests/unit/preview-flow.spec.ts`
+  - Java 側: `MusicXmlIo.preparePreviewSvgIdMap` / `PreviewSvgIdMap` と focused `MusicXmlIoTest` を追加
+  - カバー範囲: direct map、sequential fallback map、rendered note id 空時の direct mode
+  - focused 検証: `mvn test -Dtest=MusicXmlIoTest` 成功、17 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/playback-flow.ts` / `tests/unit/playback-flow.spec.ts` の dense playback compaction helper
+  - upstream 位置: `workplace/mikuscore/tests/unit/playback-flow.spec.ts` の dense schedule compaction ケース
+  - Java 側: `MidiIo.compactPlaybackScheduleForDensePlayback` / compaction result + summary と focused `MidiIoTest` を追加
+  - カバー範囲: ultra-short event filtering、onset cap、global event budget、protected small onset、outer / unique pitch retention
+  - focused 検証: `mvn test -Dtest=MidiIoTest` 成功、168 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/load-flow.ts` / `tests/unit/load-flow.spec.ts` の file-extension load routing facade
+  - upstream 位置: `workplace/mikuscore/tests/unit/load-flow.spec.ts`
+  - Java 側: `CoreApi.resolveLoadFileToMusicXml` と focused `CoreApiTest` を追加
+  - カバー範囲: MusicXML、MXL、MIDI、MEI、LilyPond、MuseScore MSCX/MSCZ、MSCZ MusicXML fallback、missing / unsupported file、Java 側 unavailable VSQX diagnostics
+  - focused 検証: `mvn test -Dtest=CoreApiTest` 成功、21 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `src/ts/download-flow.ts` / `tests/unit/download-flow.spec.ts` の browser-independent download payload facade
+  - upstream 位置: `workplace/mikuscore/tests/unit/download-flow.spec.ts`
+  - Java 側: `CoreApi.DownloadPayload`、MusicXML/MXL/SVG/JSON/VSQX/ABC/MEI/LilyPond/MIDI/MuseScore payload helper と focused `CoreApiTest` を追加
+  - カバー範囲: file name suffix、content type、MusicXML/MXL compression、VSQX / MuseScore 2-space XML formatting、MSCZ compression、invalid conversion null result
+  - focused 検証: `mvn test -Dtest=CoreApiTest` 成功、26 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `tests/unit/cffp-series.spec.ts` の minimal cross-format baseline
+  - upstream 位置: `workplace/mikuscore/tests/unit/cffp-series.spec.ts`
+  - Java 側: `CoreApiTest.roundtripsMinimalMusicXmlAcrossCoreFormatsForCffpBaseline` を追加
+  - カバー範囲: MusicXML -> ABC / MEI / LilyPond / MIDI -> MusicXML の first pitched note pitch / start position と non-MIDI duration preservation
+  - note: Java 側 MuseScore export は現状 empty scaffold、VSQX は Java 初期移植対象外のため、この baseline から除外
+  - focused 検証: `mvn test -Dtest=CoreApiTest#roundtripsMinimalMusicXmlAcrossCoreFormatsForCffpBaseline` 成功、1 test / 0 failures / 0 errors
+  - focused class 検証: `mvn test -Dtest=CoreApiTest` 成功、27 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `tests/unit/abc-parser.spec.ts` の structural/body token parity detail
+  - upstream 位置: `workplace/mikuscore/tests/unit/abc-parser.spec.ts` の decoration / broken-rhythm helper ケース
+  - Java 側: 既存 `AbcParserTest.parsesSpanDecorationAndBodyTokenAtoms` に focused assertion を追加
+  - カバー範囲: unterminated `+...` decoration token、`<` broken-rhythm の left/right scale
+  - focused 検証: `mvn test -Dtest=AbcParserTest` 成功、13 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `tests/unit/mikuscore-cli.spec.ts` の MusicXML -> LilyPond convert bridge
+  - upstream 位置: `workplace/mikuscore/tests/unit/mikuscore-cli.spec.ts` の `converts MusicXML directly to LilyPond`
+  - Java 側: `MikuscoreCli` の `convert --from musicxml --to lilypond` を `CoreApi.exportMusicXmlToLilyPond` に接続し、focused `MikuscoreCliTest` を追加
+  - focused 検証: `mvn test -Dtest=MikuscoreCliTest#convertMusicXmlToLilyPondReadsStdinAndWritesStdout` 成功、1 test / 0 failures / 0 errors
+  - focused class 検証: `mvn test -Dtest=MikuscoreCliTest` 成功、37 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
+- [x] 2026-05-30 再開 slice: upstream `tests/unit/mikuscore-cli.spec.ts` の MuseScore convert bridge
+  - upstream 位置: `workplace/mikuscore/tests/unit/mikuscore-cli.spec.ts` の `reads .mscz input files for musescore source` / `writes .mscz output when --out ends with .mscz`
+  - Java 側: `MikuscoreCli` の `convert --from musescore --to musicxml` / `convert --from musicxml --to musescore` を `CoreApi` に接続し、focused `MikuscoreCliTest` を追加
+  - カバー範囲: MuseScore stdin text import、MSCZ input decode、MusicXML -> MSCZ output encode
+  - focused 検証: `mvn test -Dtest=MikuscoreCliTest#convertMuseScoreToMusicXmlReadsStdinAndWritesStdout+convertMusicXmlToMuseScoreWritesMsczOutputFile+convertMuseScoreMsczToMusicXmlReadsFileAndWritesStdout` 成功、3 tests / 0 failures / 0 errors
+  - focused class 検証: `mvn test -Dtest=MikuscoreCliTest` 成功、40 tests / 0 failures / 0 errors
+  - tracking docs: `TODO.md`, `docs/remaining-migration-items.md`, `docs/upstream-class-mapping.md`, `docs/upstream-test-mapping.md`
 - [x] 2026-05-26 再開 slice: upstream `tests/unit/abc-io.spec.ts` の MusicXML->ABC single down-bow export regression
   - upstream 位置: `workplace/mikuscore/tests/unit/abc-io.spec.ts` の `MusicXML->ABC exports down-bow and roundtrips it`
   - Java 側: 既存 public focused test `musicXmlToAbcExportsBowingTongueHeelAndToeAndRoundtrips` が MusicXML `down-bow` technical notation の canonical `!downbow!` export と roundtrip 復元をすでに固定していることを確認し、tracking docs に明示
@@ -2124,6 +2378,7 @@
   - `change_duration` の rest consume / underfull fill 用 timing subset は partial 移植済み
   - `split_note` の occupied-time projection は partial 移植済み
 - [ ] `src/ts/beam-common.ts`
+  - `buildMusicXmlBeamItemsXml` は `MusicXmlIo` に partial 移植済み
   - implicit beam assignment subset は `MusicXmlIo.applyImplicitBeamsToMusicXmlText` 用に partial 移植済み
   - ABC measure beam XML 用の `computeBeamAssignments` subset は `AbcIo` に partial 移植済み
 - [x] `core/accidentalSpelling.ts`
@@ -2138,6 +2393,7 @@
 - [ ] `src/ts/musicxml-io.ts`
   - state command 用 DOM parse / serialize subset は partial 移植済み
   - parse / serialize / pretty-print、part-list / part id / tuplet notation / missing tuplet group補完 / final barline normalization、explicit implicit beam pass subset は `MusicXmlIo` に partial 移植済み
+  - render-doc node-id bundle / preview SVG id map helper subset は `MusicXmlIo` に partial 移植済み
 - [ ] `src/ts/abc-io.ts`
   - fraction / length token / pitch / accidental / key / tempo unit helpers は `AbcIo` に partial 移植済み
   - abcjs wrapper line / measure content duration estimate / ABC key fifths helper は `AbcIo` に partial 移植済み
@@ -2177,6 +2433,7 @@
   - duration type / dots、default title / composer 判定、repeat / dynamics / articulation / ornament / key mode / direction XML / clef / transpose / measure length、direction staff / voice placement、tuplet XML / import state / voice utilities、tuplet id reference numbering、tuplet written duration type、beam level / explicit BeamMode XML assignment / implicit beam XML assignment、MuseScore Slur spanner / legacy Slur id transition、MuseScore imported note tie/tied / articulation / technical notation XML、MuseScore Trill spanner / chord Ornament trill / accidental-mark notation XML、MuseScore Ottava spanner / display pitch shift state helper、MuseScore import pitch spelling / accidental state helper、MuseScore imported voice accidental state helper、MuseScore imported rest / pitched note XML composition helper、MuseScore imported voice cursor forward / clamp / tail rest helper、MuseScore imported dynamic / direction / barline placement helper、MuseScore imported event loop cursor step helper、MuseScore imported beam lookup handoff helper、MuseScore imported rest / chord event dispatch helper、ottava、import option、tick relative div / event routing、tie / trill transition、chord notation summary、chord note parse、ignored import tag、measure overflow warning、parsed / fallback measure carrier、part-list / identification / misc / document XML、voice event collection / chord follow merge / backup-forward cursor / by-staff push / direction routing / rest-chord construction / note cursor advance、attribute判定、measure header / finalization、part voice id resolver、accidental subtype / TPC accidental helper、MusicXML pitch / accidental / octave-shift / direction mark payload / mid-barline repeat / notation number / tuplet time-modification / articulation / technical / clef / direction tempo export helper、direction seed XML / collection、explicit clef scan、export metadata value / document body / final fallback / empty score / measure context / measure header / key signature helper、export source analysis / staff count / part identity / scaffold / instrument helper、export slur id / fraction state helper、export tuplet ref state helper、export voice / measure voice / staff XML helper、export staff state helper、export chord / rest XML helper、pending / trailing direction mark helper は `MuseScoreIo` に partial 移植済み
 - [ ] `src/ts/midi-io.ts`
   - tempo / velocity clamp、program preset mapping、leading pickup time-signature normalization、MuseScore-style pickup time-signature prelude、key pitch-class helper、imported-note key signature inference、drum name hint mapping、dynamics velocity mapping、generic track-name detection、standard title / composer meta text helper、metric accent helper、tick splitting helper、pitch helper、quantize normalization、triplet-like timing helper、import quantize tick / grid scoring、imported note quantization、controller velocity scale、auto voice allocation、measure segmentation、duration notation / tie / rest XML helper、XML pretty print / MIDI hex / measure MIDI metadata misc XML helper、source / SysEx / diagnostic metadata misc XML helper、measure voice MusicXML helper、part lane definition / active lane selection helper、tempo / dynamics direction XML helper、initial measure attributes XML helper、part measure layout / pickup measure numbering helper、part segment layout / grand-staff fallback / measure grouping helper、tempo event measure / offset grouping helper、part definition / part-list XML helper、import skeleton document XML wrapper helper、MIDI import skeleton MusicXML assembly helper、MIDI import public conversion facade、MusicXML playback event extraction facade、MusicXML playback direction dynamics velocity helper、MusicXML playback grace note timing helper、MusicXML playback articulation nuance helper、MusicXML playback temporal expression helper、MusicXML playback metric accent option helper、MusicXML playback tie processing helper、MusicXML playback tenuto legato overlap helper、MusicXML playback default detache helper、MusicXML playback slur processing helper、MusicXML playback direction wedge dynamics helper、MusicXML playback ornament expansion helper、MusicXML playback-like nuance option flags helper、MIDI variable-length / SysEx / text meta event byte writing helper、MKS SysEx chunk text / FNV-1a fingerprint helper、tempo / time-signature / key-signature meta event byte writing helper、unsigned big-endian / MIDI writer velocity / raw track chunk encoding helper、raw MIDI tempo / note / control track chunk assembly helper、SMF header assembly helper、SMF byte reader、SMF header parser、SMF track summary parser、MKS metadata helper、playback event parity normalization helper、drum part map / MIDI unpitched note parsing helper、MusicXML MIDI program override collection helper、measure advance / capacity div helper、measure content span estimation helper、first-underfull pickup / implicit measure helper、MusicXML MIDI control event collection helper、MusicXML MIDI tempo event collection helper、MusicXML leading pickup ticks collection helper、MusicXML MIDI time-signature event collection helper、MusicXML MIDI key-signature event collection helper、MIDI export tempo / time-signature / key-signature event normalization helpers、MIDI export default meta-event diagnostics helper、MIDI export text metadata line helper、MIDI export playback event track grouping helper、MIDI export channel count / MKS SysEx chunk params / program preset fallback helpers、MIDI export tempo / time-signature / key-signature meta timeline helper、MIDI export playback track plan helper、MIDI export program-change / note event field helpers、MIDI export control track plan / controller-change field helpers、MIDI export writer track plan helper、MIDI export playback preparation helper、raw MIDI playback bytes assembly helper、MIDI export playback build facade helper は `MidiIo` に first utility slices として移植済み
+  - dense playback schedule compaction helper は `MidiIo` に partial 移植済み
 - [ ] `src/ts/mei-io.ts`
   - note type -> MEI dur、alter / MusicXML accidental -> MEI accid、key signature、pname、lyric wordpos / syllabic、mks duration metadata、tie / articulation helper first slice は `MeiIo` に partial 移植済み
   - harmony kind / degree suffix、offset tick -> tstamp、MusicXML harmony values -> MEI harm XML helper は `MeiIo` に partial 移植済み
@@ -2254,18 +2511,24 @@
 - [x] `src/ts/vsqx-io.ts`
   - 初期 Java 移植対象外として固定する
 - [ ] `src/ts/cli-api.ts`
+  - `resolveLoadFileToMusicXml` 相当の file-extension load routing facade は `CoreApi` に partial 移植済み
+  - browser-independent download payload facade は `CoreApi` に partial 移植済み
   - `decodeCliMusicXmlInput` / `encodeCliMusicXmlOutput` の MusicXML/MXL file I/O facade は `CoreApi` に partial 移植済み
   - `decodeCliMuseScoreInput` / `encodeCliMuseScoreOutput` の MuseScore MSCZ/MSCX file I/O facade は `CoreApi` に partial 移植済み
   - `importAbcToMusicXml` / `exportMusicXmlToAbc` の text-result facade は `CoreApi` に partial 移植済み
   - `importMeiToMusicXml` の text-result facade は `CoreApi` に partial 移植済み
   - `importLilyPondToMusicXml` の text-result facade は `CoreApi` に partial 移植済み
   - `exportMusicXmlToMei` の text-result facade は `CoreApi` に partial 移植済み
+  - `exportMusicXmlToLilyPond` の text-result facade は `CoreApi` に partial 移植済み
+  - `importMuseScoreToMusicXml` / `exportMusicXmlToMuseScore` の text-result facade は `CoreApi` に partial 移植済み
   - `summarizeMusicXmlState` / `inspectMusicXmlMeasure` / `validateMusicXmlCommand` / `applyMusicXmlCommand` / `diffMusicXmlState` の text-result facade は `CoreApi` に partial 移植済み
   - Java CLI は該当 convert / state path を `CoreApi` 経由で呼び出す
 - [ ] `scripts/mikuscore-cli.mjs`
   - Java CLI の `convert --from mei --to musicxml` は partial 移植済み
   - Java CLI の `convert --from musicxml --to mei` は partial 移植済み
   - Java CLI の `convert --from lilypond --to musicxml` は partial 移植済み
+  - Java CLI の `convert --from musicxml --to lilypond` は partial 移植済み
+  - Java CLI の `convert --from musescore --to musicxml` / `convert --from musicxml --to musescore` は partial 移植済み
   - Java CLI の `state` family subset は partial 移植済み
 - [ ] Web UI-only files are out of Java conversion scope, but their core-facing behavior should be checked where they reveal product semantics
 

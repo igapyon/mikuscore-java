@@ -25,6 +25,11 @@ import jp.igapyon.mikuscore.musicxml.MusicXmlIo;
 
 public final class MidiIo {
     private static final double DEFAULT_DETACHE_DURATION_RATIO = 0.93d;
+    private static final int DENSE_PLAYBACK_EVENT_THRESHOLD = 2048;
+    private static final int DENSE_PLAYBACK_MAX_EVENTS = 4096;
+    private static final int DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET = 48;
+    private static final int DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR = 64;
+    private static final int DENSE_PLAYBACK_PROTECTED_ONSET_SIZE = 8;
 
     private MidiIo() {
     }
@@ -1333,6 +1338,194 @@ public final class MidiIo {
             }
         }
         return Collections.unmodifiableList(new ArrayList<RawMidiPlaybackEvent>(deduped.values()));
+    }
+
+    public static PlaybackScheduleCompactionResult compactPlaybackScheduleForDensePlayback(
+            List<RawMidiPlaybackEvent> events, int ticksPerQuarter) {
+        List<RawMidiPlaybackEvent> source = events == null ? Collections.<RawMidiPlaybackEvent>emptyList()
+                : Collections.unmodifiableList(new ArrayList<RawMidiPlaybackEvent>(events));
+        int originalEventCount = source.size();
+        if (originalEventCount <= DENSE_PLAYBACK_EVENT_THRESHOLD) {
+            return new PlaybackScheduleCompactionResult(source,
+                    new PlaybackScheduleCompactionSummary(false, originalEventCount, originalEventCount, 0, 0, 0));
+        }
+
+        int safeTicksPerQuarter = Math.max(1, Math.round(ticksPerQuarter));
+        int minDenseEventTicks =
+                Math.max(1, Math.round((float) safeTicksPerQuarter / DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR));
+        List<RawMidiPlaybackEvent> keptAfterShortFilter = new ArrayList<RawMidiPlaybackEvent>();
+        int droppedUltraShortCount = 0;
+        for (RawMidiPlaybackEvent event : source) {
+            if (event == null || event.getDurTicks() < minDenseEventTicks) {
+                droppedUltraShortCount++;
+                continue;
+            }
+            keptAfterShortFilter.add(event);
+        }
+
+        Map<Integer, List<RawMidiPlaybackEvent>> byOnset =
+                new LinkedHashMap<Integer, List<RawMidiPlaybackEvent>>();
+        for (RawMidiPlaybackEvent event : keptAfterShortFilter) {
+            Integer key = Integer.valueOf(event.getStartTicks());
+            List<RawMidiPlaybackEvent> group = byOnset.get(key);
+            if (group == null) {
+                group = new ArrayList<RawMidiPlaybackEvent>();
+                byOnset.put(key, group);
+            }
+            group.add(event);
+        }
+
+        List<Integer> orderedOnsets = new ArrayList<Integer>(byOnset.keySet());
+        Collections.sort(orderedOnsets);
+        List<List<RawMidiPlaybackEvent>> onsetGroups = new ArrayList<List<RawMidiPlaybackEvent>>();
+        for (Integer start : orderedOnsets) {
+            List<RawMidiPlaybackEvent> retained = prioritizeOnsetGroupForRetention(byOnset.get(start));
+            onsetGroups.add(new ArrayList<RawMidiPlaybackEvent>(
+                    retained.subList(0, Math.min(DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET, retained.size()))));
+        }
+
+        List<RawMidiPlaybackEvent> denseLimitedEvents = new ArrayList<RawMidiPlaybackEvent>();
+        for (List<RawMidiPlaybackEvent> group : onsetGroups) {
+            denseLimitedEvents.addAll(group);
+        }
+        int droppedDenseOnsetCount = keptAfterShortFilter.size() - denseLimitedEvents.size();
+
+        List<RawMidiPlaybackEvent> finalEvents = denseLimitedEvents;
+        int droppedBudgetCount = 0;
+        if (denseLimitedEvents.size() > DENSE_PLAYBACK_MAX_EVENTS) {
+            List<List<RawMidiPlaybackEvent>> reducibleGroups = new ArrayList<List<RawMidiPlaybackEvent>>();
+            List<RawMidiPlaybackEvent> retained = new ArrayList<RawMidiPlaybackEvent>();
+            for (List<RawMidiPlaybackEvent> group : onsetGroups) {
+                if (group.size() <= DENSE_PLAYBACK_PROTECTED_ONSET_SIZE) {
+                    retained.addAll(group);
+                } else {
+                    reducibleGroups.add(new ArrayList<RawMidiPlaybackEvent>(group));
+                }
+            }
+            if (retained.size() < DENSE_PLAYBACK_MAX_EVENTS) {
+                int rounds = 0;
+                for (List<RawMidiPlaybackEvent> group : reducibleGroups) {
+                    rounds = Math.max(rounds, group.size());
+                }
+                for (int round = 0; round < rounds && retained.size() < DENSE_PLAYBACK_MAX_EVENTS; round++) {
+                    for (List<RawMidiPlaybackEvent> group : reducibleGroups) {
+                        if (round >= group.size()) {
+                            continue;
+                        }
+                        retained.add(group.get(round));
+                        if (retained.size() >= DENSE_PLAYBACK_MAX_EVENTS) {
+                            break;
+                        }
+                    }
+                }
+            }
+            if (retained.size() > DENSE_PLAYBACK_MAX_EVENTS) {
+                retained = new ArrayList<RawMidiPlaybackEvent>(
+                        retained.subList(0, DENSE_PLAYBACK_MAX_EVENTS));
+            }
+            Collections.sort(retained, new Comparator<RawMidiPlaybackEvent>() {
+                @Override
+                public int compare(RawMidiPlaybackEvent left, RawMidiPlaybackEvent right) {
+                    if (left.getStartTicks() != right.getStartTicks()) {
+                        return left.getStartTicks() - right.getStartTicks();
+                    }
+                    return left.getMidiNumber() - right.getMidiNumber();
+                }
+            });
+            finalEvents = retained;
+            droppedBudgetCount = denseLimitedEvents.size() - finalEvents.size();
+        }
+
+        return new PlaybackScheduleCompactionResult(finalEvents,
+                new PlaybackScheduleCompactionSummary(true, originalEventCount, finalEvents.size(),
+                        droppedUltraShortCount, droppedDenseOnsetCount, droppedBudgetCount));
+    }
+
+    private static int compareScheduleEventsForRetention(RawMidiPlaybackEvent left, RawMidiPlaybackEvent right) {
+        if (right.getDurTicks() != left.getDurTicks()) {
+            return right.getDurTicks() - left.getDurTicks();
+        }
+        if (left.getChannel() == 10 && right.getChannel() != 10) {
+            return -1;
+        }
+        if (right.getChannel() == 10 && left.getChannel() != 10) {
+            return 1;
+        }
+        if (left.getStartTicks() != right.getStartTicks()) {
+            return left.getStartTicks() - right.getStartTicks();
+        }
+        if (left.getMidiNumber() != right.getMidiNumber()) {
+            return right.getMidiNumber() - left.getMidiNumber();
+        }
+        return left.getTrackId().compareTo(right.getTrackId());
+    }
+
+    private static List<RawMidiPlaybackEvent> prioritizeOnsetGroupForRetention(List<RawMidiPlaybackEvent> group) {
+        List<RawMidiPlaybackEvent> sortedByMidi = group == null ? new ArrayList<RawMidiPlaybackEvent>()
+                : new ArrayList<RawMidiPlaybackEvent>(group);
+        Collections.sort(sortedByMidi, new Comparator<RawMidiPlaybackEvent>() {
+            @Override
+            public int compare(RawMidiPlaybackEvent left, RawMidiPlaybackEvent right) {
+                if (left.getMidiNumber() != right.getMidiNumber()) {
+                    return left.getMidiNumber() - right.getMidiNumber();
+                }
+                return compareScheduleEventsForRetention(left, right);
+            }
+        });
+        int lowestMidi = sortedByMidi.isEmpty() ? 0 : sortedByMidi.get(0).getMidiNumber();
+        int highestMidi = sortedByMidi.isEmpty() ? 0 : sortedByMidi.get(sortedByMidi.size() - 1).getMidiNumber();
+        Map<Integer, List<RawMidiPlaybackEvent>> byPitchClass =
+                new LinkedHashMap<Integer, List<RawMidiPlaybackEvent>>();
+        for (RawMidiPlaybackEvent event : sortedByMidi) {
+            Integer pitchClass = Integer.valueOf(Math.floorMod(event.getMidiNumber(), 12));
+            List<RawMidiPlaybackEvent> bucket = byPitchClass.get(pitchClass);
+            if (bucket == null) {
+                bucket = new ArrayList<RawMidiPlaybackEvent>();
+                byPitchClass.put(pitchClass, bucket);
+            }
+            bucket.add(event);
+        }
+
+        List<RawMidiPlaybackEvent> anchors = new ArrayList<RawMidiPlaybackEvent>();
+        List<RawMidiPlaybackEvent> uniquePitchClasses = new ArrayList<RawMidiPlaybackEvent>();
+        List<RawMidiPlaybackEvent> octaveOuter = new ArrayList<RawMidiPlaybackEvent>();
+        List<RawMidiPlaybackEvent> octaveInner = new ArrayList<RawMidiPlaybackEvent>();
+        for (RawMidiPlaybackEvent event : sortedByMidi) {
+            if (event.getMidiNumber() == lowestMidi || event.getMidiNumber() == highestMidi) {
+                anchors.add(event);
+                continue;
+            }
+            List<RawMidiPlaybackEvent> bucket = byPitchClass.get(Integer.valueOf(Math.floorMod(event.getMidiNumber(), 12)));
+            if (bucket == null || bucket.size() <= 1) {
+                uniquePitchClasses.add(event);
+                continue;
+            }
+            int bucketLowest = bucket.get(0).getMidiNumber();
+            int bucketHighest = bucket.get(bucket.size() - 1).getMidiNumber();
+            if (event.getMidiNumber() == bucketLowest || event.getMidiNumber() == bucketHighest) {
+                octaveOuter.add(event);
+            } else {
+                octaveInner.add(event);
+            }
+        }
+
+        List<RawMidiPlaybackEvent> prioritized = new ArrayList<RawMidiPlaybackEvent>();
+        prioritized.addAll(sortRetentionBucket(anchors));
+        prioritized.addAll(sortRetentionBucket(uniquePitchClasses));
+        prioritized.addAll(sortRetentionBucket(octaveOuter));
+        prioritized.addAll(sortRetentionBucket(octaveInner));
+        return prioritized;
+    }
+
+    private static List<RawMidiPlaybackEvent> sortRetentionBucket(List<RawMidiPlaybackEvent> bucket) {
+        List<RawMidiPlaybackEvent> sorted = new ArrayList<RawMidiPlaybackEvent>(bucket);
+        Collections.sort(sorted, new Comparator<RawMidiPlaybackEvent>() {
+            @Override
+            public int compare(RawMidiPlaybackEvent left, RawMidiPlaybackEvent right) {
+                return compareScheduleEventsForRetention(left, right);
+            }
+        });
+        return sorted;
     }
 
     public static Integer parseMidiNoteNumber(String value) {
@@ -7345,6 +7538,71 @@ public final class MidiIo {
 
         public String getTrackName() {
             return trackName;
+        }
+    }
+
+    public static final class PlaybackScheduleCompactionResult {
+        private final List<RawMidiPlaybackEvent> events;
+        private final PlaybackScheduleCompactionSummary summary;
+
+        private PlaybackScheduleCompactionResult(List<RawMidiPlaybackEvent> events,
+                PlaybackScheduleCompactionSummary summary) {
+            this.events = events == null ? Collections.<RawMidiPlaybackEvent>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<RawMidiPlaybackEvent>(events));
+            this.summary = summary == null
+                    ? new PlaybackScheduleCompactionSummary(false, 0, 0, 0, 0, 0)
+                    : summary;
+        }
+
+        public List<RawMidiPlaybackEvent> getEvents() {
+            return events;
+        }
+
+        public PlaybackScheduleCompactionSummary getSummary() {
+            return summary;
+        }
+    }
+
+    public static final class PlaybackScheduleCompactionSummary {
+        private final boolean applied;
+        private final int originalEventCount;
+        private final int finalEventCount;
+        private final int droppedUltraShortCount;
+        private final int droppedDenseOnsetCount;
+        private final int droppedBudgetCount;
+
+        private PlaybackScheduleCompactionSummary(boolean applied, int originalEventCount, int finalEventCount,
+                int droppedUltraShortCount, int droppedDenseOnsetCount, int droppedBudgetCount) {
+            this.applied = applied;
+            this.originalEventCount = originalEventCount;
+            this.finalEventCount = finalEventCount;
+            this.droppedUltraShortCount = droppedUltraShortCount;
+            this.droppedDenseOnsetCount = droppedDenseOnsetCount;
+            this.droppedBudgetCount = droppedBudgetCount;
+        }
+
+        public boolean isApplied() {
+            return applied;
+        }
+
+        public int getOriginalEventCount() {
+            return originalEventCount;
+        }
+
+        public int getFinalEventCount() {
+            return finalEventCount;
+        }
+
+        public int getDroppedUltraShortCount() {
+            return droppedUltraShortCount;
+        }
+
+        public int getDroppedDenseOnsetCount() {
+            return droppedDenseOnsetCount;
+        }
+
+        public int getDroppedBudgetCount() {
+            return droppedBudgetCount;
         }
     }
 

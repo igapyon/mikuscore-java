@@ -59,6 +59,24 @@ public final class MusicXmlIo {
         }
     }
 
+    public static final class PreviewSvgIdMap {
+        private final Map<String, String> map;
+        private final String mapMode;
+
+        private PreviewSvgIdMap(Map<String, String> map, String mapMode) {
+            this.map = map == null ? Collections.<String, String>emptyMap() : map;
+            this.mapMode = mapMode == null ? "" : mapMode;
+        }
+
+        public Map<String, String> getMap() {
+            return map;
+        }
+
+        public String getMapMode() {
+            return mapMode;
+        }
+    }
+
     public static Document parseMusicXmlDocument(String xmlText) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -170,6 +188,23 @@ public final class MusicXmlIo {
             map.put(svgId, nodeId);
         }
         return new RenderDocBundle(doc, map, count);
+    }
+
+    public static PreviewSvgIdMap preparePreviewSvgIdMap(RenderDocBundle renderBundle, List<String> noteNodeIds,
+            List<String> renderedNoteIds) {
+        Map<String, String> directMap = renderBundle == null ? Collections.<String, String>emptyMap()
+                : renderBundle.getSvgIdToNodeId();
+        List<String> rendered = renderedNoteIds == null ? Collections.<String>emptyList() : renderedNoteIds;
+        if (rendered.isEmpty() || directMap.keySet().containsAll(rendered)) {
+            return new PreviewSvgIdMap(directMap, "direct");
+        }
+        List<String> nodes = noteNodeIds == null ? Collections.<String>emptyList() : noteNodeIds;
+        Map<String, String> fallback = new HashMap<String, String>();
+        int count = Math.min(nodes.size(), rendered.size());
+        for (int index = 0; index < count; index++) {
+            fallback.put(rendered.get(index), nodes.get(index));
+        }
+        return new PreviewSvgIdMap(fallback, "fallback-seq");
     }
 
     public static Document extractMeasureEditorDocument(Document sourceDoc, String partId, String measureNumber) {
@@ -431,6 +466,19 @@ public final class MusicXmlIo {
             return 6;
         }
         return 0;
+    }
+
+    public static String buildMusicXmlBeamItemsXml(String state, Object levels) {
+        int count = positiveRoundedInt(levels);
+        if (count <= 0) {
+            return "";
+        }
+        StringBuilder xml = new StringBuilder();
+        for (int level = 1; level <= count; level++) {
+            xml.append("<beam number=\"").append(level).append("\">").append(xmlEscape(trimToEmpty(state)))
+                    .append("</beam>");
+        }
+        return xml.toString();
     }
 
     private static void appendBeamElement(Element note, int number, String state) {
@@ -956,6 +1004,37 @@ public final class MusicXmlIo {
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    private static int positiveRoundedInt(Object value) {
+        double parsed = toNumber(value);
+        if (Double.isNaN(parsed) || Double.isInfinite(parsed) || parsed <= 0) {
+            return 0;
+        }
+        return (int) Math.round(parsed);
+    }
+
+    private static double toNumber(Object value) {
+        if (value == null) {
+            return Double.NaN;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        String text = String.valueOf(value).trim();
+        if (text.length() == 0) {
+            return Double.NaN;
+        }
+        try {
+            return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return Double.NaN;
+        }
+    }
+
+    private static String xmlEscape(String value) {
+        return String.valueOf(value == null ? "" : value).replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     private static String trimToEmpty(String text) {

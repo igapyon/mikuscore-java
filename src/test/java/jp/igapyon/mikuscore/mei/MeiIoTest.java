@@ -629,6 +629,485 @@ public class MeiIoTest {
     }
 
     @Test
+    public void importsFirstScoreBearingMeiFromMeiCorpusByDefault() {
+        String meiCorpus = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<meiCorpus xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<meiHead><fileDesc><titleStmt><title>Corpus</title></titleStmt><pubStmt><p>test</p></pubStmt></fileDesc></meiHead>"
+                + "<mei><meiHead><fileDesc><titleStmt><title>First score</title></titleStmt><pubStmt><p>test</p></pubStmt></fileDesc></meiHead>"
+                + "<music><body><mdiv><score><scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"S1\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><note pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>"
+                + "<mei><meiHead><fileDesc><titleStmt><title>Second score</title></titleStmt><pubStmt><p>test</p></pubStmt></fileDesc></meiHead>"
+                + "<music><body><mdiv><score><scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"S2\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><note pname=\"d\" oct=\"5\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>"
+                + "</meiCorpus>";
+
+        String xml = MeiIo.convertMeiToMusicXml(meiCorpus, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+
+        assertEquals("First score", musicXml.getElementsByTagName("work-title").item(0).getTextContent());
+        assertEquals("C", musicXml.getElementsByTagName("step").item(0).getTextContent());
+        assertEquals("4", musicXml.getElementsByTagName("octave").item(0).getTextContent());
+    }
+
+    @Test
+    public void skipsEmptyFirstMeiCorpusChildAndImportsNextScoreBearingMei() {
+        String meiCorpus = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<meiCorpus xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<mei><meiHead><fileDesc><titleStmt><title>Header only</title></titleStmt><pubStmt><p>test</p></pubStmt></fileDesc></meiHead></mei>"
+                + "<mei><meiHead><fileDesc><titleStmt><title>Playable score</title></titleStmt><pubStmt><p>test</p></pubStmt></fileDesc></meiHead>"
+                + "<music><body><mdiv><score><scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"S\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><note pname=\"e\" oct=\"5\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>"
+                + "</meiCorpus>";
+
+        String xml = MeiIo.convertMeiToMusicXml(meiCorpus, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+
+        assertEquals("Playable score", musicXml.getElementsByTagName("work-title").item(0).getTextContent());
+        assertEquals("E", musicXml.getElementsByTagName("step").item(0).getTextContent());
+        assertEquals("5", musicXml.getElementsByTagName("octave").item(0).getTextContent());
+    }
+
+    @Test
+    public void importsSelectedMeiCorpusChildByIndex() {
+        String meiCorpus = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<meiCorpus xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<mei><meiHead><fileDesc><titleStmt><title>First score</title></titleStmt><pubStmt><p>test</p></pubStmt></fileDesc></meiHead>"
+                + "<music><body><mdiv><score><scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"S1\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><note pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>"
+                + "<mei><meiHead><fileDesc><titleStmt><title>Second score</title></titleStmt><pubStmt><p>test</p></pubStmt></fileDesc></meiHead>"
+                + "<music><body><mdiv><score><scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"S2\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><note pname=\"d\" oct=\"5\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>"
+                + "</meiCorpus>";
+
+        String xml = MeiIo.convertMeiToMusicXml(meiCorpus, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE,
+                Integer.valueOf(1));
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+
+        assertEquals("Second score", musicXml.getElementsByTagName("work-title").item(0).getTextContent());
+        assertEquals("D", musicXml.getElementsByTagName("step").item(0).getTextContent());
+        assertEquals("5", musicXml.getElementsByTagName("octave").item(0).getTextContent());
+    }
+
+    @Test
+    public void rejectsOutOfRangeMeiCorpusIndex() {
+        final String meiCorpus = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<meiCorpus xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<mei><meiHead><fileDesc><titleStmt><title>A</title></titleStmt><pubStmt><p>x</p></pubStmt></fileDesc></meiHead></mei>"
+                + "</meiCorpus>";
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                new org.junit.jupiter.api.function.Executable() {
+                    public void execute() {
+                        MeiIo.convertMeiToMusicXml(meiCorpus, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE,
+                                Integer.valueOf(3));
+                    }
+                });
+
+        assertTrue(ex.getMessage().toLowerCase().contains("index out of range"));
+    }
+
+    @Test
+    public void importsPartNameFromMeiStaffDefChildLabel() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score><scoreDef meter.count=\"4\" meter.unit=\"4\">"
+                + "<staffGrp><staffDef n=\"1\" clef.shape=\"G\" clef.line=\"2\"><label>Violin 1</label></staffDef></staffGrp>"
+                + "</scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/></layer></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+
+        assertEquals("Violin 1", musicXml.getElementsByTagName("part-name").item(0).getTextContent());
+        assertEquals("C", musicXml.getElementsByTagName("step").item(0).getTextContent());
+        assertEquals("4", musicXml.getElementsByTagName("octave").item(0).getTextContent());
+    }
+
+    @Test
+    public void importsMeterSymbolFromMeiStaffDefAsMusicXmlTimeSymbol() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score><scoreDef>"
+                + "<staffGrp><staffDef n=\"1\" meter.sym=\"common\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp>"
+                + "</scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/></layer></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element time = (org.w3c.dom.Element) musicXml.getElementsByTagName("time").item(0);
+
+        assertEquals("common", time.getAttribute("symbol"));
+        assertEquals("4", directChildText(time, "beats"));
+        assertEquals("4", directChildText(time, "beat-type"));
+    }
+
+    @Test
+    public void importsMidScoreScoreDefChangesIntoSubsequentMeasureAttributes() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\">"
+                + "<staffGrp><staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp>"
+                + "</scoreDef><section>"
+                + "<measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><note pname=\"c\" oct=\"4\" dur=\"4\"/></layer></staff></measure>"
+                + "<scoreDef meter.count=\"3\" meter.unit=\"4\" key.sig=\"2s\">"
+                + "<staffGrp><staffDef n=\"1\" clef.shape=\"F\" clef.line=\"4\"/></staffGrp></scoreDef>"
+                + "<measure n=\"2\"><staff n=\"1\"><layer n=\"1\"><note pname=\"d\" oct=\"3\" dur=\"4\"/></layer></staff></measure>"
+                + "</section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure1 = findMeasureByNumber(musicXml, "1");
+        org.w3c.dom.Element measure2 = findMeasureByNumber(musicXml, "2");
+        org.w3c.dom.Element attributes1 = (org.w3c.dom.Element) measure1.getElementsByTagName("attributes").item(0);
+        org.w3c.dom.Element attributes2 = (org.w3c.dom.Element) measure2.getElementsByTagName("attributes").item(0);
+
+        assertEquals("4", nestedText(attributes1, "beats"));
+        assertEquals("0", nestedText(attributes1, "fifths"));
+        assertEquals("G", nestedText(attributes1, "sign"));
+        assertEquals("3", nestedText(attributes2, "beats"));
+        assertEquals("2", nestedText(attributes2, "fifths"));
+        assertEquals("F", nestedText(attributes2, "sign"));
+        assertEquals("4", nestedText(attributes2, "line"));
+    }
+
+    @Test
+    public void importsMidScoreStaffDefChangesForTargetStaff() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\">"
+                + "<staffGrp><staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp>"
+                + "</scoreDef><section>"
+                + "<measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><note pname=\"c\" oct=\"4\" dur=\"4\"/></layer></staff></measure>"
+                + "<measure n=\"2\"><staffDef n=\"1\" key.sig=\"2\" clef.shape=\"F\" clef.line=\"4\" trans.diat=\"1\" trans.semi=\"2\"/>"
+                + "<staff n=\"1\"><layer n=\"1\"><note pname=\"d\" oct=\"4\" dur=\"4\"/></layer></staff></measure>"
+                + "</section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure2 = findMeasureByNumber(musicXml, "2");
+        org.w3c.dom.Element attributes2 = (org.w3c.dom.Element) measure2.getElementsByTagName("attributes").item(0);
+
+        assertEquals("2", nestedText(attributes2, "fifths"));
+        assertEquals("F", nestedText(attributes2, "sign"));
+        assertEquals("4", nestedText(attributes2, "line"));
+        assertEquals("1", nestedText(attributes2, "diatonic"));
+        assertEquals("2", nestedText(attributes2, "chromatic"));
+    }
+
+    @Test
+    public void importsTranspositionFromScoreDefWhenStaffDefOmitsTransposition() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\" trans.diat=\"-2\" trans.semi=\"-3\">"
+                + "<staffGrp><staffDef n=\"1\" label=\"Clarinet in A\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp>"
+                + "</scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"5\" dur=\"4\"/></layer></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element attributes = (org.w3c.dom.Element) findMeasureByNumber(musicXml, "1")
+                .getElementsByTagName("attributes").item(0);
+
+        assertEquals("-2", nestedText(attributes, "diatonic"));
+        assertEquals("-3", nestedText(attributes, "chromatic"));
+    }
+
+    @Test
+    public void prefersStaffDefTranspositionOverScoreDefTranspositionForTargetStaff() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\" trans.diat=\"-2\" trans.semi=\"-3\">"
+                + "<staffGrp><staffDef n=\"1\" label=\"Eb Clarinet\" clef.shape=\"G\" clef.line=\"2\" "
+                + "trans.diat=\"2\" trans.semi=\"3\"/></staffGrp>"
+                + "</scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"g\" oct=\"4\" dur=\"4\"/></layer></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element attributes = (org.w3c.dom.Element) findMeasureByNumber(musicXml, "1")
+                .getElementsByTagName("attributes").item(0);
+
+        assertEquals("2", nestedText(attributes, "diatonic"));
+        assertEquals("3", nestedText(attributes, "chromatic"));
+    }
+
+    @Test
+    public void importsAltoClefFromMeiStaffDefChildClef() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Viola\" lines=\"5\"><clef shape=\"C\" line=\"3\"/></staffDef>"
+                + "</staffGrp></scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/></layer></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element attributes = (org.w3c.dom.Element) findMeasureByNumber(musicXml, "1")
+                .getElementsByTagName("attributes").item(0);
+
+        assertEquals("C", nestedText(attributes, "sign"));
+        assertEquals("3", nestedText(attributes, "line"));
+    }
+
+    @Test
+    public void keepsPriorAltoClefWhenLaterStaffDefOmitsClef() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Viola\" lines=\"5\" clef.shape=\"C\" clef.line=\"3\"/>"
+                + "</staffGrp></scoreDef><section><scoreDef><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Viola\"/>"
+                + "</staffGrp></scoreDef><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/></layer></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element attributes = (org.w3c.dom.Element) findMeasureByNumber(musicXml, "1")
+                .getElementsByTagName("attributes").item(0);
+
+        assertEquals("C", nestedText(attributes, "sign"));
+        assertEquals("3", nestedText(attributes, "line"));
+    }
+
+    @Test
+    public void appliesMeasureLocalScoreDefBeforeStaffContent() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><scoreDef key.sig=\"2s\"><staffGrp>"
+                + "<staffDef n=\"1\" clef.shape=\"F\" clef.line=\"4\"/></staffGrp></scoreDef>"
+                + "<staff n=\"1\"><layer n=\"1\"><note pname=\"d\" oct=\"3\" dur=\"4\"/></layer></staff>"
+                + "</measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element attributes = (org.w3c.dom.Element) findMeasureByNumber(musicXml, "1")
+                .getElementsByTagName("attributes").item(0);
+
+        assertEquals("2", nestedText(attributes, "fifths"));
+        assertEquals("F", nestedText(attributes, "sign"));
+        assertEquals("4", nestedText(attributes, "line"));
+    }
+
+    @Test
+    public void emitsInitialAttributesOnFirstMeasureContainingTargetStaff() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"3\" meter.unit=\"4\" key.sig=\"2f\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Main\" clef.shape=\"G\" clef.line=\"2\"/>"
+                + "<staffDef n=\"2\" label=\"Other\" clef.shape=\"F\" clef.line=\"4\"/>"
+                + "</staffGrp></scoreDef><section>"
+                + "<measure n=\"1\"><staff n=\"2\"><layer n=\"1\"><rest dur=\"4\"/></layer></staff></measure>"
+                + "<measure n=\"2\"><staff n=\"1\"><layer n=\"1\"><note pname=\"b\" oct=\"4\" dur=\"4\"/></layer></staff></measure>"
+                + "</section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure2 = findMeasureByNumber(musicXml, "2");
+        org.w3c.dom.Element attributes = (org.w3c.dom.Element) measure2.getElementsByTagName("attributes").item(0);
+
+        assertEquals("P1", ((org.w3c.dom.Element) measure2.getParentNode()).getAttribute("id"));
+        assertEquals("480", directChildText(attributes, "divisions"));
+        assertEquals("-2", nestedText(attributes, "fifths"));
+        assertEquals("3", nestedText(attributes, "beats"));
+        assertEquals("G", nestedText(attributes, "sign"));
+    }
+
+    @Test
+    public void appliesKeySignatureImpliedAccidentalWhenAccidIsOmitted() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"1s\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note pname=\"g\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(musicXml, "1").getElementsByTagName("note");
+        org.w3c.dom.Element note1 = (org.w3c.dom.Element) notes.item(0);
+        org.w3c.dom.Element note2 = (org.w3c.dom.Element) notes.item(1);
+        org.w3c.dom.Element note3 = (org.w3c.dom.Element) notes.item(2);
+
+        assertEquals("1", nestedText(note1, "alter"));
+        assertEquals("", nestedText(note2, "alter"));
+        assertEquals("", nestedText(note3, "alter"));
+        assertEquals(0, note1.getElementsByTagName("accidental").getLength());
+    }
+
+    @Test
+    public void carriesExplicitAccidentalWithinSameMeasureWhenFollowingNoteOmitsAccid() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\" accid=\"s\"/>"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(musicXml, "1").getElementsByTagName("note");
+
+        assertEquals(2, notes.getLength());
+        assertEquals("1", nestedText((org.w3c.dom.Element) notes.item(0), "alter"));
+        assertEquals("1", nestedText((org.w3c.dom.Element) notes.item(1), "alter"));
+    }
+
+    @Test
+    public void prefersStaffDefKeySigOverScoreDefKeySigForTargetStaff() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" key.sig=\"1s\" clef.shape=\"G\" clef.line=\"2\"/>"
+                + "</staffGrp></scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure = findMeasureByNumber(musicXml, "1");
+
+        assertEquals("1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("attributes").item(0),
+                "fifths"));
+        assertEquals("1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("note").item(0), "alter"));
+    }
+
+    @Test
+    public void acceptsMeiKeysigAliasOnScoreDefAndStaffDef() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" keysig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" keysig=\"1s\" clef.shape=\"G\" clef.line=\"2\"/>"
+                + "</staffGrp></scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure = findMeasureByNumber(musicXml, "1");
+
+        assertEquals("1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("attributes").item(0),
+                "fifths"));
+        assertEquals("1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("note").item(0), "alter"));
+    }
+
+    @Test
+    public void infersMajorKeyFifthsFromMeiKeyPnameAndModeWhenKeysigIsAbsent() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.pname=\"g\" key.mode=\"major\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/>"
+                + "</staffGrp></scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure = findMeasureByNumber(musicXml, "1");
+
+        assertEquals("1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("attributes").item(0),
+                "fifths"));
+        assertEquals("1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("note").item(0), "alter"));
+    }
+
+    @Test
+    public void infersMinorKeyFifthsFromMeiKeyPnameAndModeWhenKeysigIsAbsent() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.pname=\"d\" key.mode=\"minor\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/>"
+                + "</staffGrp></scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"b\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure = findMeasureByNumber(musicXml, "1");
+
+        assertEquals("-1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("attributes").item(0),
+                "fifths"));
+        assertEquals("-1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("note").item(0), "alter"));
+    }
+
+    @Test
+    public void infersKeyFifthsFromMeiKeyPnameAccidAndModeWhenKeysigIsAbsent() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.pname=\"f\" key.accid=\"s\" key.mode=\"major\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/>"
+                + "</staffGrp></scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure = findMeasureByNumber(musicXml, "1");
+
+        assertEquals("6", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("attributes").item(0),
+                "fifths"));
+        assertEquals("1", nestedText((org.w3c.dom.Element) measure.getElementsByTagName("note").item(0), "alter"));
+    }
+
+    @Test
+    public void marksFirstShortMeasureAsImplicitPickupWhenDurationIsShorterThanMeter() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\">"
+                + "<music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"8\"/>"
+                + "</layer></staff></measure><measure n=\"2\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"d\" oct=\"4\" dur=\"1\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document musicXml = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element measure1 = findMeasureByNumber(musicXml, "1");
+
+        assertEquals("yes", measure1.getAttribute("implicit"));
+        assertEquals("240", directChildText((org.w3c.dom.Element) measure1.getElementsByTagName("note").item(0),
+                "duration"));
+    }
+
+    @Test
     public void importsMeiMeasureRestsAndSpacesAsTimingPreservingRests() {
         String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
@@ -808,6 +1287,362 @@ public class MeiIoTest {
         assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(1), "slur", "type", "stop"));
         assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(2), "slur", "type", "stop"));
         assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(2), "slur", "number", "1"));
+    }
+
+    @Test
+    public void importsNoteLevelMeiTieAndSlurAttributesTogether() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\" tie=\"i\" slur=\"i1\"/>"
+                + "<note pname=\"d\" oct=\"4\" dur=\"4\" tie=\"t\" slur=\"t1\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+        org.w3c.dom.Element first = (org.w3c.dom.Element) notes.item(0);
+        org.w3c.dom.Element second = (org.w3c.dom.Element) notes.item(1);
+
+        assertEquals(2, notes.getLength());
+        assertTrue(hasDirectChildWithAttribute(first, "tie", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute(first, "tied", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute(first, "slur", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute(first, "slur", "number", "1"));
+        assertTrue(hasDirectChildWithAttribute(second, "tie", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute(second, "tied", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute(second, "slur", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute(second, "slur", "number", "1"));
+    }
+
+    @Test
+    public void importsStaffLevelMeiSlurControlEventsById() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"n1\" pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"n2\" pname=\"d\" oct=\"4\" dur=\"4\"/>"
+                + "</layer><slur startid=\"#n1\" endid=\"#n2\"/></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(2, notes.getLength());
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(0), "slur", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(1), "slur", "type", "stop"));
+    }
+
+    @Test
+    public void importsStaffLevelMeiTieControlEventsById() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"n1\" pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"n2\" pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "</layer><tie startid=\"#n1\" endid=\"#n2\"/></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+        org.w3c.dom.Element first = (org.w3c.dom.Element) notes.item(0);
+        org.w3c.dom.Element second = (org.w3c.dom.Element) notes.item(1);
+
+        assertEquals(2, notes.getLength());
+        assertTrue(hasDirectChildWithAttribute(first, "tie", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute(first, "tied", "type", "start"));
+        assertTrue(hasDirectChildWithAttribute(second, "tie", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute(second, "tied", "type", "stop"));
+    }
+
+    @Test
+    public void resolvesStaffLevelMeiTieStartIdFromChordChildNoteId() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<chord dur=\"4\"><note xml:id=\"cn1\" pname=\"c\" oct=\"4\"/>"
+                + "<note pname=\"e\" oct=\"4\"/></chord>"
+                + "<note xml:id=\"n2\" pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "</layer><tie startid=\"#cn1\" endid=\"#n2\"/></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+        org.w3c.dom.Element first = (org.w3c.dom.Element) notes.item(0);
+        org.w3c.dom.Element third = (org.w3c.dom.Element) notes.item(2);
+
+        assertEquals(3, notes.getLength());
+        assertTrue(hasDirectChildWithAttribute(first, "tie", "type", "start"));
+        assertTrue(hasDirectChildWithAttribute(third, "tie", "type", "stop"));
+    }
+
+    @Test
+    public void appliesStaffLevelMeiTieControlAccidentalCarry() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"n1\" pname=\"f\" oct=\"4\" dur=\"4\" accid=\"s\"/>"
+                + "<note xml:id=\"n2\" pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "</layer><tie startid=\"#n1\" endid=\"#n2\"/></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+        org.w3c.dom.Element first = (org.w3c.dom.Element) notes.item(0);
+        org.w3c.dom.Element second = (org.w3c.dom.Element) notes.item(1);
+
+        assertEquals("1", nestedText(first, "alter"));
+        assertEquals("1", nestedText(second, "alter"));
+        assertTrue(hasDirectChildWithAttribute(first, "tie", "type", "start"));
+        assertTrue(hasDirectChildWithAttribute(second, "tie", "type", "stop"));
+    }
+
+    @Test
+    public void importsStaffLevelMeiSlurControlEventsByTstamp() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note pname=\"d\" oct=\"4\" dur=\"4\"/>"
+                + "</layer><slur tstamp=\"1\" tstamp2=\"2\"/></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(2, notes.getLength());
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(0), "slur", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(1), "slur", "type", "stop"));
+    }
+
+    @Test
+    public void importsStaffLevelMeiTieControlEventsByTstamp() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "</layer><tie tstamp=\"1\" tstamp2=\"2\"/></staff></measure></section>"
+                + "</score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+        org.w3c.dom.Element first = (org.w3c.dom.Element) notes.item(0);
+        org.w3c.dom.Element second = (org.w3c.dom.Element) notes.item(1);
+
+        assertEquals(2, notes.getLength());
+        assertTrue(hasDirectChildWithAttribute(first, "tie", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute(first, "tied", "type", "start"));
+        assertTrue(hasDirectChildWithAttribute(second, "tie", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute(second, "tied", "type", "stop"));
+    }
+
+    @Test
+    public void importsLayerLevelMeiSlurControlEventsById() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"ln1\" pname=\"e\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"ln2\" pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "<slur startid=\"#ln1\" endid=\"#ln2\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(2, notes.getLength());
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(0), "slur", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(1), "slur", "type", "stop"));
+    }
+
+    @Test
+    public void importsLayerLevelMeiTieControlEventsById() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"tn1\" pname=\"g\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"tn2\" pname=\"g\" oct=\"4\" dur=\"4\"/>"
+                + "<tie startid=\"#tn1\" endid=\"#tn2\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+        org.w3c.dom.Element first = (org.w3c.dom.Element) notes.item(0);
+        org.w3c.dom.Element second = (org.w3c.dom.Element) notes.item(1);
+
+        assertEquals(2, notes.getLength());
+        assertTrue(hasDirectChildWithAttribute(first, "tie", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute(first, "tied", "type", "start"));
+        assertTrue(hasDirectChildWithAttribute(second, "tie", "type", "stop"));
+        assertTrue(hasNestedChildWithAttribute(second, "tied", "type", "stop"));
+    }
+
+    @Test
+    public void importsMeiControlEventUsingPlistWhenStartIdIsAbsent() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"p1\" pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"p2\" pname=\"d\" oct=\"4\" dur=\"4\"/>"
+                + "<trill plist=\"#p1 #p2\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(2, notes.getLength());
+        assertTrue(((org.w3c.dom.Element) notes.item(0)).getElementsByTagName("trill-mark").getLength() > 0);
+        assertEquals(0, ((org.w3c.dom.Element) notes.item(1)).getElementsByTagName("trill-mark").getLength());
+    }
+
+    @Test
+    public void importsMeiSlurSpanUsingPlistAndTstamp2() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"sp1\" pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"sp2\" pname=\"d\" oct=\"4\" dur=\"4\"/>"
+                + "<slur plist=\"#sp1\" tstamp2=\"2\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(2, notes.getLength());
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(0), "slur", "type", "start"));
+        assertTrue(hasNestedChildWithAttribute((org.w3c.dom.Element) notes.item(1), "slur", "type", "stop"));
+    }
+
+    @Test
+    public void importsMeiAccidGesAsSoundingAlterWithoutVisualAccidental() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\" accid.ges=\"s\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element note = firstNoteOfMeasure(doc, "1");
+
+        assertEquals("1", nestedText(note, "alter"));
+        assertEquals(0, note.getElementsByTagName("accidental").getLength());
+    }
+
+    @Test
+    public void importsChordNoteMeiAccidGesAsSoundingAlterForEachMember() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\"><chord dur=\"4\">"
+                + "<note pname=\"f\" oct=\"4\" accid.ges=\"s\"/>"
+                + "<note pname=\"b\" oct=\"4\" accid.ges=\"f\"/>"
+                + "</chord></layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertEquals(2, notes.getLength());
+        assertEquals("1", nestedText((org.w3c.dom.Element) notes.item(0), "alter"));
+        assertEquals("-1", nestedText((org.w3c.dom.Element) notes.item(1), "alter"));
+    }
+
+    @Test
+    public void importsMeiFermataControlEventByTstampAsInvertedNotation() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"e\" oct=\"4\" dur=\"4\"/>"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "<fermata tstamp=\"2\" place=\"below\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.Element second = (org.w3c.dom.Element) findMeasureByNumber(doc, "1").getElementsByTagName("note")
+                .item(1);
+
+        assertTrue(hasNestedChildWithAttribute(second, "fermata", "type", "inverted"));
+    }
+
+    @Test
+    public void importsMeiTurnAndMordentControlEventsAsOrnaments() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note xml:id=\"orn1\" pname=\"c\" oct=\"4\" dur=\"4\"/>"
+                + "<note xml:id=\"orn2\" pname=\"d\" oct=\"4\" dur=\"4\"/>"
+                + "<turn startid=\"#orn1\" type=\"inverted\"/>"
+                + "<mordent startid=\"#orn2\" type=\"upper\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertTrue(((org.w3c.dom.Element) notes.item(0)).getElementsByTagName("inverted-turn").getLength() > 0);
+        assertTrue(((org.w3c.dom.Element) notes.item(1)).getElementsByTagName("mordent").getLength() > 0);
+    }
+
+    @Test
+    public void importsMeiBreathAndCaesuraControlEventsAsArticulations() {
+        String mei = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1\"><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"4\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/></staffGrp></scoreDef>"
+                + "<section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<note pname=\"e\" oct=\"4\" dur=\"4\"/>"
+                + "<note pname=\"f\" oct=\"4\" dur=\"4\"/>"
+                + "<breath tstamp=\"1\"/>"
+                + "<caesura tstamp=\"2\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String xml = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document doc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+        org.w3c.dom.NodeList notes = findMeasureByNumber(doc, "1").getElementsByTagName("note");
+
+        assertTrue(((org.w3c.dom.Element) notes.item(0)).getElementsByTagName("breath-mark").getLength() > 0);
+        assertTrue(((org.w3c.dom.Element) notes.item(1)).getElementsByTagName("caesura").getLength() > 0);
     }
 
     @Test
