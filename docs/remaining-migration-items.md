@@ -2,8 +2,9 @@
 
 This document tracks repository-specific remaining work for the `mikuscore-java` straight conversion.
 
-The shared policy is described in `docs/miku-soft-30-straight-conversion-v20260425.md`.
-This file records the current `mikuscore-java` status and next migration items.
+The shared policy is referenced through
+[`miku-soft-reference.md`](miku-soft-reference.md). This file records the
+current `mikuscore-java` status and next migration items.
 
 ## Current Remaining Work
 

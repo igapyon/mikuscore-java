@@ -32,6 +32,7 @@ public class MikuscoreCliTest {
         assertTrue(out.contains("convert --from musicxml --to musicxml"));
         assertTrue(out.contains("state summarize"));
         assertTrue(out.contains("Commands:"));
+        assertTrue(out.contains("--diagnostics text|json is not yet implemented"));
         assertEquals("", err);
     }
 
@@ -48,7 +49,24 @@ public class MikuscoreCliTest {
         assertEquals(0, exitCode);
         assertTrue(out.contains("Convert score text between supported formats"));
         assertTrue(out.contains("--from musicxml --to musicxml"));
+        assertTrue(out.contains("--out <file> replaces an existing file"));
+        assertTrue(out.contains("0 success, 1 processing failure, 2 invalid usage or unsupported pair"));
         assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertRejectsUnsupportedDiagnosticsOption() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musicxml", "--to", "abc", "--diagnostics", "json" },
+                new ByteArrayInputStream(new byte[0]),
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(2, exitCode);
+        assertEquals("", outBytes.toString("UTF-8"));
+        assertTrue(errBytes.toString("UTF-8").contains("Unsupported option: --diagnostics"));
     }
 
     @Test
@@ -460,6 +478,7 @@ public class MikuscoreCliTest {
     public void convertMusicXmlToMuseScoreWritesMsczOutputFile() throws Exception {
         Path output = Files.createTempFile("mikuscore-convert-musescore-out", ".mscz");
         try {
+            Files.write(output, "previous output".getBytes(StandardCharsets.UTF_8));
             ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
             ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
             ByteArrayInputStream inBytes = new ByteArrayInputStream(

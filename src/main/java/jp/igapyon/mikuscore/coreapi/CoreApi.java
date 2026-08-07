@@ -40,7 +40,7 @@ public final class CoreApi {
     public static String version() {
         Package pkg = CoreApi.class.getPackage();
         String version = pkg == null ? null : pkg.getImplementationVersion();
-        return version == null ? "0.5.0" : version;
+        return version == null ? "0.5.1" : version;
     }
 
     public static CliResult importAbcToMusicXml(String abcText) {
