@@ -4,6 +4,18 @@ This document records upstream-following questions, parity gaps, and conversion 
 
 ## Open Items
 
+### CLI diagnostics parity
+
+- Status: open, recorded 2026-08-06
+- Area: `scripts/mikuscore-cli.mjs`, `MikuscoreCli`
+- Upstream reference: `--diagnostics text|json` and the structured error
+  diagnostics produced by the Node.js CLI.
+- Note: Java currently keeps primary output on stdout and failures on stderr
+  with exit codes `0` / `1` / `2`, but does not accept a diagnostics-format
+  option or emit the upstream JSON diagnostics envelope. Preserve that
+  difference explicitly in help and mapping documents until a bounded,
+  testable Java parity slice is selected.
+
 ### `change_duration` remaining timing parity
 
 - Status: open, narrowed 2026-05-09

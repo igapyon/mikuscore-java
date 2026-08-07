@@ -2,3 +2,5 @@
 target/
 workplace/*
 !workplace/.gitkeep
+.vscode/mcp.json
+.codex/skills/

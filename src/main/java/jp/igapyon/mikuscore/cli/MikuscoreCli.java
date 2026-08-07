@@ -39,6 +39,10 @@ public final class MikuscoreCli {
             out.println(CoreApi.version());
             return 0;
         }
+        if (hasOption(args, "--diagnostics")) {
+            err.println("Unsupported option: --diagnostics. The Java CLI does not yet implement upstream diagnostics formats.");
+            return 2;
+        }
         if ("convert".equals(args[0])) {
             return runConvert(args, in, out, err);
         }
@@ -443,6 +447,9 @@ public final class MikuscoreCli {
         out.println("  --in <file>|-    Read input from file or stdin");
         out.println("  --out <file>|-   Write output to file or stdout");
         out.println("  --version        Show version");
+        out.println();
+        out.println("Compatibility note:");
+        out.println("  Upstream --diagnostics text|json is not yet implemented and is rejected by this Java CLI.");
     }
 
     private static void printConvertHelp(PrintStream out) {
@@ -482,11 +489,19 @@ public final class MikuscoreCli {
         out.println();
         out.println("Input:");
         out.println("  --in <file>|-  Read MusicXML, MXL, ABC, MEI, LilyPond, MIDI, MuseScore MSCX, or MSCZ from file or stdin");
+        out.println("  stdin          Used when --in is omitted or is -");
         out.println("  file paths     musicxml accepts .musicxml / .xml / .mxl; musescore accepts .mscx / .mscz; midi accepts bytes");
         out.println();
         out.println("Output:");
         out.println("  --out <file>|-  Write MusicXML text, MXL bytes, MIDI bytes, MuseScore MSCX text, or MSCZ bytes");
+        out.println("  stdout          Used when --out is omitted or is -");
         out.println("  file paths      musicxml writes .mxl when --out ends with .mxl; musescore writes .mscz when requested");
+        out.println("  overwrite       --out <file> replaces an existing file");
+        out.println();
+        out.println("Runtime contract:");
+        out.println("  primary output  stdout; usage and processing failures use stderr");
+        out.println("  exit codes      0 success, 1 processing failure, 2 invalid usage or unsupported pair");
+        out.println("  diagnostics     upstream --diagnostics text|json is not implemented by this Java CLI");
     }
 
     private static void printRenderHelp(PrintStream out) {
@@ -522,6 +537,12 @@ public final class MikuscoreCli {
         out.println("  validate-command   Validate one bounded MusicXML command");
         out.println("  apply-command   Apply one bounded command and emit the next canonical MusicXML state");
         out.println("  diff   Emit a compact JSON diff between two MusicXML states");
+        out.println();
+        out.println("Runtime contract:");
+        out.println("  input/output    UTF-8 MusicXML; stdin is used by commands with omitted --in, and results use stdout");
+        out.println("  primary output  stdout; usage and processing failures use stderr");
+        out.println("  exit codes      0 success, 1 processing failure, 2 invalid usage");
+        out.println("  diagnostics     upstream --diagnostics text|json is not implemented by this Java CLI");
     }
 
     private static String optionValue(String[] args, String name) {
@@ -531,6 +552,15 @@ public final class MikuscoreCli {
             }
         }
         return null;
+    }
+
+    private static boolean hasOption(String[] args, String name) {
+        for (String arg : args) {
+            if (name.equals(arg)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String lowerOptionValue(String[] args, String name) {

@@ -59,6 +59,7 @@ mvn package
 Runtime artifact:
 
 - `target/mikuscore.jar`
+- `target/mikuscore-sources.jar`
 - `target/mikuscore-dist.zip`
 
 Expected execution path:
@@ -69,14 +70,21 @@ java -jar target/mikuscore.jar --help
 
 Release asset workflow:
 
-- pushing a `v*` tag, for example `v0.5.0`, builds the CLI runtime and attaches release assets to the matching GitHub Release
+- pushing a `v*` tag, for example `v0.5.1`, builds the CLI runtime and attaches release assets to the matching GitHub Release
 - attached files are `mikuscore-<version>.jar` and `mikuscore-sources-<version>.jar`
-- the Maven version is kept aligned with the upstream Node.js package version
+- the Release tag version must equal the Maven version or use its documented dot suffix
+
+The local Maven output names and public Release asset names are currently
+different by design. Any public artifact-name migration is tracked as a
+dedicated compatibility change in
+[`docs/release-artifact-migration.md`](docs/release-artifact-migration.md), not
+as an incidental packaging edit.
 
 ## CLI
 
-The current Java CLI is only a foundation entrypoint.
-Product commands are added through straight conversion from upstream `mikuscore`.
+The Java CLI is a testable adapter over `CoreApi`. Product commands are added
+through straight conversion from upstream `mikuscore`; supported conversion
+pairs remain partial unless their mapping documents say otherwise.
 
 Current foundation commands:
 
@@ -89,8 +97,12 @@ Current foundation commands:
 - `convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]`
 - `convert --from musicxml --to mei [--in <file>|-] [--out <file>|-]`
 - `convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-]`
 - `convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-]`
+- `convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-]`
 - `convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]`
+- `render svg [--from musicxml|abc] [--in <file>|-] [--out <file>|-]` (recognized but unsupported)
 - `state summarize [--in <file>|-]`
 - `state inspect-measure --measure <number> [--in <file>|-]`
 - `state validate-command --command <json> [--in <file>|-]`
@@ -112,33 +124,36 @@ Current MusicXML I/O support also includes a Java `MusicXmlIo` normalization sub
 
 MXL container support is available through the Java `MxlIo` slice for `META-INF/container.xml` based MusicXML extraction, fallback `.musicxml` / `.xml` extraction, and `score.musicxml` MXL encoding.
 
-The first `convert` slice is intentionally narrow and follows the latest upstream CLI taxonomy while Java format conversion is still partial:
+The conversion surface follows the upstream CLI taxonomy while Java format
+conversion remains partial. It covers MusicXML/MXL, ABC, MIDI, MEI, LilyPond,
+and MuseScore/MSCZ routes through the migrated Java facades. The exact current
+coverage and remaining parity work are maintained in
+[`docs/upstream-cli-mapping.md`](docs/upstream-cli-mapping.md).
 
-- stdin / stdout MusicXML text pass-through
-- `.musicxml` / `.xml` file input and output
-- `.mxl` file input decoded to MusicXML text
-- `.mxl` file output encoded from MusicXML text
-- first ABC text to MusicXML conversion slice for basic headers, notes, rests, chords, tuplets, grace groups, overlay voices, basic / standard-shorthand / prefixed decorations, richer decoration aliases, accidental annotations, navigation / wedge / dynamics decorations, overfull compatibility reflow diagnostics, repeat / ending metadata, tie handoff, broken rhythm / slur handoff, barline-separated measures, and initial MusicXML -> ABC -> MusicXML fixture roundtrip coverage
-- first MIDI file import/export CLI bridge through the migrated Java `MidiIo` facade, including ABC -> MusicXML -> MIDI handoff
-- first LilyPond text to MusicXML CLI bridge through `CoreApi.importLilyPondToMusicXml`
-- unsupported conversion pairs return usage error status `2`
+### CLI runtime contract
 
-Planned upstream command families:
-
-- `convert --from ... --to ...`
-- `render svg` (pending; upstream currently depends on `verovio.js` browser runtime)
-- `state summarize`
-- `state inspect-measure`
-- `state validate-command`
-- `state apply-command`
-- `state diff`
+- Omit `--in` or pass `-` to read from standard input. Omit `--out` or pass
+  `-` to write the primary result to standard output.
+- Text input and output use UTF-8. MusicXML accepts `.musicxml`, `.xml`, and
+  `.mxl`; MuseScore accepts `.mscx` and `.mscz`; MIDI is handled as bytes.
+- Primary results use standard output; usage and processing failures use
+  standard error. Exit code `0` means success, `1` a processing failure, and
+  `2` an invalid or unsupported invocation.
+- An explicit `--out <file>` replaces an existing file. This matches the
+  upstream CLI behavior. Use an explicit output path for binary results in
+  automation.
+- The upstream `--diagnostics text|json` option is not yet implemented by the
+  Java CLI. This is a documented parity follow-up, rather than an implied
+  supported option.
+- `render svg` is recognized but unsupported because the upstream path depends
+  on the browser-oriented Verovio runtime.
 
 ## Development Docs
 
 Suggested order:
 
 1. `docs/remaining-migration-items.md`
-2. `docs/miku-soft-30-straight-conversion-v20260425.md`
+2. `docs/miku-soft-reference.md`
 3. `docs/upstream-class-mapping.md`
 4. `docs/upstream-test-mapping.md`
 5. `docs/upstream-cli-mapping.md`
