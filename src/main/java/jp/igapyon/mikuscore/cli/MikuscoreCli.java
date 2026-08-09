@@ -53,7 +53,7 @@ public final class MikuscoreCli {
             return runState(args, in, out, err);
         }
         err.println("Unsupported command: " + args[0]);
-        err.println("Product commands will be added through straight conversion from upstream mikuscore.");
+        err.println("Product commands will be added through straight conversion from upstream miku-score.");
         return 2;
     }
 
@@ -412,29 +412,29 @@ public final class MikuscoreCli {
     }
 
     private static void printHelp(PrintStream out) {
-        out.println("mikuscore-java");
+        out.println("miku-score-java");
         out.println();
         out.println("Usage:");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from abc --to midi [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar render svg [--from musicxml|abc] [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state summarize [--in <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state inspect-measure --measure <number> [--in <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state validate-command --command <json> [--in <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state apply-command --command <json> [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state diff --before <file> --after <file>");
-        out.println("  java -jar target/mikuscore.jar convert --help");
-        out.println("  java -jar target/mikuscore.jar state --help");
-        out.println("  java -jar target/mikuscore.jar --help");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from abc --to midi [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar render svg [--from musicxml|abc] [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar state summarize [--in <file>|-]");
+        out.println("  java -jar target/miku-score.jar state inspect-measure --measure <number> [--in <file>|-]");
+        out.println("  java -jar target/miku-score.jar state validate-command --command <json> [--in <file>|-]");
+        out.println("  java -jar target/miku-score.jar state apply-command --command <json> [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar state diff --before <file> --after <file>");
+        out.println("  java -jar target/miku-score.jar convert --help");
+        out.println("  java -jar target/miku-score.jar state --help");
+        out.println("  java -jar target/miku-score.jar --help");
         out.println();
         out.println("Commands:");
         out.println("  convert   Convert score text between supported formats");
@@ -453,22 +453,22 @@ public final class MikuscoreCli {
     }
 
     private static void printConvertHelp(PrintStream out) {
-        out.println("mikuscore-java convert");
+        out.println("miku-score-java convert");
         out.println();
         out.println("Usage:");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from abc --to midi [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to mei [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar convert --help");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from abc --to midi [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to mei [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar convert --help");
         out.println();
         out.println("Description:");
         out.println("  Convert score text between supported formats.");
@@ -505,11 +505,11 @@ public final class MikuscoreCli {
     }
 
     private static void printRenderHelp(PrintStream out) {
-        out.println("mikuscore-java render");
+        out.println("miku-score-java render");
         out.println();
         out.println("Usage:");
-        out.println("  java -jar target/mikuscore.jar render svg [--from musicxml|abc] [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar render --help");
+        out.println("  java -jar target/miku-score.jar render svg [--from musicxml|abc] [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar render --help");
         out.println();
         out.println("Description:");
         out.println("  Render derived outputs.");
@@ -522,14 +522,14 @@ public final class MikuscoreCli {
     }
 
     private static void printStateHelp(PrintStream out) {
-        out.println("mikuscore-java state");
+        out.println("miku-score-java state");
         out.println();
         out.println("Usage:");
-        out.println("  java -jar target/mikuscore.jar state summarize [--in <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state inspect-measure --measure <number> [--in <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state validate-command --command <json> [--in <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state apply-command --command <json> [--in <file>|-] [--out <file>|-]");
-        out.println("  java -jar target/mikuscore.jar state diff --before <file> --after <file>");
+        out.println("  java -jar target/miku-score.jar state summarize [--in <file>|-]");
+        out.println("  java -jar target/miku-score.jar state inspect-measure --measure <number> [--in <file>|-]");
+        out.println("  java -jar target/miku-score.jar state validate-command --command <json> [--in <file>|-]");
+        out.println("  java -jar target/miku-score.jar state apply-command --command <json> [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar state diff --before <file> --after <file>");
         out.println();
         out.println("Commands:");
         out.println("  summarize   Emit a compact JSON summary of canonical MusicXML state");

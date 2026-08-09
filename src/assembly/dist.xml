@@ -8,14 +8,14 @@
   <includeBaseDirectory>false</includeBaseDirectory>
   <files>
     <file>
-      <source>${project.build.directory}/mikuscore.jar</source>
+      <source>${project.build.directory}/miku-score.jar</source>
       <outputDirectory>/</outputDirectory>
-      <destName>mikuscore.jar</destName>
+      <destName>miku-score.jar</destName>
     </file>
     <file>
-      <source>${project.build.directory}/mikuscore-sources.jar</source>
+      <source>${project.build.directory}/miku-score-sources.jar</source>
       <outputDirectory>/</outputDirectory>
-      <destName>mikuscore-sources.jar</destName>
+      <destName>miku-score-sources.jar</destName>
     </file>
     <file>
       <source>${project.basedir}/README.md</source>

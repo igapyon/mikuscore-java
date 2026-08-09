@@ -1,6 +1,6 @@
 # Upstream Follow-up Log
 
-This document records upstream-following questions, parity gaps, and conversion constraints found during `mikuscore-java` straight conversion.
+This document records upstream-following questions, parity gaps, and conversion constraints found during `miku-score-java` straight conversion.
 
 ## Open Items
 

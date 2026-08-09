@@ -1,10 +1,10 @@
-# mikuscore-java
+# miku-score-java
 
-Java straight-conversion workspace for `mikuscore`.
+Java straight-conversion workspace for `miku-score`.
 
 ## Purpose
 
-This repository is a Java 1.8 based straight conversion of `mikuscore`.
+This repository is a Java 1.8 based straight conversion of `miku-score`.
 
 The Java version does not try to redesign the upstream project into a Java-first architecture at the initial stage.
 The primary goal is to preserve the upstream Node.js / TypeScript structure, naming, CLI intent, tests, and artifact roles closely enough that upstream changes remain traceable.
@@ -23,14 +23,14 @@ VSQX conversion is intentionally out of scope for the initial Java conversion be
 
 ## Upstream Policy
 
-- Use `workplace/mikuscore` as the local temporary reference clone of the Node.js / TypeScript upstream.
+- Use `workplace/miku-score` as the local temporary reference clone of the Node.js / TypeScript upstream. An existing pre-rename `workplace/mikuscore` checkout is an ignored local historical path, not the canonical name.
 - Treat `workplace/` as local working space.
 - Track only `workplace/.gitkeep` in Git.
 - Keep Java implementation and Java-specific specs outside `workplace/`.
 
 The upstream source repository is:
 
-- `https://github.com/igapyon/mikuscore`
+- `https://github.com/igapyon/miku-score`
 
 ## Porting Policy
 
@@ -58,32 +58,31 @@ mvn package
 
 Runtime artifact:
 
-- `target/mikuscore.jar`
-- `target/mikuscore-sources.jar`
-- `target/mikuscore-dist.zip`
+- `target/miku-score.jar`
+- `target/miku-score-sources.jar`
+- `target/miku-score-dist.zip`
 
 Expected execution path:
 
 ```sh
-java -jar target/mikuscore.jar --help
+java -jar target/miku-score.jar --help
 ```
 
 Release asset workflow:
 
 - pushing a `v*` tag, for example `v0.5.1`, builds the CLI runtime and attaches release assets to the matching GitHub Release
-- attached files are `mikuscore-<version>.jar` and `mikuscore-sources-<version>.jar`
+- attached files are `miku-score-<version>.jar` and `miku-score-sources-<version>.jar`
 - the Release tag version must equal the Maven version or use its documented dot suffix
 
-The local Maven output names and public Release asset names are currently
-different by design. Any public artifact-name migration is tracked as a
-dedicated compatibility change in
-[`docs/release-artifact-migration.md`](docs/release-artifact-migration.md), not
-as an incidental packaging edit.
+The current local Maven output and public Release asset names use the
+`miku-score` canonical name. The compatibility boundary, including the Java
+package and historical references that intentionally retain `mikuscore`, is
+recorded in [`docs/rename-migration.md`](docs/rename-migration.md).
 
 ## CLI
 
 The Java CLI is a testable adapter over `CoreApi`. Product commands are added
-through straight conversion from upstream `mikuscore`; supported conversion
+through straight conversion from upstream `miku-score`; supported conversion
 pairs remain partial unless their mapping documents say otherwise.
 
 Current foundation commands:
@@ -158,6 +157,7 @@ Suggested order:
 4. `docs/upstream-test-mapping.md`
 5. `docs/upstream-cli-mapping.md`
 6. `docs/upstream-followup-log.md`
+7. `docs/rename-migration.md`
 
 Tracking flow:
 

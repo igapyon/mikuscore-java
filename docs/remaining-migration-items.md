@@ -1,10 +1,10 @@
 # Remaining Migration Items
 
-This document tracks repository-specific remaining work for the `mikuscore-java` straight conversion.
+This document tracks repository-specific remaining work for the `miku-score-java` straight conversion.
 
 The shared policy is referenced through
 [`miku-soft-reference.md`](miku-soft-reference.md). This file records the
-current `mikuscore-java` status and next migration items.
+current `miku-score-java` status and next migration items.
 
 ## Current Remaining Work
 

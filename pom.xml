@@ -4,13 +4,13 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>jp.igapyon</groupId>
-  <artifactId>mikuscore</artifactId>
+  <artifactId>miku-score</artifactId>
   <version>0.5.1</version>
   <packaging>jar</packaging>
 
-  <name>mikuscore-java</name>
-  <description>Java straight-conversion workspace for mikuscore</description>
-  <url>https://github.com/igapyon/mikuscore-java</url>
+  <name>miku-score-java</name>
+  <description>Java straight-conversion workspace for miku-score</description>
+  <url>https://github.com/igapyon/miku-score-java</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -30,7 +30,7 @@
   </dependencies>
 
   <build>
-    <finalName>mikuscore</finalName>
+    <finalName>miku-score</finalName>
     <pluginManagement>
       <plugins>
         <plugin>
@@ -111,7 +111,7 @@
             </goals>
             <configuration>
               <appendAssemblyId>false</appendAssemblyId>
-              <finalName>mikuscore-dist</finalName>
+              <finalName>miku-score-dist</finalName>
               <descriptors>
                 <descriptor>src/assembly/dist.xml</descriptor>
               </descriptors>
