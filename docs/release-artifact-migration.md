@@ -1,12 +1,12 @@
 ---
-title: Release artifact naming migration decision
-description: Compatibility gate and implementation design for aligning Maven and Release artifact names.
-topics: [mikuscore, release, maven, artifacts, compatibility]
+title: Release artifact naming migration
+description: Canonical Maven and Release artifact naming for miku-score-java.
+topics: [miku-score, release, maven, artifacts, compatibility]
 category: workflow
-status: draft
+status: implemented
 audience: [maintainer, developer]
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-09
 sources:
   - type: local-file
     role: primary
@@ -22,64 +22,42 @@ sources:
     checked: 2026-08-06
 ---
 
-# Release artifact naming migration decision
+# Release artifact naming migration
 
 ## Purpose
 
-The current shared miku-soft Java guidance prefers Maven-coordinate-traceable
-artifact names. Changing public Release asset names can break download scripts,
-checksums, and user documentation, so it is intentionally not included in
-ordinary repository cleanup.
+Issue #31 renamed this repository to `miku-score-java`. The Maven outputs,
+CLI help, distribution ZIP, and future Release assets use the same
+`miku-score` canonical name.
 
 ## Current contract
 
-`mvn package` currently produces these local paths:
+`mvn package` produces these local paths:
 
-- `target/mikuscore.jar`
-- `target/mikuscore-sources.jar`
-- `target/mikuscore-dist.zip`
+- `target/miku-score.jar`
+- `target/miku-score-sources.jar`
+- `target/miku-score-dist.zip`
 
-The distribution ZIP contains `mikuscore.jar`, `mikuscore-sources.jar`,
+The distribution ZIP contains `miku-score.jar`, `miku-score-sources.jar`,
 `README.md`, and `LICENSE`.
 
-The tag workflow renames and uploads only these public assets:
+The tag workflow stages and uploads these public assets:
 
-- `mikuscore-<version>.jar`
-- `mikuscore-sources-<version>.jar`
+- `miku-score-<version>.jar`
+- `miku-score-sources-<version>.jar`
 
-It does not currently publish the distribution ZIP.
+It does not publish the distribution ZIP. The tag/POM version validation and
+Java 8 runtime smoke test remain unchanged.
 
-## Decision required
+## Compatibility boundary
 
-Before changing any filename, inspect the published Releases and known
-consumers. Decide one of these contracts explicitly:
+Existing releases and their assets are historical records and are not
+rewritten. The new names apply to future release assets after the migration.
+No compatibility alias is created in the repository; release publication
+continues to be a human-controlled GitHub operation.
 
-1. Retain the existing public names and record them as a compatibility
-   exception. This is the default until consumer evidence is available.
-2. Migrate consistently to Maven-coordinate-traceable names:
-   `<artifactId>-<version>.jar`,
-   `<artifactId>-<version>-sources.jar`, and
-   `<artifactId>-dist-<version>.zip`.
+## Verification
 
-The decision also needs to state whether the distribution ZIP becomes a public
-Release asset and whether a compatibility alias or a release-note migration
-period is required.
-
-## Implementation after approval
-
-1. Change `pom.xml` and `src/assembly/dist.xml` together so Maven outputs and
-   ZIP contents use the selected final names.
-2. Change `.github/workflows/release-cli-runtime.yml` to stage only the exact
-   approved files. Keep the tag/POM version validation and Java 8 final-jar
-   smoke test.
-3. Update `README.md` and any download or checksum references in the same
-   change.
-4. Build from a clean staging directory; assert the exact basenames, non-empty
-   files, executable jar behavior, ZIP contents, and any approved checksums.
-5. Leave tagging, Release creation, asset upload, and publication to the
-   human-controlled GitHub step.
-
-## Current disposition
-
-Deferred on 2026-08-06. No public artifact name or Release workflow behavior
-was changed by the miku-soft maintenance alignment.
+Run `mvn test`, `mvn package`, `java -jar target/miku-score.jar --help`, and
+`java -jar target/miku-score.jar --version`. Confirm the three local artifacts
+are non-empty and inspect the ZIP entries before preparing a release.

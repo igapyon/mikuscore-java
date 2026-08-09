@@ -1,5 +1,5 @@
 ---
-title: mikuscore-java miku-soft reference
+title: miku-score-java miku-soft reference
 description: Project-local entry point to the shared miku-soft standards used for maintenance.
 topics: [miku-soft, java, maintenance, straight-conversion]
 category: reference
@@ -54,3 +54,4 @@ is the project-local entry point.
 - [`upstream-test-mapping.md`](upstream-test-mapping.md)
 - [`upstream-cli-mapping.md`](upstream-cli-mapping.md)
 - [`upstream-followup-log.md`](upstream-followup-log.md)
+- [`rename-migration.md`](rename-migration.md)

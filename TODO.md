@@ -1,11 +1,11 @@
 ---
-title: mikuscore-java maintenance and migration TODO
+title: miku-score-java maintenance and migration TODO
 description: Current repository-specific work, decisions, and verification for the Java runtime.
-topics: [mikuscore, java, migration, maintenance]
+topics: [miku-score, java, migration, maintenance]
 category: worklog
 status: active
 audience: [maintainer, developer, agent]
-updated: 2026-08-06
+updated: 2026-08-09
 sources:
   - type: local-file
     role: primary
@@ -21,7 +21,7 @@ sources:
 
 ## Current role
 
-This file is the concise repository worklog for `mikuscore-java`. Detailed
+This file is the concise repository worklog for `miku-score-java`. Detailed
 upstream migration status belongs in
 [`docs/remaining-migration-items.md`](docs/remaining-migration-items.md), and
 class, test, CLI, and parity evidence belongs in the corresponding mapping
@@ -33,7 +33,7 @@ rewriting it in
 
 ## Current project direction
 
-- Preserve `mikuscore` upstream semantics in Java; do not begin with a
+- Preserve `miku-score` upstream semantics in Java; do not begin with a
   Java-first redesign.
 - Keep Java 8, Maven, JUnit Jupiter, the executable runtime jar, and
   `workplace/` as the established runtime and repository boundaries.
@@ -57,9 +57,9 @@ rewriting it in
 - [ ] Record an installed miku-soft skill commit when the deployed skill source
   exposes Git metadata. The copy inspected on 2026-08-06 was not a Git
   worktree, so its exact commit could not be recorded.
-- [ ] Resolve the public artifact-name decision in
-  [`docs/release-artifact-migration.md`](docs/release-artifact-migration.md)
-  before changing Maven or GitHub Release filenames.
+- [x] Rename the repository and adopt canonical `miku-score` Maven, CLI, and
+  Release artifact names; see [`docs/rename-migration.md`](docs/rename-migration.md)
+  and [`docs/release-artifact-migration.md`](docs/release-artifact-migration.md).
 
 ## 2026-08-06 miku-soft maintenance record
 
@@ -71,3 +71,13 @@ rewriting it in
 | Deferred | Public artifact-name and Release-asset changes require the dedicated compatibility decision in [`docs/release-artifact-migration.md`](docs/release-artifact-migration.md). The shared maintenance backlog is still decision-gated. |
 | Verification | `mvn package`; built runtime `--version` and `--help`; distribution ZIP contents; focused CLI contract tests. |
 | Next action | Continue a bounded upstream-parity slice from `docs/remaining-migration-items.md`. |
+
+## 2026-08-09 repository rename record
+
+| Field | Record |
+| --- | --- |
+| Issue | GitHub Issue #31 |
+| GitHub operation | The repository was renamed by a human from `mikuscore-java` to `miku-score-java`; the old URL redirects to the new URL. |
+| Applied | Updated `origin`, Maven coordinates and outputs, CLI display/help, README, release workflow input paths, and the artifact migration record. |
+| Compatibility | Java package `jp.igapyon.mikuscore` and public class names remain unchanged; historical references are listed in `docs/rename-migration.md`. |
+| Verification | `mvn test`, `mvn package`, CLI `--help` / `--version`, artifact and ZIP-content checks. |

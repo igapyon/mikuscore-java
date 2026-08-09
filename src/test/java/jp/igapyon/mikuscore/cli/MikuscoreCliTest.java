@@ -29,6 +29,8 @@ public class MikuscoreCliTest {
         String out = outBytes.toString("UTF-8");
         String err = errBytes.toString("UTF-8");
         assertEquals(0, exitCode);
+        assertTrue(out.contains("miku-score-java"));
+        assertTrue(out.contains("target/miku-score.jar"));
         assertTrue(out.contains("convert --from musicxml --to musicxml"));
         assertTrue(out.contains("state summarize"));
         assertTrue(out.contains("Commands:"));
