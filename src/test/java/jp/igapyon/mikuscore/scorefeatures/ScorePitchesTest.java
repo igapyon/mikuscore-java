@@ -39,6 +39,16 @@ public class ScorePitchesTest {
     }
 
     @Test
+    public void normalizesJavaScriptBooleanAndRadixNumberInputs() {
+        PitchFeature normalized = ScorePitches
+                .normalizePitchFeature(new PitchFeature("g", Boolean.TRUE, "0x5"));
+
+        assertEquals("G", normalized.getStep());
+        assertEquals(Integer.valueOf(1), normalized.getAlter());
+        assertEquals(Integer.valueOf(5), normalized.getOctave());
+    }
+
+    @Test
     public void extractsMusicXmlPitchFeatures() {
         Element pitch = parsePitch("<pitch><step>B</step><alter>-1</alter><octave>3</octave></pitch>");
 
@@ -47,6 +57,15 @@ public class ScorePitchesTest {
         assertEquals("B", feature.getStep());
         assertEquals(Integer.valueOf(-1), feature.getAlter());
         assertEquals(Integer.valueOf(3), feature.getOctave());
+    }
+
+    @Test
+    public void extractionUsesEmptyStringNumberCoercionForMissingDirectChildren() {
+        PitchFeature feature = ScorePitches.extractMusicXmlPitchFeature(parsePitch("<pitch><step>D</step></pitch>"));
+
+        assertEquals("D", feature.getStep());
+        assertNull(feature.getAlter());
+        assertEquals(Integer.valueOf(0), feature.getOctave());
     }
 
     private static Element parsePitch(String xml) {

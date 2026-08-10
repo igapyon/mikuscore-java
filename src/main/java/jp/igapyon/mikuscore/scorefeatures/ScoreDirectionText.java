@@ -43,10 +43,12 @@ public final class ScoreDirectionText {
         if (text == null) {
             return "";
         }
-        String placement = normalizePlacement(feature.getPlacement());
-        String placementAttr = placement == null ? "" : " placement=\"" + placement + "\"";
-        String fontStyle = normalizeFontStyle(feature.getFontStyle());
-        String fontStyleAttr = fontStyle == null ? "" : " font-style=\"" + fontStyle + "\"";
+        String placementAttr = isJavaScriptTruthyText(feature.getPlacement())
+                ? " placement=\"" + feature.getPlacement() + "\""
+                : "";
+        String fontStyleAttr = isJavaScriptTruthyText(feature.getFontStyle())
+                ? " font-style=\"" + feature.getFontStyle() + "\""
+                : "";
         Double tempo = normalizeTempoBpm(feature.getTempoBpm());
         String soundXml = tempo == null ? "" : "<sound tempo=\"" + formatTempoBpm(tempo) + "\"/>";
         return "<direction" + placementAttr + "><direction-type><words" + fontStyleAttr + ">" + xmlEscape(text)
@@ -63,8 +65,9 @@ public final class ScoreDirectionText {
         if (tempo == null) {
             return "";
         }
-        String placement = normalizePlacement(feature.getPlacement());
-        String placementAttr = placement == null ? "" : " placement=\"" + placement + "\"";
+        String placementAttr = isJavaScriptTruthyText(feature.getPlacement())
+                ? " placement=\"" + feature.getPlacement() + "\""
+                : "";
         StringBuilder directionTypes = new StringBuilder();
         String text = trimToNull(feature.getText());
         if (text != null) {
@@ -116,19 +119,19 @@ public final class ScoreDirectionText {
     private static String directionTailXml(Object offsetDiv, String voice, Object staff) {
         Integer offset = positiveRounded(offsetDiv);
         String offsetXml = offset == null ? "" : "<offset>" + offset + "</offset>";
-        String voiceXml = trimToNull(voice) == null ? "" : "<voice>" + xmlEscape(voice) + "</voice>";
+        String voiceXml = isJavaScriptTruthyText(voice) ? "<voice>" + xmlEscape(voice) + "</voice>" : "";
         String staffXml = staff == null || String.valueOf(staff).trim().length() == 0 ? ""
                 : "<staff>" + xmlEscape(String.valueOf(staff)) + "</staff>";
         return offsetXml + voiceXml + staffXml;
     }
 
     private static String normalizePlacement(String value) {
-        String normalized = value == null ? "" : value.trim().toLowerCase();
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         return "above".equals(normalized) || "below".equals(normalized) ? normalized : null;
     }
 
     private static String normalizeFontStyle(String value) {
-        String normalized = value == null ? "" : value.trim().toLowerCase();
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         return "italic".equals(normalized) || "normal".equals(normalized) ? normalized : null;
     }
 
@@ -144,15 +147,38 @@ public final class ScoreDirectionText {
         if (value == null) {
             return Double.NaN;
         }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue() ? 1 : 0;
+        }
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
         String text = String.valueOf(value).trim();
         if (text.length() == 0) {
-            return Double.NaN;
+            return 0;
+        }
+        if (text.startsWith("0x") || text.startsWith("0X")) {
+            return parseRadixNumber(text.substring(2), 16);
+        }
+        if (text.startsWith("0b") || text.startsWith("0B")) {
+            return parseRadixNumber(text.substring(2), 2);
+        }
+        if (text.startsWith("0o") || text.startsWith("0O")) {
+            return parseRadixNumber(text.substring(2), 8);
         }
         try {
             return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return Double.NaN;
+        }
+    }
+
+    private static double parseRadixNumber(String digits, int radix) {
+        if (digits.isEmpty()) {
+            return Double.NaN;
+        }
+        try {
+            return Long.parseLong(digits, radix);
         } catch (NumberFormatException ex) {
             return Double.NaN;
         }
@@ -171,6 +197,10 @@ public final class ScoreDirectionText {
     private static String trimToNull(String value) {
         String trimmed = value == null ? "" : value.trim();
         return trimmed.length() == 0 ? null : trimmed;
+    }
+
+    private static boolean isJavaScriptTruthyText(String value) {
+        return value != null && value.length() > 0;
     }
 
     private static String xmlEscape(String value) {

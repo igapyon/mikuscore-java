@@ -38,6 +38,7 @@ public class ScoreNoteElementsTest {
 
     @Test
     public void buildsMusicXmlGraceItems() {
+        assertEquals("<grace/>", ScoreNoteElements.buildMusicXmlGraceXml());
         assertEquals("<grace/>", ScoreNoteElements.buildMusicXmlGraceXml(null));
         assertEquals("<grace slash=\"yes\"/>", ScoreNoteElements.buildMusicXmlGraceXml(new GraceFeature(true)));
     }
@@ -66,6 +67,8 @@ public class ScoreNoteElementsTest {
         assertEquals("<string>3.4</string>", ScoreNoteElements.buildMusicXmlStringNumberXml(Double.valueOf(3.4)));
         assertEquals("<string>3</string>",
                 ScoreNoteElements.buildMusicXmlStringNumberXml(Double.valueOf(3.4), true));
+        assertEquals("<string>1</string>", ScoreNoteElements.buildMusicXmlStringNumberXml(Boolean.TRUE, true));
+        assertEquals("<string>16</string>", ScoreNoteElements.buildMusicXmlStringNumberXml("0x10", true));
         assertEquals("<technical><fingering>2</fingering></technical>",
                 ScoreNoteElements.buildMusicXmlTechnicalXml(Arrays.asList("<fingering>2</fingering>", "")));
     }

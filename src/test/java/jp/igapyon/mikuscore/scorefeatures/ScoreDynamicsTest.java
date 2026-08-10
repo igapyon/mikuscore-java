@@ -27,6 +27,7 @@ public class ScoreDynamicsTest {
         assertEquals("ppp", ScoreDynamics.velocityToDynamicMark(Integer.valueOf(1)));
         assertEquals("mp", ScoreDynamics.velocityToDynamicMark(Integer.valueOf(63)));
         assertEquals("mf", ScoreDynamics.velocityToDynamicMark("64"));
+        assertEquals("mf", ScoreDynamics.velocityToDynamicMark("1"));
         assertEquals("fff", ScoreDynamics.velocityToDynamicMark(Integer.valueOf(127)));
     }
 
@@ -40,6 +41,18 @@ public class ScoreDynamicsTest {
                 "<direction placement=\"above\"><direction-type><wedge type=\"crescendo\" number=\"hairpin &amp; 1\"/></direction-type></direction>",
                 ScoreDynamics.buildMusicXmlDirectionFeatureXml(
                         DynamicFeature.wedge("crescendo", "hairpin & 1", null, null, null, "above")));
+    }
+
+    @Test
+    public void builderRetainsUpstreamRuntimeValuesBeforeExtractionNormalizesThem() {
+        assertEquals(
+                "<direction placement=\"sideways\"><direction-type><dynamics><MF/></dynamics></direction-type><offset>2</offset><voice> </voice></direction>",
+                ScoreDynamics.buildMusicXmlDirectionFeatureXml(
+                        DynamicFeature.dynamic("MF", "0x2", " ", null, "sideways")));
+        assertEquals(
+                "<direction><direction-type><wedge type=\"CRESCENDO\" number=\" \"/></direction-type></direction>",
+                ScoreDynamics.buildMusicXmlDirectionFeatureXml(
+                        DynamicFeature.wedge("CRESCENDO", " ", null, null, null, null)));
     }
 
     @Test
@@ -58,6 +71,20 @@ public class ScoreDynamicsTest {
         assertEquals("wedge", features.get(1).getKind());
         assertEquals("diminuendo", features.get(1).getWedgeType());
         assertEquals("2", features.get(1).getNumber());
+    }
+
+    @Test
+    public void extractionUsesFirstCommonNodesAndReturnsDynamicsBeforeWedges() {
+        Element direction = parseDirection(
+                "<direction><direction-type><wedge type=\"crescendo\"/></direction-type><direction-type><dynamics><mf/></dynamics></direction-type><offset>2</offset><offset>4</offset><voice>1</voice><voice>2</voice><staff>1</staff><staff>2</staff></direction>");
+
+        List<DynamicFeature> features = ScoreDynamics.extractMusicXmlDirectionFeatures(direction);
+        assertEquals(2, features.size());
+        assertEquals("dynamic", features.get(0).getKind());
+        assertEquals("wedge", features.get(1).getKind());
+        assertEquals(Integer.valueOf(2), features.get(0).getOffsetDiv());
+        assertEquals("1", features.get(0).getVoice());
+        assertEquals("1", features.get(0).getStaff());
     }
 
     private static Element parseDirection(String directionXml) {

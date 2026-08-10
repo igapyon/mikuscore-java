@@ -1,57 +1,62 @@
 # Upstream CLI Mapping
 
-This document maps the upstream `mikuscore` CLI contract to the Java CLI.
+This document maps the upstream `miku-score` CLI contract to the Java CLI.
+All non-Verovio unit cases and all included `cli-api.ts` source exports are
+complete in [upstream-cli-case-map.md](upstream-cli-case-map.md) and
+[upstream-cli-api-source-map.md](upstream-cli-api-source-map.md). Converter
+semantics are owned by their format maps; local-only corpus predicates have
+versioned behavior-equivalent evidence there rather than CLI gaps.
 
 ## Current Java CLI
 
 | Java command | Status | Notes |
 | --- | --- | --- |
-| `--help` | implemented | Documents the implemented `convert` / `state` command split and the Java runtime I/O, exit-code, and overwrite contract |
-| `--version` | implemented | Returns Java package version fallback |
-| `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]` | implemented | First Java convert slice; supports text MusicXML and `.mxl` decode / encode by file extension |
-| `convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First ABC import/export bridge; supports basic ABC text headers, notes, rests, chords, tuplets, grace groups, basic decorations, repeat / ending metadata, tie handoff, and barline-separated measures |
-| `convert --from abc --to midi [--in <file>|-] [--out <file>|-]` | partial | First ABC-to-MIDI bridge; imports ABC to MusicXML, then delegates to `CoreApi.exportMusicXmlToMidi` |
-| `convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]` | partial | First ABC export CLI bridge; supports MusicXML text and `.mxl` input through the migrated `musicXmlToAbc` path |
-| `convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First MEI import bridge through `CoreApi.importMeiToMusicXml` |
-| `convert --from musicxml --to mei [--in <file>|-] [--out <file>|-]` | partial | First MEI export bridge through `CoreApi.exportMusicXmlToMei` |
-| `convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First LilyPond import CLI bridge; supports UTF-8 LilyPond text input and MusicXML/MXL output through `CoreApi.importLilyPondToMusicXml` |
-| `convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-]` | partial | First LilyPond export bridge through `CoreApi.exportMusicXmlToLilyPond` |
-| `convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First MIDI import CLI bridge; supports MIDI byte input and MusicXML/MXL output through `CoreApi.importMidiToMusicXml` |
-| `convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]` | partial | First MIDI export CLI bridge; supports MusicXML/MXL input and MIDI byte output through `CoreApi.exportMusicXmlToMidi` |
-| `convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-]` | partial | First MuseScore/MSCZ import bridge through `CoreApi.importMuseScoreToMusicXml` |
-| `convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-]` | partial | First MuseScore/MSCZ export bridge through `CoreApi.exportMusicXmlToMuseScore` |
-| `render svg [--from musicxml\|abc] [--in <file>\|-] [--out <file>\|-]` | unsupported | Command family is recognized, but SVG output remains blocked by the upstream Verovio/browser runtime dependency |
-| `state summarize [--in <file>|-]` | implemented | Emits upstream-shaped JSON summary for MusicXML text input |
-| `state inspect-measure --measure <number> [--in <file>|-]` | implemented | Emits upstream-shaped note selectors for one MusicXML measure |
-| `state validate-command --command <json> [--in <file>|-]` | implemented | Partial: validates basic command catalog including `ui_noop` |
-| `state apply-command --command <json> [--in <file>|-] [--out <file>|-]` | implemented | Partial: applies basic command catalog including no-op behavior |
-| `state diff --before <file> --after <file>` | implemented | Emits upstream-shaped JSON diff for two MusicXML files |
+| `--help` | done | Documents the implemented `convert` / `state` command split and the Java runtime I/O, exit-code, and overwrite contract |
+| `--version` | done | Returns Java package version fallback |
+| `convert --from musicxml --to musicxml [--in <file>|-] [--out <file>|-]` | done | First Java convert slice; supports text MusicXML and `.mxl` decode / encode by file extension |
+| `convert --from abc --to musicxml [--in <file>|-] [--out <file>|-]` | done | Delegates to the complete public ABC facade |
+| `convert --from abc --to midi [--in <file>|-] [--out <file>|-]` | done | Delegates through the complete ABC and MIDI facades |
+| `convert --from musicxml --to abc [--in <file>|-] [--out <file>|-]` | done | Delegates to the complete public ABC facade with MXL input support |
+| `convert --from mei --to musicxml [--in <file>|-] [--out <file>|-]` | done | Delegates to the public MEI facade; local-only evidence is format-owned |
+| `convert --from musicxml --to mei [--in <file>|-] [--out <file>|-]` | done | Delegates to the public MEI facade; local-only evidence is format-owned |
+| `convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-]` | done | Delegates to the complete public LilyPond facade |
+| `convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-]` | done | Delegates to the complete public LilyPond facade |
+| `convert --from midi --to musicxml [--in <file>|-] [--out <file>|-]` | done | Delegates to the public MIDI facade; local-only evidence is format-owned |
+| `convert --from musicxml --to midi [--in <file>|-] [--out <file>|-]` | done | Delegates to the public MIDI facade; raw and Writer-compatible bytes are covered |
+| `convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-]` | done | Delegates to the complete public MSCX/MSCZ facade; local-only evidence is format-owned |
+| `convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-]` | done | Delegates to the complete public MSCX/MSCZ facade; local-only evidence is format-owned |
+| `render svg [--from musicxml\|abc] [--in <file>\|-] [--out <file>\|-]` | excluded | Command family is recognized, but Verovio/browser rendering is outside the Java parity scope |
+| `state summarize [--in <file>|-]` | done | Emits upstream-shaped JSON summary for MusicXML text or `.mxl` file input |
+| `state inspect-measure --measure <number> [--in <file>|-]` | done | Emits upstream-shaped note selectors for one MusicXML text or `.mxl` input |
+| `state validate-command [--command <json>|--command-file <file>|-] [--in <file>|-]` | done | Validates the complete included Core command catalog; accepts MusicXML text or `.mxl` input |
+| `state apply-command [--command <json>|--command-file <file>|-] [--in <file>|-] [--out <file>|-]` | done | Applies the complete included Core command catalog; accepts MusicXML text or `.mxl` input |
+| `state diff --before <file> --after <file>` | done | Emits upstream-shaped JSON diff for two MusicXML text or `.mxl` files |
 
 ## Planned Upstream Command Families
 
 | Upstream command | Java command | Status | Notes |
 | --- | --- | --- | --- |
-| `convert --from musicxml --to musicxml` | `convert --from musicxml --to musicxml` | implemented | Java-side bridge command for text MusicXML and MXL file-path handling while broader conversion pairs are pending |
-| `convert --from abc --to musicxml` | `convert --from abc --to musicxml` | partial | First Java slice covers basic ABC text, tuplet timing, grace groups, basic decorations, repeat / ending metadata, and tie handoff to MusicXML; broader decorations, overlays, diagnostics parity, and golden fixtures remain pending |
-| `convert --from abc --to midi` | `convert --from abc --to midi` | partial | First Java CLI bridge imports ABC to MusicXML and exports MIDI bytes through the migrated MIDI facade; broader ABC/MIDI parity remains pending |
-| `convert --from musicxml --to abc` | `convert --from musicxml --to abc` | partial | Java CLI bridge covers stdin/file input and `.mxl` decode, then delegates to the migrated `AbcIo.musicXmlToAbc` exporter |
-| `convert --from midi --to musicxml` | `convert --from midi --to musicxml` | partial | First Java CLI bridge reads MIDI bytes from stdin/file and delegates to `CoreApi.importMidiToMusicXml` / `MidiIo.convertMidiToMusicXml`; broader MIDI import parity remains pending |
-| `convert --from musicxml --to midi` | `convert --from musicxml --to midi` | partial | First Java CLI bridge reads MusicXML text/MXL, delegates to `CoreApi.exportMusicXmlToMidi`, and writes SMF bytes; broader MIDI export parity remains pending |
-| `convert --from mei --to musicxml` | `convert --from mei --to musicxml` | partial | First Java CLI bridge covers stdin/file MEI text input and delegates to the migrated MEI importer through `CoreApi.importMeiToMusicXml`; broader MEI import parity remains pending |
-| `convert --from musicxml --to mei` | `convert --from musicxml --to mei` | partial | First Java CLI bridge covers stdin/file MusicXML input and delegates to the migrated MEI exporter through `CoreApi.exportMusicXmlToMei`; broader MEI export parity remains pending |
-| `convert --from lilypond --to musicxml` | `convert --from lilypond --to musicxml` | partial | First Java CLI bridge delegates to `CoreApi.importLilyPondToMusicXml`; broader LilyPond import parity remains pending |
-| `convert --from musicxml --to lilypond` | `convert --from musicxml --to lilypond` | partial | First Java export bridge uses `CoreApi.exportMusicXmlToLilyPond`; broader LilyPond export parity remains pending |
-| `convert --from musescore --to musicxml` | `convert --from musescore --to musicxml` | partial | First Java import bridge accepts `.mscx` text and `.mscz` containers through `CoreApi.importMuseScoreToMusicXml` |
-| `convert --from musicxml --to musescore` | `convert --from musicxml --to musescore` | partial | First Java export bridge emits MuseScore text or MSCZ bytes through `CoreApi.exportMusicXmlToMuseScore` |
+| `convert --from musicxml --to musicxml` | `convert --from musicxml --to musicxml` | done | Text MusicXML and MXL file-path handling |
+| `convert --from abc --to musicxml` | `convert --from abc --to musicxml` | done | Complete public ABC facade |
+| `convert --from abc --to midi` | `convert --from abc --to midi` | done | Complete public ABC and MIDI facades |
+| `convert --from musicxml --to abc` | `convert --from musicxml --to abc` | done | Complete public ABC facade |
+| `convert --from midi --to musicxml` | `convert --from midi --to musicxml` | done | Complete public MIDI facade; local-only evidence is format-owned |
+| `convert --from musicxml --to midi` | `convert --from musicxml --to midi` | done | Complete public MIDI facade; local-only evidence is format-owned |
+| `convert --from mei --to musicxml` | `convert --from mei --to musicxml` | done | Complete public MEI facade; local-only evidence is format-owned |
+| `convert --from musicxml --to mei` | `convert --from musicxml --to mei` | done | Complete public MEI facade; local-only evidence is format-owned |
+| `convert --from lilypond --to musicxml` | `convert --from lilypond --to musicxml` | done | Complete public LilyPond facade |
+| `convert --from musicxml --to lilypond` | `convert --from musicxml --to lilypond` | done | Complete public LilyPond facade |
+| `convert --from musescore --to musicxml` | `convert --from musescore --to musicxml` | done | Complete public MuseScore facade; local-only evidence is format-owned |
+| `convert --from musicxml --to musescore` | `convert --from musicxml --to musescore` | done | Complete public MuseScore facade; local-only evidence is format-owned |
 | `convert --from vsqx --to musicxml` | excluded | out of initial Java conversion scope | VSQX bridge / dependency constraints |
 | `convert --from musicxml --to vsqx` | excluded | out of initial Java conversion scope | VSQX bridge / dependency constraints |
-| `render svg` | `render svg` | unsupported in current Java slice | Java CLI recognizes the command and reports the Verovio/browser runtime constraint |
-| `render svg --from abc` | `render svg --from abc` | unsupported in current Java slice | Java CLI recognizes the source option, but SVG rendering has the same Verovio/browser runtime constraint |
-| `state summarize` | `state summarize [--in <file>|-]` | partial | Supports MusicXML text input from stdin or file |
-| `state inspect-measure` | `state inspect-measure --measure <number> [--in <file>|-]` | partial | Supports MusicXML text input from stdin or file |
-| `state validate-command` | `state validate-command --command <json> [--in <file>|-]` | partial | Basic command catalog; supports `targetNodeId`/`selector` or `anchorNodeId`/`anchor_selector` where applicable |
-| `state apply-command` | `state apply-command --command <json> [--in <file>|-] [--out <file>|-]` | partial | Basic command catalog; emits MusicXML on success and upstream-shaped apply JSON on validation failure |
-| `state diff` | `state diff --before <file> --after <file>` | partial | File inputs only |
+| `render svg` | `render svg` | excluded from Java parity scope | Java CLI recognizes the command and reports the Verovio/browser runtime constraint |
+| `render svg --from abc` | `render svg --from abc` | excluded from Java parity scope | Java CLI recognizes the source option, but SVG rendering has the same Verovio/browser runtime constraint |
+| `state summarize` | `state summarize [--in <file>|-]` | done | MusicXML text or `.mxl` input from stdin or file |
+| `state inspect-measure` | `state inspect-measure --measure <number> [--in <file>|-]` | done | MusicXML text or `.mxl` input from stdin or file |
+| `state validate-command` | `state validate-command [--command <json>|--command-file <file>|-] [--in <file>|-]` | done | Complete Core command catalog with `targetNodeId`/`selector` or `anchorNodeId`/`anchor_selector` |
+| `state apply-command` | `state apply-command [--command <json>|--command-file <file>|-] [--in <file>|-] [--out <file>|-]` | done | Complete Core command catalog and upstream-shaped validation responses |
+| `state diff` | `state diff --before <file> --after <file>` | done | MusicXML text or `.mxl` file inputs |
 
 ## Contract Items To Track
 
@@ -78,5 +83,5 @@ This document maps the upstream `mikuscore` CLI contract to the Java CLI.
 | explicit output file | Existing file is replaced, matching the upstream CLI `writeFileSync` behavior |
 | standard error | Usage and processing failures are emitted to stderr; primary results are not mixed with those failures |
 | exit codes | `0` success, `1` processing failure, `2` invalid usage or unsupported command / conversion pair |
-| diagnostics mode | Upstream supports `--diagnostics text|json`; Java has no equivalent option yet, so it must not be passed as if supported |
+| diagnostics mode | `--diagnostics text|json` is supported; text is the default and JSON mode emits a version 1 diagnostics envelope to stderr without mixing it into the primary result |
 | unsupported pair | Exit status `2`, message `Unsupported conversion pair: --from ... --to ...` |

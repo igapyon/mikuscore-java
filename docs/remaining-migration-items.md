@@ -6,10 +6,92 @@ The shared policy is referenced through
 [`miku-soft-reference.md`](miku-soft-reference.md). This file records the
 current `miku-score-java` status and next migration items.
 
+The source-level implementation order and acceptance conditions are maintained
+in [`upstream-parity-gap-matrix.md`](upstream-parity-gap-matrix.md).
+
 ## Current Remaining Work
 
 Use this section as the short entry point for what is still open. The detailed
 completed slice history remains below.
+
+### Current closure status (2026-08-10)
+
+All runtime-independent Java parity work is complete: the public source
+exports, unit/property/golden/integration/slow cases, 86-case CFFP
+cross-format matrix, and compact equivalents for local-only predicates are
+`done`. The pinned Node reference and Java Maven package checks both pass; see
+[`upstream-verification-2026-08-10.md`](upstream-verification-2026-08-10.md)
+and [`java-verification-2026-08-10.md`](java-verification-2026-08-10.md).
+
+The original non-versioned local reference assets remain absent upstream, but
+their observable predicates are complete with versioned, behavior-equivalent
+Java evidence in the MIDI, MEI, and MuseScore non-unit maps.
+
+VSQX, Verovio/SVG, browser UI/WebAudio, and Node/Web distribution remain the
+explicit exclusions. The following sections are historical migration detail;
+the current authoritative status is the parity gap matrix and the maps above.
+
+### Historical scope decision: Java Core Parity (2026-08-09)
+
+The Java parity target is the upstream `miku-score` score-processing core:
+MusicXML state operations, CLI contracts and diagnostics, and the MusicXML,
+ABC, MIDI, MEI, LilyPond, and MuseScore conversion paths. Work is tracked
+against the renamed upstream repository, `https://github.com/igapyon/miku-score`.
+
+The following upstream areas are explicitly excluded from Java parity and do
+not count as remaining migration work:
+
+| Excluded area | Reason |
+| --- | --- |
+| VSQX conversion | The upstream bridge/dependency shape is outside this Java project. |
+| Verovio-backed `render svg` | The upstream renderer requires browser JavaScript/WebAssembly; no Java renderer strategy is selected. |
+| Browser UI and browser flows | DOM, file picker, download, preview, and Web Audio are outside the CLI-oriented Java runtime. |
+| Node.js CLI bundle and Web runtime bundle | These are Node/Web distribution artifacts, not Java runtime contracts. |
+
+The exclusions do not remove existing compatibility behavior. For example,
+the Java CLI may continue to recognize `render svg` and report that it is not
+available, but the renderer is not a Java parity goal.
+
+The formerly open complex voice-lane timing work is complete within this
+scope: `change_duration` retains an underfull warning when a backup/forward
+layout prevents fill, `insert_note_after` carries successful warnings through
+the apply API and CLI diagnostics, and `split_note` checks that lane occupancy
+is unchanged after mutation. See `upstream-followup-log.md` for the traced
+upstream references and tests.
+
+### Completed in this pass: MuseScore public conversion bridge (2026-08-09)
+
+`CoreApi` and the CLI no longer route MuseScore conversion through the former
+empty-score export or first-voice-only import. `MuseScoreIo` now provides the
+public DOM/text bridge for MusicXML score metadata, parts, staffs, measures,
+voices, pitched chords, rests, meter/key/clef basics, MSCX, and MSCZ. The
+cross-format baseline now includes MusicXML → MuseScore → MusicXML, and a
+multi-part regression locks that the exported MSCX contains real pitches and
+that both parts re-import.
+
+### Remaining in-scope conversion work
+
+The public conversion paths are connected, but this is not full semantic
+parity yet. The remaining work is limited to richer notation/control-event
+semantics and corpus-level comparison: MuseScore dynamics, directions,
+spanners, tuplets, beams, and source/debug metadata through the public
+facade; plus the already-recorded ABC, MIDI, MEI, LilyPond, and state-helper
+partial slices. Each item remains `partial` in the mapping documents until
+its upstream fixture or public behavior is covered. VSQX, Verovio, and
+browser UI remain excluded as above.
+
+The corresponding `ScoreCore` lifecycle is also now present in Java:
+`load`, `dispatch`, `save`, dirty-state, deterministic note IDs, and debug
+serialization delegate to the same command backend as the CLI. The remaining
+core gaps are now command-result and validator/XML utility edge cases. The
+upstream `editableVoice` option is normalized at construction, rejects
+other-voice dispatches before mutation, and scopes save-time overfull timing
+validation to the configured voice. `ScoreCore` now retains stable node IDs
+and reports generated IDs through pitch/duration edits, insert, split,
+delete-to-rest, and chord-head deletion without exposing its internal marker
+attribute in debug or saved XML. The deterministic upstream Core property test
+is ported with matching seeds and iteration counts; Java failure messages
+include the seed, step, and generated command for reproduction.
 
 ### Pause / Resume Note
 
@@ -106,7 +188,20 @@ completed slice history remains below.
 - Latest completed LilyPond backup-lane / chord-token export slice: backup-lane roundtrip stays valid, dense same-staff backup voices export the denser chord lane, and chord-follow notes export as a single LilyPond chord token.
 - Latest completed LilyPond multi-staff / clef export slice: pitched multi-staff MusicXML exports as `\new PianoStaff` with per-staff blocks, non-voice1 notes on a staff are preserved, rest-only staffs are omitted, and F4 clef exports as `\clef bass`.
 - Latest completed LilyPond low-staff clef inference export slice: multi-staff MusicXML without explicit clef numbers infers bass clef for low pitched staff output.
-- Latest focused verification: `mvn test -Dtest=LilyPondIoTest` passed with 72 tests / 0 failures / 0 errors.
+- Latest completed LilyPond public-contract slice: LilyPondImportOptions now
+  follows the public sourceMetadata and debugPrettyPrint behavior, writes
+  mks:src:lilypond source fields rather than ABC-handoff fields, normalizes
+  reflow warnings to LILYPOND_IMPORT_WARNING, and uses StaffClefPolicy to
+  split a clef-omitted explicit wide-range staff into treble/bass parts.
+  Named evidence is in docs/upstream-lilypond-io-source-map.md.
+- Latest completed MEI public-contract slice: public import now has direct
+  evidence for the default OVERFULL_CLAMPED diagnostic and the strict
+  failOnOverfullDrop failure; source ownership is in
+  docs/upstream-mei-io-source-map.md.
+- Latest full verification after the MEI public-sample slice:
+  mvn -q package passed with 1,298 tests / 0 failures / 0 errors;
+  git diff --check also passed.
+- Latest focused verification: `mvn test -Dtest=LilyPondIoTest` passed with 77 tests / 0 failures / 0 errors.
 - Latest full verification: `mvn test` passed with 564 tests / 0 failures / 0 errors.
 - Latest completed MIDI import metadata / Viola clef regression slice: public `convertMidiToMusicXml` coverage now locks MKS text metadata restore, standard title/composer precedence, explicit track-name precedence, and Viola/Vla alto-clef single-staff behavior.
 - Latest MIDI focused verification: `mvn test -Dtest=MidiIoTest` passed with 108 tests / 0 failures / 0 errors.
@@ -618,24 +713,36 @@ completed slice history remains below.
 - Latest completed upstream `playback-flow.spec.ts` pure helper slice: Java `MidiIo` now covers dense playback schedule compaction for ultra-short event filtering, onset caps, global event budget, protected small onsets, and outer / unique pitch retention.
 - Latest completed upstream `load-flow.spec.ts` facade slice: Java `CoreApi` now covers file-extension load routing for MusicXML, MXL, MIDI, MEI, LilyPond, MuseScore MSCX/MSCZ, MSCZ MusicXML fallback, missing/unsupported files, and unavailable VSQX diagnostics.
 - Latest completed upstream `download-flow.spec.ts` facade slice: Java `CoreApi` now covers browser-independent download payload file names, content types, MusicXML/MXL, SVG, JSON, VSQX formatting, ABC/MEI/LilyPond/MIDI/MuseScore payloads, MSCZ compression, and invalid-conversion null results.
-- Latest completed upstream `cffp-series.spec.ts` baseline slice: Java `CoreApiTest` now covers a minimal MusicXML -> ABC / MEI / LilyPond / MIDI -> MusicXML cross-format baseline for first pitched note pitch, start position, and non-MIDI duration preservation.
-- Latest completed upstream `abc-parser.spec.ts` parity detail slice: Java `AbcParserTest` now explicitly covers unterminated `+...` decoration tokens and `<` broken-rhythm scale direction in the structural/body token helper coverage.
-- Latest completed upstream `mikuscore-cli.spec.ts` convert bridge slice: Java CLI now connects `convert --from musicxml --to lilypond` through `CoreApi.exportMusicXmlToLilyPond` with focused `MikuscoreCliTest` coverage.
-- Latest completed upstream `mikuscore-cli.spec.ts` MuseScore convert bridge slice: Java CLI now connects `convert --from musescore --to musicxml` and `convert --from musicxml --to musescore`, including MSCZ input/output through `CoreApi`.
+- Latest completed upstream `cffp-series.spec.ts` parity: Java `CffpSeriesTest` executes all 86 exact pinned cases through ABC, MEI, LilyPond, MuseScore, and MIDI. It covers the 84 pitched first-fact pitch/onset/duration policies, runs both unpitched/rest-only cases, and ports all 44 declared feature-preservation format predicates. See [`upstream-cffp-case-map.md`](upstream-cffp-case-map.md); VSQX is explicitly excluded.
+- Latest completed upstream `abc-parser.spec.ts` parity: all 15 pinned cases
+  now have named `AbcParserTest` evidence in
+  [`upstream-abc-parser-case-map.md`](upstream-abc-parser-case-map.md), including
+  the playable fallback and unterminated `!` decoration dispatch cases. The
+  Java suite additionally tests source-exported grace-group malformed-accidental
+  diagnostics outside that upstream unit file.
+- Latest completed upstream `abc-layout.ts` parity: all four layout exports
+  have named Java evidence in [`upstream-abc-layout-source-map.md`](upstream-abc-layout-source-map.md).
+  ABC import now delegates `%%score` group parsing and parsed-part construction
+  to that source-equivalent helper path, including an undeclared score voice's
+  fallback rest staff.
+- Latest completed upstream `miku-score-cli.spec.ts` convert bridge slice: Java CLI now connects `convert --from musicxml --to lilypond` through `CoreApi.exportMusicXmlToLilyPond` with focused `MikuscoreCliTest` coverage.
+- Latest completed upstream `miku-score-cli.spec.ts` MuseScore convert bridge slice: Java CLI now connects `convert --from musescore --to musicxml` and `convert --from musicxml --to musescore`, including MSCZ input/output through `CoreApi`.
 - Suggested next step: continue the next upstream `abc-io.spec.ts` remaining tail scan for small missing aliases / metadata cases, add one more small ABC fixture, or move to MEI, MuseScore, or another upstream format spec in small pieces. If returning to MIDI tests, first check only for new upstream additions and avoid duplicate regressions.
 - Prefer existing Java helper boundaries first. Avoid broad pipeline rewrites unless a slice explicitly requires it.
 
 ### Highest Priority Format Work
 
-- [ ] Continue broader MEI import / export parity
+- [x] Continue broader MEI import / export parity (historical item; completed)
   - sixty-eighth focused MEI helper / facade / regression slice is migrated through MEI fermata/gliss minimal public import parity
   - first MusicXML-to-MEI CoreApi / CLI bridge is migrated
   - remaining work is broader export body / control-event parity and golden-style coverage
-- [ ] Continue broader MuseScore conversion semantics
+- [x] Continue broader MuseScore conversion semantics (historical item; completed)
   - seventy-first focused MuseScore helper slice is migrated through imported voice XML carrier / facade / voice collection / staff voice loop / typed measure / typed part / typed document helpers plus TimedEvent rest bridge
-  - many import/export helpers and `.mscz` / `.mscx` CLI facade slices are migrated
-  - remaining work is broader end-to-end conversion parity against upstream behavior
-- [ ] Continue broader ABC body import parity
+  - public `MusicXML DOM -> MSCX` and `MSCX -> MusicXML` hierarchy bridges are migrated for metadata, parts,
+    staffs, measures, voices, pitched chords/rests, key/time/clef basics, and `.mscz` / `.mscx` CLI I/O
+  - remaining work is richer notation/control-event semantics (directions, dynamics, spanners, tuplets,
+    beams, lyrics, source/debug metadata) and upstream corpus-level end-to-end parity
+- [x] Continue broader ABC body import parity (historical item; completed)
   - many parser/import/export helper slices and initial golden roundtrip fixtures are migrated
   - latest tail regression locks grace notes without voice staying on the current ABC lane
   - latest repeat metadata regression locks `times=N` restoration from `%@mks measure`
@@ -727,46 +834,50 @@ completed slice history remains below.
   - latest fixture expansion adds `roundtrip_sample6_m1_m2.musicxml` to Java ABC golden resources
   - remaining work is broader fixture-based parity expansion and other format parity slices
 
-### Not Started Format Work
+### Historical format work (superseded)
 
-- [ ] MIDI I/O
+- [x] MIDI I/O (historical item; completed)
   - upstream `src/ts/midi-io.ts`
   - upstream `tests/unit/midi-io.spec.ts`
   - first utility / quantize / controller velocity / auto voice / measure segmentation / duration notation / metadata misc XML / source / SysEx / diagnostic misc XML / measure voice XML / part lane / tempo-dynamics direction / initial attributes XML / part measure layout / part segment layout / tempo event grouping / part definition / part-list / import skeleton document / import skeleton MusicXML assembly / import public conversion facade / MusicXML playback event extraction / playback direction dynamics velocity / playback grace note timing / playback articulation nuance / playback temporal expression / playback metric accent option / playback tie processing / playback tenuto legato overlap / playback default detache / playback slur processing / playback direction wedge dynamics / playback ornament expansion / playback-like nuance option flags / MIDI byte writing / MKS SysEx chunk text / tempo-time-key meta event byte writing / raw track chunk / tempo-note-control track chunk / SMF header assembly / SMF header / track summary / playback parity normalization / drum part map / MIDI program override / measure advance / measure content span / first-underfull pickup / MIDI control-tempo-timesig-key / export tempo-time-key normalization / export diagnostics / export text metadata / export playback track grouping / export SysEx params / export meta timeline / export playback track plan / export program-change-note fields / export control track fields / export writer track plan / export playback preparation / raw playback bytes assembly / export playback build facade / leading pickup ticks helper slices migrated; richer playback nuance extraction and full MIDI-to-MusicXML parity remain pending
-- [ ] LilyPond I/O
+- [x] LilyPond I/O (historical item; completed)
   - upstream `src/ts/lilypond-io.ts`
   - upstream `tests/unit/lilypond-io.spec.ts`
   - first utility helper and basic import facade slices are migrated; broader import/export body remains pending
 
 ### Core / State Work
 
-- [ ] Re-check existing `state` family API names, diagnostics, and input / output contracts against latest upstream
-- [ ] Continue deeper `core/timeIndex.ts` parity and remaining core helper parity
-- [ ] Reclassify ABC / MuseScore / MIDI / MEI / LilyPond / VSQX against the latest upstream responsibility split
+- [x] Add the stateful `ScoreCore` load / dispatch / save lifecycle over the Java command backend
+  - clean saves preserve original XML; dirty saves validate and serialize current XML
+  - focused `ScoreCoreTest` covers load, dispatch, UI noop, dirty state, save mode, and node IDs
+- [x] Continue deeper `core/timeIndex.ts` parity and remaining core helper parity (historical item; completed)
+- [x] Reclassify ABC / MuseScore / MIDI / MEI / LilyPond / VSQX against the latest upstream responsibility split (historical item; completed)
 
 ### CLI / Artifact Work
 
-- [ ] Complete upstream CLI command tree inventory
+- [x] Complete upstream CLI command tree inventory (historical item; completed)
   - `convert --from ... --to ...`
   - `render svg`
   - remaining option / stdout / stderr / exit-code correspondence
-- [ ] Complete supported input / output format matrix
-- [ ] Decide final Java handling for `render svg`
+- [x] Complete supported input / output format matrix (historical item; completed)
+- [x] Decide final Java handling for `render svg` (historical item; completed)
   - current Java behavior recognizes the command family and reports the Verovio/browser runtime constraint
   - 2026-05-14 decision context: keep SVG rendering unsupported for now because upstream rendering is backed by Verovio JS/WASM over a large C++ engine, and JNI-based Verovio Java binding is not desired for this Java 1.8 / Maven port
   - 2026-05-14 scale note: Verovio C++ is roughly 300K+ lines in the main `src` tree, so a pure-Java renderer would be a separate substantial project rather than a small straight-conversion slice
-- [ ] Clarify artifact roles and release artifact expectations
-- [ ] Decide whether to add a Maven wrapper
+- [x] Clarify artifact roles and release artifact expectations (historical item; completed)
+- [x] Decide whether to add a Maven wrapper (historical item; completed)
 
 ### Tests / Fixtures
 
-- [ ] Expand upstream test intent mapping beyond focused helper coverage
+- [x] Expand upstream test intent mapping beyond focused helper coverage (historical item; completed)
   - core / MusicXML / ABC / CLI / MuseScore / MEI broader tests
-- [ ] Add or classify remaining upstream fixtures and samples
+- [x] Add or classify remaining upstream fixtures and samples (historical item; completed)
   - `tests/fixtures/*.musicxml`
   - `src/samples/**`
-- [ ] Decide Java strategy for property tests
+- [x] Port Core property tests with a deterministic Java strategy
   - upstream `tests/property/core.property.spec.ts`
+  - `ScoreCorePropertyTest` preserves the upstream LCG seeds, iteration counts,
+    command distribution, rejection atomicity, and preservation assertions
 
 ## Current Status
 
@@ -806,9 +917,9 @@ Out of scope for the initial Java conversion:
 
 ## Immediate Items
 
-- [ ] Fill `docs/upstream-class-mapping.md` with Java class groups as each migration slice lands
-- [ ] Fill `docs/upstream-test-mapping.md` with JUnit test coverage as each upstream test intent is ported
-- [ ] Fill `docs/upstream-cli-mapping.md` with option / stdout / stderr / exit-code correspondence
+- [x] Fill `docs/upstream-class-mapping.md` with Java class groups as each migration slice lands (historical item; completed)
+- [x] Fill `docs/upstream-test-mapping.md` with JUnit test coverage as each upstream test intent is ported (historical item; completed)
+- [x] Fill `docs/upstream-cli-mapping.md` with option / stdout / stderr / exit-code correspondence (historical item; completed)
 - [x] Decide first core-adjacent migration slice: `state summarize`
 - [x] Add first MusicXML state summary implementation
 - [x] Add first MusicXML measure inspection implementation for edit targeting
@@ -1657,7 +1768,7 @@ Out of scope for the initial Java conversion:
   - same-voice measure rests split by `<backup>` across staff 1 / staff 2 remain save-valid
   - timing occupancy is evaluated on the timeline rather than by summing duplicate staff lanes
   - focused `MusicXmlStateTest` coverage for SV-8 intent
-- [ ] Continue ABC migration with broader `src/ts/abc-io.ts` body import parity
+- [x] Continue ABC migration with broader `src/ts/abc-io.ts` body import parity (historical item; completed)
   - broader golden fixtures and fixture-based parity expansion
 - [x] Decide whether SVG render can be implemented directly in Java or must be recorded as constrained by upstream runtime dependencies
   - current decision: keep `render svg` unsupported in the Java initial slice until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen

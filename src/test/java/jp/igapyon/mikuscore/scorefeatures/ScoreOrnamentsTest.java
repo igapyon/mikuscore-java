@@ -37,6 +37,13 @@ public class ScoreOrnamentsTest {
     }
 
     @Test
+    public void builderRetainsUpstreamRuntimeKindAndTremoloTypeValues() {
+        assertEquals("<Trill-Mark/><tremolo type=\"START\">2</tremolo>",
+                ScoreOrnaments.buildMusicXmlOrnamentItemsXml(Arrays.asList(new OrnamentFeature("Trill-Mark"),
+                        OrnamentFeature.tremolo("START", "0x2"))));
+    }
+
+    @Test
     public void extractsSupportedMusicXmlOrnamentFeatures() {
         Element note = parseNote(
                 "<ornaments><trill-mark/><turn slash=\"yes\"/><tremolo type=\"start\">2</tremolo><wavy-line type=\"start\"/></ornaments>");

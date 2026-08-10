@@ -8,9 +8,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 import jp.igapyon.mikuscore.coreapi.CoreApi;
+import jp.igapyon.mikuscore.musicxml.MusicXmlState;
 
 /**
  * Minimal CLI entrypoint. Product commands are added through straight conversion.
@@ -31,6 +34,22 @@ public final class MikuscoreCli {
     }
 
     public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
+        if (isHelpOrVersionRequest(args)) {
+            return runWithoutDiagnostics(args, in, out, err);
+        }
+        String diagnosticsFormat = optionValue(args, "--diagnostics");
+        if ("json".equals(diagnosticsFormat)) {
+            ByteArrayOutputStream capturedDiagnostics = new ByteArrayOutputStream();
+            PrintStream diagnosticStream = new PrintStream(capturedDiagnostics, true);
+            int exitCode = runWithoutDiagnostics(args, in, out, diagnosticStream);
+            writeJsonDiagnostics(err, args, exitCode,
+                    new String(capturedDiagnostics.toByteArray(), StandardCharsets.UTF_8));
+            return exitCode;
+        }
+        return runWithoutDiagnostics(args, in, out, err);
+    }
+
+    private static int runWithoutDiagnostics(String[] args, InputStream in, PrintStream out, PrintStream err) {
         if (args == null || args.length == 0 || "--help".equals(args[0]) || "-h".equals(args[0])) {
             printHelp(out);
             return 0;
@@ -40,8 +59,15 @@ public final class MikuscoreCli {
             return 0;
         }
         if (hasOption(args, "--diagnostics")) {
-            err.println("Unsupported option: --diagnostics. The Java CLI does not yet implement upstream diagnostics formats.");
-            return 2;
+            String diagnosticsFormat = optionValue(args, "--diagnostics");
+            if (diagnosticsFormat == null || diagnosticsFormat.trim().length() == 0) {
+                err.println("Option --diagnostics requires a value.");
+                return 2;
+            }
+            if (!"text".equals(diagnosticsFormat) && !"json".equals(diagnosticsFormat)) {
+                err.println("--diagnostics must be either text or json.");
+                return 2;
+            }
         }
         if ("convert".equals(args[0])) {
             return runConvert(args, in, out, err);
@@ -76,8 +102,7 @@ public final class MikuscoreCli {
                 writeMusicXmlOutput(outputPath, xmlText, out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MusicXML to MusicXML conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MusicXML to MusicXML conversion failed");
             }
         }
         if ("abc".equals(from) && "musicxml".equals(to)) {
@@ -93,8 +118,7 @@ public final class MikuscoreCli {
                 writeMusicXmlOutput(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("ABC to MusicXML conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "ABC to MusicXML conversion failed");
             }
         }
         if ("abc".equals(from) && "midi".equals(to)) {
@@ -115,8 +139,7 @@ public final class MikuscoreCli {
                 writeOutputBytes(outputPath, exported.getOutputBytes(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("ABC to MIDI conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "ABC to MIDI conversion failed");
             }
         }
         if ("mei".equals(from) && "musicxml".equals(to)) {
@@ -132,8 +155,7 @@ public final class MikuscoreCli {
                 writeMusicXmlOutput(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MEI to MusicXML conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MEI to MusicXML conversion failed");
             }
         }
         if ("lilypond".equals(from) && "musicxml".equals(to)) {
@@ -149,8 +171,7 @@ public final class MikuscoreCli {
                 writeMusicXmlOutput(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("LilyPond to MusicXML conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "LilyPond to MusicXML conversion failed");
             }
         }
         if ("midi".equals(from) && "musicxml".equals(to)) {
@@ -165,8 +186,7 @@ public final class MikuscoreCli {
                 writeMusicXmlOutput(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MIDI to MusicXML conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MIDI to MusicXML conversion failed");
             }
         }
         if ("musescore".equals(from) && "musicxml".equals(to)) {
@@ -182,8 +202,7 @@ public final class MikuscoreCli {
                 writeMusicXmlOutput(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MuseScore to MusicXML conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MuseScore to MusicXML conversion failed");
             }
         }
         if ("musicxml".equals(from) && "abc".equals(to)) {
@@ -199,8 +218,7 @@ public final class MikuscoreCli {
                 writeOutputText(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MusicXML to ABC conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MusicXML to ABC conversion failed");
             }
         }
         if ("musicxml".equals(from) && "mei".equals(to)) {
@@ -216,8 +234,7 @@ public final class MikuscoreCli {
                 writeOutputText(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MusicXML to MEI conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MusicXML to MEI conversion failed");
             }
         }
         if ("musicxml".equals(from) && "lilypond".equals(to)) {
@@ -233,8 +250,7 @@ public final class MikuscoreCli {
                 writeOutputText(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MusicXML to LilyPond conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MusicXML to LilyPond conversion failed");
             }
         }
         if ("musicxml".equals(from) && "musescore".equals(to)) {
@@ -250,8 +266,7 @@ public final class MikuscoreCli {
                 writeMuseScoreOutput(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MusicXML to MuseScore conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MusicXML to MuseScore conversion failed");
             }
         }
         if ("musicxml".equals(from) && "midi".equals(to)) {
@@ -267,8 +282,7 @@ public final class MikuscoreCli {
                 writeOutputBytes(outputPath, result.getOutputBytes(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("MusicXML to MIDI conversion failed: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "MusicXML to MIDI conversion failed");
             }
         }
         err.println("Unsupported conversion pair: --from " + from + " --to " + to);
@@ -304,7 +318,7 @@ public final class MikuscoreCli {
         if ("summarize".equals(args[1])) {
             String inputPath = optionValue(args, "--in");
             try {
-                String xmlText = readInputText(inputPath, in);
+                String xmlText = readMusicXmlInput(inputPath, in);
                 CoreApi.CliResult result = CoreApi.summarizeMusicXmlState(xmlText);
                 if (!result.isOk()) {
                     err.println(result.getDiagnostic());
@@ -313,19 +327,18 @@ public final class MikuscoreCli {
                 out.print(result.getOutput());
                 return 0;
             } catch (Exception ex) {
-                err.println("Failed to summarize MusicXML state: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "Failed to summarize MusicXML state");
             }
         }
         if ("inspect-measure".equals(args[1])) {
             String measureNumber = optionValue(args, "--measure");
             if (measureNumber == null || measureNumber.trim().length() == 0) {
-                err.println("Missing required option: --measure");
+                err.println("state inspect-measure requires --measure <number>.");
                 return 2;
             }
             String inputPath = optionValue(args, "--in");
             try {
-                String xmlText = readInputText(inputPath, in);
+                String xmlText = readMusicXmlInput(inputPath, in);
                 CoreApi.CliResult result = CoreApi.inspectMusicXmlMeasure(xmlText, measureNumber);
                 if (!result.isOk()) {
                     err.println(result.getDiagnostic());
@@ -334,24 +347,20 @@ public final class MikuscoreCli {
                 out.print(result.getOutput());
                 return 0;
             } catch (Exception ex) {
-                err.println("Failed to inspect MusicXML measure: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "Failed to inspect MusicXML measure");
             }
         }
         if ("diff".equals(args[1])) {
             String beforePath = optionValue(args, "--before");
             String afterPath = optionValue(args, "--after");
-            if (beforePath == null || beforePath.trim().length() == 0) {
-                err.println("Missing required option: --before");
-                return 2;
-            }
-            if (afterPath == null || afterPath.trim().length() == 0) {
-                err.println("Missing required option: --after");
+            if (beforePath == null || beforePath.trim().length() == 0 || afterPath == null
+                    || afterPath.trim().length() == 0) {
+                err.println("state diff requires both --before <file> and --after <file>.");
                 return 2;
             }
             try {
-                String beforeXml = readInputText(beforePath, in);
-                String afterXml = readInputText(afterPath, in);
+                String beforeXml = readMusicXmlInput(beforePath, in);
+                String afterXml = readMusicXmlInput(afterPath, in);
                 CoreApi.CliResult result = CoreApi.diffMusicXmlState(beforeXml, afterXml);
                 if (!result.isOk()) {
                     err.println(result.getDiagnostic());
@@ -360,19 +369,23 @@ public final class MikuscoreCli {
                 out.print(result.getOutput());
                 return 0;
             } catch (Exception ex) {
-                err.println("Failed to diff MusicXML state: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "Failed to diff MusicXML state");
             }
         }
         if ("validate-command".equals(args[1])) {
-            String commandPayload = optionValue(args, "--command");
-            if (commandPayload == null || commandPayload.trim().length() == 0) {
-                err.println("Missing required option: --command");
+            String commandPayload;
+            try {
+                commandPayload = readCommandPayload(args, in, err);
+            } catch (IOException ex) {
+                err.println("Failed to read command payload: " + ex.getMessage());
+                return 1;
+            }
+            if (commandPayload == null) {
                 return 2;
             }
             String inputPath = optionValue(args, "--in");
             try {
-                String xmlText = readInputText(inputPath, in);
+                String xmlText = readMusicXmlInput(inputPath, in);
                 CoreApi.CliResult result = CoreApi.validateMusicXmlCommand(xmlText, commandPayload);
                 if (!result.isOk()) {
                     err.println(result.getDiagnostic());
@@ -381,30 +394,34 @@ public final class MikuscoreCli {
                 out.print(result.getOutput());
                 return 0;
             } catch (Exception ex) {
-                err.println("Failed to validate MusicXML command: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "Failed to validate MusicXML command");
             }
         }
         if ("apply-command".equals(args[1])) {
-            String commandPayload = optionValue(args, "--command");
-            if (commandPayload == null || commandPayload.trim().length() == 0) {
-                err.println("Missing required option: --command");
+            String commandPayload;
+            try {
+                commandPayload = readCommandPayload(args, in, err);
+            } catch (IOException ex) {
+                err.println("Failed to read command payload: " + ex.getMessage());
+                return 1;
+            }
+            if (commandPayload == null) {
                 return 2;
             }
             String inputPath = optionValue(args, "--in");
             String outputPath = optionValue(args, "--out");
             try {
-                String xmlText = readInputText(inputPath, in);
+                String xmlText = readMusicXmlInput(inputPath, in);
                 CoreApi.CliResult result = CoreApi.applyMusicXmlCommand(xmlText, commandPayload);
                 if (!result.isOk()) {
                     err.println(result.getDiagnostic());
                     return 1;
                 }
+                writeWarnings(err, result);
                 writeOutputText(outputPath, result.getOutput(), out);
                 return 0;
             } catch (Exception ex) {
-                err.println("Failed to apply MusicXML command: " + ex.getMessage());
-                return 1;
+                return reportCommandFailure(err, ex, "Failed to apply MusicXML command");
             }
         }
         err.println("Unsupported state command: " + args[1]);
@@ -429,8 +446,8 @@ public final class MikuscoreCli {
         out.println("  java -jar target/miku-score.jar render svg [--from musicxml|abc] [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/miku-score.jar state summarize [--in <file>|-]");
         out.println("  java -jar target/miku-score.jar state inspect-measure --measure <number> [--in <file>|-]");
-        out.println("  java -jar target/miku-score.jar state validate-command --command <json> [--in <file>|-]");
-        out.println("  java -jar target/miku-score.jar state apply-command --command <json> [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar state validate-command [--command <json>|--command-file <file>|-] [--in <file>|-]");
+        out.println("  java -jar target/miku-score.jar state apply-command [--command <json>|--command-file <file>|-] [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/miku-score.jar state diff --before <file> --after <file>");
         out.println("  java -jar target/miku-score.jar convert --help");
         out.println("  java -jar target/miku-score.jar state --help");
@@ -446,10 +463,11 @@ public final class MikuscoreCli {
         out.println("  --to <format>    Target format");
         out.println("  --in <file>|-    Read input from file or stdin");
         out.println("  --out <file>|-   Write output to file or stdout");
+        out.println("  --diagnostics text|json  Select diagnostics format");
         out.println("  --version        Show version");
         out.println();
-        out.println("Compatibility note:");
-        out.println("  Upstream --diagnostics text|json is not yet implemented and is rejected by this Java CLI.");
+        out.println("Diagnostics:");
+        out.println("  --diagnostics text is the default. --diagnostics json writes version 1 diagnostics JSON to stderr.");
     }
 
     private static void printConvertHelp(PrintStream out) {
@@ -501,7 +519,7 @@ public final class MikuscoreCli {
         out.println("Runtime contract:");
         out.println("  primary output  stdout; usage and processing failures use stderr");
         out.println("  exit codes      0 success, 1 processing failure, 2 invalid usage or unsupported pair");
-        out.println("  diagnostics     upstream --diagnostics text|json is not implemented by this Java CLI");
+        out.println("  diagnostics     --diagnostics text is the default; --diagnostics json writes version 1 diagnostics JSON to stderr");
     }
 
     private static void printRenderHelp(PrintStream out) {
@@ -527,9 +545,12 @@ public final class MikuscoreCli {
         out.println("Usage:");
         out.println("  java -jar target/miku-score.jar state summarize [--in <file>|-]");
         out.println("  java -jar target/miku-score.jar state inspect-measure --measure <number> [--in <file>|-]");
-        out.println("  java -jar target/miku-score.jar state validate-command --command <json> [--in <file>|-]");
-        out.println("  java -jar target/miku-score.jar state apply-command --command <json> [--in <file>|-] [--out <file>|-]");
+        out.println("  java -jar target/miku-score.jar state validate-command [--command <json>|--command-file <file>|-] [--in <file>|-]");
+        out.println("  java -jar target/miku-score.jar state apply-command [--command <json>|--command-file <file>|-] [--in <file>|-] [--out <file>|-]");
         out.println("  java -jar target/miku-score.jar state diff --before <file> --after <file>");
+        out.println();
+        out.println("Description:");
+        out.println("  Inspect canonical MusicXML state.");
         out.println();
         out.println("Commands:");
         out.println("  summarize   Emit a compact JSON summary of canonical MusicXML state");
@@ -538,11 +559,196 @@ public final class MikuscoreCli {
         out.println("  apply-command   Apply one bounded command and emit the next canonical MusicXML state");
         out.println("  diff   Emit a compact JSON diff between two MusicXML states");
         out.println();
+        out.println("Command payload note:");
+        out.println("  Targeting may use targetNodeId/anchorNodeId directly or selector/anchor_selector from inspect-measure output.");
+        out.println();
         out.println("Runtime contract:");
         out.println("  input/output    UTF-8 MusicXML; stdin is used by commands with omitted --in, and results use stdout");
         out.println("  primary output  stdout; usage and processing failures use stderr");
         out.println("  exit codes      0 success, 1 processing failure, 2 invalid usage");
-        out.println("  diagnostics     upstream --diagnostics text|json is not implemented by this Java CLI");
+        out.println("  diagnostics     --diagnostics text is the default; --diagnostics json writes version 1 diagnostics JSON to stderr");
+    }
+
+    private static boolean isHelpOrVersionRequest(String[] args) {
+        return args == null || args.length == 0 || "--help".equals(args[0]) || "-h".equals(args[0])
+                || "--version".equals(args[0]) || hasOption(args, "--help") || hasOption(args, "-h");
+    }
+
+    private static String readCommandPayload(String[] args, InputStream in, PrintStream err) throws IOException {
+        String inlinePayload = optionValue(args, "--command");
+        String commandFile = optionValue(args, "--command-file");
+        boolean hasInlinePayload = inlinePayload != null && inlinePayload.trim().length() > 0;
+        boolean hasCommandFile = commandFile != null && commandFile.trim().length() > 0;
+        if (hasInlinePayload == hasCommandFile) {
+            err.println("state validate-command requires exactly one of --command <json> or --command-file <file>.");
+            return null;
+        }
+        String payload = hasInlinePayload ? inlinePayload : readInputText(commandFile, in);
+        try {
+            MusicXmlState.requireMusicXmlCommandJsonObject(payload);
+            return payload;
+        } catch (IllegalArgumentException ex) {
+            err.println("Command payload must be valid JSON: " + ex.getMessage());
+            return null;
+        }
+    }
+
+    private static void writeJsonDiagnostics(PrintStream err, String[] args, int exitCode, String capturedText) {
+        List<String> errors = new ArrayList<String>();
+        List<String> warnings = new ArrayList<String>();
+        String message = capturedText == null ? "" : capturedText.trim();
+        if (message.length() > 0) {
+            String[] lines = message.split("\\r?\\n");
+            for (String line : lines) {
+                if (line.startsWith("[warning] ")) {
+                    warnings.add(line.substring("[warning] ".length()));
+                } else if (line.length() > 0) {
+                    errors.add(line);
+                }
+            }
+        }
+        String command = commandForDiagnostics(args);
+        String inputPath = optionValue(args, "--in");
+        String outputPath = optionValue(args, "--out");
+        boolean ok = exitCode == 0 && errors.isEmpty();
+        String status = ok ? (warnings.isEmpty() ? "success" : "warning") : "error";
+        StringBuilder json = new StringBuilder();
+        json.append("{\n");
+        json.append("  \"ok\": ").append(ok).append(",\n");
+        json.append("  \"diagnostics_version\": 1,\n");
+        json.append("  \"command\": \"").append(jsonEscape(command)).append("\",\n");
+        json.append("  \"context\": \"").append(jsonEscape(command)).append("\",\n");
+        json.append("  \"status\": \"").append(status).append("\",\n");
+        json.append("  \"exit_code\": ").append(exitCode).append(",\n");
+        json.append("  \"warning_count\": ").append(warnings.size()).append(",\n");
+        json.append("  \"error_count\": ").append(errors.size()).append(",\n");
+        json.append("  \"io\": {\n");
+        json.append("    \"inputs\": [").append(jsonInputDescriptor(inputPath)).append("],\n");
+        json.append("    \"output\": ").append(jsonOutputDescriptor(outputPath)).append("\n");
+        json.append("  },\n");
+        json.append("  \"warnings\": ").append(jsonStringArray(warnings)).append(",\n");
+        json.append("  \"errors\": ").append(jsonStringArray(errors));
+        if (!ok) {
+            json.append(",\n  \"error_type\": \"")
+                    .append(exitCode == 2 ? "usage_error" : "processing_error").append("\",");
+            json.append("\n  \"error_code\": \"")
+                    .append(jsonEscape(diagnosticErrorCode(message, exitCode))).append("\"");
+        }
+        json.append("\n}\n");
+        err.print(json.toString());
+    }
+
+    private static void writeWarnings(PrintStream err, CoreApi.CliResult result) {
+        for (String warning : result.getWarnings()) {
+            err.println("[warning] " + warning);
+        }
+    }
+
+    private static String commandForDiagnostics(String[] args) {
+        if (args == null || args.length == 0) {
+            return "cli";
+        }
+        List<String> command = new ArrayList<String>();
+        for (int index = 0; index < args.length; index++) {
+            String token = args[index];
+            if (token.startsWith("--")) {
+                if (!"--help".equals(token) && index + 1 < args.length) {
+                    index++;
+                }
+                continue;
+            }
+            command.add(token);
+        }
+        return command.isEmpty() ? "cli" : join(command, " ");
+    }
+
+    private static String diagnosticErrorCode(String message, int exitCode) {
+        if (exitCode != 2) {
+            return "processing_error";
+        }
+        if (message.contains("requires both --from")) {
+            return "missing_from_to";
+        }
+        if (message.contains("Unsupported conversion pair")) {
+            return "unsupported_conversion_pair";
+        }
+        if (message.contains("Unsupported render source")) {
+            return "unsupported_render_source";
+        }
+        if (message.contains("requires --measure")) {
+            return "missing_measure_option";
+        }
+        if (message.contains("exactly one of --command")) {
+            return "missing_command_payload";
+        }
+        if (message.contains("Command payload must be valid JSON")) {
+            return "invalid_command_json";
+        }
+        if (message.contains("requires a value")) {
+            return "missing_option_value";
+        }
+        if (message.contains("--diagnostics must")) {
+            return "invalid_diagnostics_option";
+        }
+        return "usage_error";
+    }
+
+    private static String jsonInputDescriptor(String inputPath) {
+        if (inputPath == null || "-".equals(inputPath)) {
+            return "{\"option\":\"--in\",\"mode\":\"stdin\"}";
+        }
+        return "{\"option\":\"--in\",\"mode\":\"file\",\"path\":\"" + jsonEscape(inputPath) + "\"}";
+    }
+
+    private static String jsonOutputDescriptor(String outputPath) {
+        if (outputPath == null || "-".equals(outputPath)) {
+            return "{\"mode\":\"stdout\"}";
+        }
+        return "{\"mode\":\"file\",\"path\":\"" + jsonEscape(outputPath) + "\"}";
+    }
+
+    private static String jsonStringArray(List<String> values) {
+        StringBuilder json = new StringBuilder("[");
+        for (int index = 0; index < values.size(); index++) {
+            if (index > 0) {
+                json.append(", ");
+            }
+            json.append("\"").append(jsonEscape(values.get(index))).append("\"");
+        }
+        return json.append("]").toString();
+    }
+
+    private static String jsonEscape(String text) {
+        String value = text == null ? "" : text;
+        StringBuilder escaped = new StringBuilder();
+        for (int index = 0; index < value.length(); index++) {
+            char ch = value.charAt(index);
+            if (ch == '\\' || ch == '\"') {
+                escaped.append('\\').append(ch);
+            } else if (ch == '\n') {
+                escaped.append("\\n");
+            } else if (ch == '\r') {
+                escaped.append("\\r");
+            } else if (ch == '\t') {
+                escaped.append("\\t");
+            } else if (ch < 0x20) {
+                escaped.append(String.format("\\u%04x", Integer.valueOf(ch)));
+            } else {
+                escaped.append(ch);
+            }
+        }
+        return escaped.toString();
+    }
+
+    private static String join(List<String> values, String delimiter) {
+        StringBuilder text = new StringBuilder();
+        for (int index = 0; index < values.size(); index++) {
+            if (index > 0) {
+                text.append(delimiter);
+            }
+            text.append(values.get(index));
+        }
+        return text.toString();
     }
 
     private static String optionValue(String[] args, String name) {
@@ -592,7 +798,28 @@ public final class MikuscoreCli {
         if (inputPath != null && !"-".equals(inputPath)) {
             return Files.readAllBytes(Paths.get(inputPath));
         }
-        return readAllBytes(in);
+        byte[] bytes = readAllBytes(in);
+        if (bytes.length == 0) {
+            throw new MissingInputException();
+        }
+        return bytes;
+    }
+
+    private static int reportCommandFailure(PrintStream err, Exception ex, String fallback) {
+        if (ex instanceof MissingInputException) {
+            err.println(ex.getMessage());
+            return 2;
+        }
+        err.println(fallback + ": " + ex.getMessage());
+        return 1;
+    }
+
+    private static final class MissingInputException extends IOException {
+        private static final long serialVersionUID = 1L;
+
+        private MissingInputException() {
+            super("Input is required. Use --in <file> or pipe text via stdin.");
+        }
     }
 
     private static void writeMusicXmlOutput(String outputPath, String text, PrintStream out) throws IOException {

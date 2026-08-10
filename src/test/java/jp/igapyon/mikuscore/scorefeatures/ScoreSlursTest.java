@@ -28,6 +28,14 @@ public class ScoreSlursTest {
     }
 
     @Test
+    public void builderRetainsUpstreamRuntimeTypeAndPlacementSemantics() {
+        assertEquals("<slur type=\"START\" number=\"2\"/>",
+                ScoreSlurs.buildMusicXmlSlurXml(new SlurFeature("START", "0x2", "below")));
+        assertEquals("<slur type=\"start\" number=\"0\" placement=\"sideways\"/>",
+                ScoreSlurs.buildMusicXmlSlurXml(new SlurFeature("start", "0.2", "sideways")));
+    }
+
+    @Test
     public void extractsSupportedMusicXmlSlurFeatures() {
         Element note = parseNote(
                 "<slur type=\"start\" number=\"2\" placement=\"below\"/><slur type=\"stop\" number=\"2\"/><slur type=\"continue\"/>");

@@ -29,6 +29,16 @@ public class ScoreTranspositionsTest {
     }
 
     @Test
+    public void normalizesJavaScriptBooleanAndRadixNumberInputs() {
+        TranspositionFeature normalized = ScoreTranspositions
+                .normalizeTranspositionFeature(new TranspositionFeature(Boolean.TRUE, "0x10"));
+
+        assertNotNull(normalized);
+        assertEquals(Integer.valueOf(1), normalized.getDiatonic());
+        assertEquals(Integer.valueOf(16), normalized.getChromatic());
+    }
+
+    @Test
     public void buildsMusicXmlTransposeFeatures() {
         assertEquals("<transpose><diatonic>1</diatonic><chromatic>2</chromatic></transpose>",
                 ScoreTranspositions.buildMusicXmlTransposeXml(
@@ -45,6 +55,16 @@ public class ScoreTranspositionsTest {
         assertNotNull(feature);
         assertEquals(Integer.valueOf(-1), feature.getDiatonic());
         assertEquals(Integer.valueOf(-2), feature.getChromatic());
+    }
+
+    @Test
+    public void extractionUsesZeroForMissingDirectChildrenLikeTheUpstreamEmptyStringFallback() {
+        TranspositionFeature feature = ScoreTranspositions
+                .extractMusicXmlTranspositionFeature(parseTranspose("<transpose><diatonic>-1</diatonic></transpose>"));
+
+        assertNotNull(feature);
+        assertEquals(Integer.valueOf(-1), feature.getDiatonic());
+        assertEquals(Integer.valueOf(0), feature.getChromatic());
     }
 
     private static Element parseTranspose(String xml) {

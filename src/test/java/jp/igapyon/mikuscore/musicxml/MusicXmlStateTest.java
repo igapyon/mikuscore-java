@@ -1,6 +1,8 @@
 package jp.igapyon.mikuscore.musicxml;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -12,9 +14,41 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 public class MusicXmlStateTest {
+    @Test
+    public void rejectsTrailingTextInCommandJson() {
+        assertThrows(IllegalArgumentException.class,
+                () -> MusicXmlState.requireMusicXmlCommandJsonObject("{\"type\":\"ui_noop\"} trailing"));
+        assertThrows(IllegalArgumentException.class,
+                () -> MusicXmlState.requireMusicXmlCommandJsonObject("{\"type\":\"ui\u0001noop\"}"));
+        assertThrows(IllegalArgumentException.class,
+                () -> MusicXmlState.requireMusicXmlCommandJsonObject("\f{\"type\":\"ui_noop\"}"));
+        assertThrows(IllegalArgumentException.class,
+                () -> MusicXmlState.requireMusicXmlCommandJsonObject("\u00a0{\"type\":\"ui_noop\"}"));
+    }
+
+    @Test
+    public void acceptsJsonExponentNumbersAndRejectsInvalidOrNonFiniteIntegerPayloads() {
+        String xml = sampleMusicXml("Command number grammar");
+
+        MusicXmlCommandValidation exponent = MusicXmlState.validateMusicXmlCommand(xml,
+                "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":1e0}");
+        assertTrue(exponent.isOk());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> MusicXmlState.requireMusicXmlCommandJsonObject("{\"duration\":01}"));
+        assertThrows(IllegalArgumentException.class,
+                () -> MusicXmlState.requireMusicXmlCommandJsonObject("{\"duration\":1e}"));
+
+        MusicXmlCommandValidation nonFinite = MusicXmlState.validateMusicXmlCommand(xml,
+                "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":1e400}");
+        assertFalse(nonFinite.isOk());
+        assertEquals("MVP_INVALID_COMMAND_PAYLOAD", nonFinite.getDiagnostics().get(0).getCode());
+    }
+
     @Test
     public void summarizesCanonicalMusicXmlState() {
         MusicXmlStateSummary summary = MusicXmlState.summarizeMusicXmlState(sampleMusicXml("State summary"));
@@ -71,6 +105,64 @@ public class MusicXmlStateTest {
         assertTrue(json.contains("\"measure_note_index\": 1"));
         assertTrue(json.contains("\"voice_note_index\": 1"));
         assertTrue(json.contains("\"step\": \"C\""));
+    }
+
+    @Test
+    public void inspectionRetainsPinnedCliApiEmptySelectorFieldsAndFractionalDuration() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"  \"><measure number=\"  \">"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>0.5</duration>"
+                + "<voice> </voice></note></measure></part></score-partwise>";
+
+        MusicXmlMeasureInspection inspection = MusicXmlState.inspectMusicXmlMeasure(source, "");
+        String json = inspection.toJson();
+
+        assertEquals("", inspection.getMeasures().get(0).getPartId());
+        assertEquals("", inspection.getMeasures().get(0).getNotes().get(0).getSelector().getMeasureNumber());
+        assertEquals("", inspection.getMeasures().get(0).getNotes().get(0).getVoice());
+        assertEquals(Double.valueOf(0.5d), inspection.getMeasures().get(0).getNotes().get(0).getDuration());
+        assertTrue(json.contains("\"part_id\": \"\""));
+        assertTrue(json.contains("\"measure_number\": \"\""));
+        assertTrue(json.contains("\"voice\": \"\""));
+        assertTrue(json.contains("\"duration\": 0.5"));
+    }
+
+    @Test
+    public void stateSummaryAndDiffRetainPinnedEmptyTextAndVoiceSemantics() {
+        String titleSource = "<score-partwise version=\"4.0\"><work><work-title> </work-title></work>"
+                + "<movement-title>Movement fallback</movement-title><part id=\"P1\"><measure number=\"1\">"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>"
+                + "</measure></part></score-partwise>";
+        String absentVoice = "<score-partwise version=\"4.0\"><part id=\"  \"><measure number=\"  \">"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>"
+                + "</measure></part></score-partwise>";
+        String emptyVoice = absentVoice.replace("</duration></note>", "</duration><voice> </voice></note>");
+
+        MusicXmlStateSummary summary = MusicXmlState.summarizeMusicXmlState(titleSource);
+        MusicXmlStateDiff diff = MusicXmlState.diffMusicXmlState(absentVoice, emptyVoice);
+
+        assertEquals("", summary.getTitle());
+        assertTrue(summary.toJson().contains("\"title\": \"\""));
+        assertTrue(diff.isChanged());
+        assertEquals("", diff.getChangedMeasures().get(0).getPartId());
+        assertEquals("", diff.getChangedMeasures().get(0).getMeasureNumber());
+    }
+
+    @Test
+    public void inspectionRetainsPinnedCliApiPitchNumberSemantics() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<note><pitch><step>C</step><alter>0x1</alter><octave>4.5</octave></pitch>"
+                + "<duration>1</duration><voice>1</voice></note>"
+                + "<note><pitch><step>D</step><alter>invalid</alter><octave>invalid</octave></pitch>"
+                + "<duration>1</duration><voice>1</voice></note>"
+                + "</measure></part></score-partwise>";
+
+        String json = MusicXmlState.inspectMusicXmlMeasure(source, "1").toJson();
+
+        assertTrue(json.contains("\"alter\": 1"));
+        assertTrue(json.contains("\"octave\": 4.5"));
+        assertTrue(json.contains("\"step\": \"D\""));
+        assertTrue(json.contains("\"alter\": null"));
+        assertTrue(json.contains("\"octave\": null"));
     }
 
     @Test
@@ -259,6 +351,49 @@ public class MusicXmlStateTest {
     }
 
     @Test
+    public void rejectsDecimalNumericPitchAlterLikeUpstreamValidator() {
+        String command = "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"pitch\":{\"step\":\"G\",\"alter\":1.5,\"octave\":4}}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(
+                sampleMusicXml("Reject decimal pitch alter"), command);
+
+        assertFalse(validation.isOk());
+        assertEquals("MVP_INVALID_COMMAND_PAYLOAD", validation.getDiagnostics().get(0).getCode());
+        assertEquals("change_to_pitch.pitch is invalid.", validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void treatsEmptyCommandTargetAsMissingLikeUpstreamCore() {
+        String command = "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"\",\"voice\":\"1\",\"pitch\":{\"step\":\"G\",\"octave\":4}}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(
+                sampleMusicXml("Empty command target"), command);
+
+        assertFalse(validation.isOk());
+        assertEquals("MVP_COMMAND_TARGET_MISSING", validation.getDiagnostics().get(0).getCode());
+        assertEquals("Command target is missing.", validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void reportsAffectedMeasureNumbersLikeUpstreamWithoutSelectorNormalization() {
+        String missingNumber = "<score-partwise><part id=\"P1\"><measure><note><pitch><step>C</step>"
+                + "<octave>4</octave></pitch><duration>1</duration><voice>1</voice></note></measure></part>"
+                + "</score-partwise>";
+        MusicXmlCommandValidation missing = MusicXmlState.validateMusicXmlCommand(missingNumber,
+                "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"1\","
+                        + "\"pitch\":{\"step\":\"D\",\"octave\":4}}");
+        assertTrue(missing.isOk());
+        assertEquals(0, missing.getAffectedMeasureNumbers().size());
+
+        String spacedNumber = missingNumber.replace("<measure>", "<measure number=\" 1 \">");
+        MusicXmlCommandValidation spaced = MusicXmlState.validateMusicXmlCommand(spacedNumber,
+                "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"1\","
+                        + "\"pitch\":{\"step\":\"D\",\"octave\":4}}");
+        assertTrue(spaced.isOk());
+        assertEquals(" 1 ", spaced.getAffectedMeasureNumbers().get(0));
+    }
+
+    @Test
     public void failedCommandDoesNotMutatePreviouslySuccessfulEdit() throws Exception {
         String source = loadTestFixture("abc-roundtrip/base.musicxml");
         String successCommand = "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"pitch\":{\"step\":\"G\",\"octave\":5}}";
@@ -310,12 +445,135 @@ public class MusicXmlStateTest {
     }
 
     @Test
+    public void changeDurationAddsMissingVoiceToEditedNoteLikeScoreCore() throws Exception {
+        String source = loadMusicXmlStateFixture("invalid_note_voice.musicxml");
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":1}";
+
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertEquals("1:C:4:1|1:D:4:1|1:E:4:1|1:F:4:1", noteSignatureSequence(xml));
+        assertTrue(MusicXmlState.validateMusicXmlForSave(xml, true).isOk());
+    }
+
+    @Test
+    public void treatsEmptyTargetVoiceAsMissingAndNormalizesItLikeNodeXmlUtils() throws Exception {
+        String source = sampleMusicXml("Empty voice").replaceFirst("<voice>1</voice>", "<voice>  </voice>");
+        String command = "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"\","
+                + "\"pitch\":{\"step\":\"G\",\"octave\":4}}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(source, command);
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertTrue(validation.isOk());
+        assertEquals("1:G:4:1|2:D:4:1|rest:1:1", noteSignatureSequence(xml));
+        assertTrue(MusicXmlState.validateMusicXmlForSave(xml, true).isOk());
+    }
+
+    @Test
+    public void insertKeepsTheNodeEmptyVoiceLaneDistinctFromAMissingVoice() {
+        String source = sampleMusicXmlWithDivisions("Empty voice lane")
+                .replace("<voice>1</voice>", "<voice> </voice>")
+                .replace("<voice>2</voice>", "<voice> </voice>");
+        String command = "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":\"\","
+                + "\"note\":{\"duration\":1,\"pitch\":{\"step\":\"E\",\"octave\":4}}}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(source, command);
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertTrue(validation.isOk());
+        assertEquals(4, countOccurrences(xml, "<note>"));
+        assertTrue(xml.contains("<step>E</step>"));
+        assertTrue(xml.contains("<voice/>"));
+    }
+
+    @Test
+    public void missingCommandVoiceUsesUpstreamStringFallbackForMissingTargetVoice() throws Exception {
+        String source = loadMusicXmlStateFixture("invalid_note_voice.musicxml");
+        String command = "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"pitch\":{\"step\":\"G\",\"octave\":4}}";
+
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertEquals("undefined:G:4:1|1:D:4:1|1:E:4:1|1:F:4:1", noteSignatureSequence(xml));
+        assertTrue(MusicXmlState.validateMusicXmlForSave(xml, true).isOk());
+    }
+
+    @Test
+    public void missingCommandVoiceKeepsTheRawUndefinedValueForDurationTiming() throws Exception {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>"
+                + "</measure></part></score-partwise>";
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"duration\":1}";
+
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertEquals("undefined:C:4:1|rest:undefined:4", noteSignatureSequence(xml));
+        assertEquals(2, countOccurrences(xml, "<voice>undefined</voice>"));
+    }
+
+    @Test
+    public void explicitNullVoiceUsesDomTextContentClearingRatherThanStringNull() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>"
+                + "</measure></part></score-partwise>";
+        String command = "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":null,"
+                + "\"note\":{\"duration\":1,\"pitch\":{\"step\":\"D\",\"octave\":4}}}";
+
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertEquals(1, countOccurrences(xml, "<voice/>"));
+        assertFalse(xml.contains("<voice>null</voice>"));
+    }
+
+    @Test
     public void saveIntegrityRejectsOverfullFixture() throws Exception {
         MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlForSave(
                 loadMusicXmlStateFixture("overfull.musicxml"), false);
 
         assertEquals(false, validation.isOk());
         assertEquals("MEASURE_OVERFULL", validation.getDiagnostics().get(0).getCode());
+    }
+
+    @Test
+    public void saveIntegrityUsesFiniteFractionalDurationsLikeTheNodeXmlReader() {
+        String valid = fractionalDurationMusicXml("1.5");
+        String overfull = fractionalDurationMusicXml("4.5");
+
+        assertTrue(MusicXmlState.validateMusicXmlForSave(valid, false).isOk());
+        MusicXmlCommandValidation failure = MusicXmlState.validateMusicXmlForSave(overfull, false);
+        assertFalse(failure.isOk());
+        assertEquals("MEASURE_OVERFULL", failure.getDiagnostics().get(0).getCode());
+        assertEquals("Occupied time 4.5 exceeds capacity 4.", failure.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void saveIntegrityUsesFiniteNodeNumericTimingContextValues() {
+        assertTrue(MusicXmlState.validateMusicXmlForSave(fractionalTimingContextMusicXml("1.5", "6"), false).isOk());
+
+        MusicXmlCommandValidation fractionalOverfull = MusicXmlState.validateMusicXmlForSave(
+                fractionalTimingContextMusicXml("1.5", "6.5"), false);
+        assertFalse(fractionalOverfull.isOk());
+        assertEquals("Occupied time 6.5 exceeds capacity 6.", fractionalOverfull.getDiagnostics().get(0).getMessage());
+
+        MusicXmlCommandValidation hexadecimalOverfull = MusicXmlState.validateMusicXmlForSave(
+                fractionalTimingContextMusicXml("0x2", "9"), false);
+        assertFalse(hexadecimalOverfull.isOk());
+        assertEquals("Occupied time 9 exceeds capacity 8.", hexadecimalOverfull.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void savePitchValidationUsesNodeNumberRulesForOctaveAndAlter() {
+        assertTrue(MusicXmlState.validateMusicXmlForSave(numericPitchMusicXml("<octave>0x4</octave>", ""), false)
+                .isOk());
+        assertTrue(MusicXmlState.validateMusicXmlForSave(numericPitchMusicXml("", ""), false).isOk());
+        assertTrue(MusicXmlState.validateMusicXmlForSave(
+                numericPitchMusicXml("<octave>4e0</octave>", "<alter>0x2</alter>"), false).isOk());
+
+        MusicXmlCommandValidation invalidAlter = MusicXmlState.validateMusicXmlForSave(
+                numericPitchMusicXml("<octave>4</octave>", "<alter>0x3</alter>"), false);
+        assertFalse(invalidAlter.isOk());
+        assertEquals("MVP_INVALID_NOTE_PITCH", invalidAlter.getDiagnostics().get(0).getCode());
+        assertEquals("Pitch alter is invalid.", invalidAlter.getDiagnostics().get(0).getMessage());
     }
 
     @Test
@@ -326,6 +584,30 @@ public class MusicXmlStateTest {
 
         assertTrue(validation.isOk());
         assertEquals("rest:1:3840|rest:1:3840", noteSignatureSequence(xml));
+    }
+
+    @Test
+    public void voiceLaneTimingUsesGlobalBackupForwardCursorAndSkipsChordTones() {
+        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\"><part-name>Music</part-name>"
+                + "</score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>"
+                + "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>"
+                + "<backup><duration>3</duration></backup>"
+                + "<note><pitch><step>G</step><octave>3</octave></pitch><duration>2</duration><voice>2</voice></note>"
+                + "<forward><duration>1</duration></forward>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>"
+                + "</measure></part></score-partwise>";
+
+        MusicXmlCommandValidation clean = MusicXmlState.validateMusicXmlForSave(xml, true);
+        MusicXmlCommandValidation overfull = MusicXmlState.validateMusicXmlCommand(xml,
+                "{\"type\":\"change_duration\",\"targetNodeId\":\"n4\",\"voice\":\"1\",\"duration\":4}");
+
+        assertTrue(clean.isOk());
+        assertFalse(overfull.isOk());
+        assertEquals("MEASURE_OVERFULL", overfull.getDiagnostics().get(0).getCode());
+        assertEquals("Projected occupied time 5 exceeds capacity 4.", overfull.getDiagnostics().get(0).getMessage());
     }
 
     @Test
@@ -359,6 +641,112 @@ public class MusicXmlStateTest {
 
         assertTrue(xml.contains("<duration>2</duration>"));
         assertTrue(xml.contains("<type>half</type>"));
+    }
+
+    @Test
+    public void durationNotationUsesUpstreamNumberCoercionForEffectiveDivisions() {
+        String source = sampleMusicXmlWithDivisions("Hexadecimal divisions")
+                .replace("<divisions>1</divisions>", "<divisions>0x1</divisions>");
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":2}";
+
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertTrue(xml.contains("<duration>2</duration>"));
+        assertTrue(xml.contains("<type>half</type>"));
+    }
+
+    @Test
+    public void durationNotationAndTimingRetainFiniteValuesBeyondTheJavaIntRange() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>4294967296</divisions><time><beats>4</beats><beat-type>4</beat-type>"
+                + "</time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>4294967296</duration>"
+                + "<voice>1</voice><type>half</type><dot/></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>12884901888</duration>"
+                + "<voice>1</voice></note></measure></part></score-partwise>";
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\","
+                + "\"duration\":4294967296}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(source, command);
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertTrue(validation.isOk());
+        assertTrue(xml.contains("<duration>4294967296</duration>"));
+        assertTrue(xml.contains("<type>quarter</type>"));
+        assertFalse(xml.contains("<type>half</type>"));
+        assertFalse(xml.contains("<dot/>"));
+    }
+
+    @Test
+    public void timingContextInheritsPastBlankFieldsInsteadOfTreatingThemAsZero() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\">"
+                + "<measure number=\"1\"><attributes><divisions>1</divisions><time><beats>4</beats>"
+                + "<beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice>"
+                + "</note></measure>"
+                + "<measure number=\"2\"><attributes><divisions> </divisions><time><beats> </beats>"
+                + "<beat-type> </beat-type></time></attributes>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice>"
+                + "</note><note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice>"
+                + "</note></measure></part></score-partwise>";
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n2\",\"voice\":\"1\","
+                + "\"duration\":4}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(source, command);
+
+        assertFalse(validation.isOk());
+        assertEquals("MEASURE_OVERFULL", validation.getDiagnostics().get(0).getCode());
+        assertEquals("Projected occupied time 5 exceeds capacity 4.", validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void durationCommandProjectsFiniteFractionalSourceDurationsLikeTimeIndex() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1.5</duration><voice>1</voice></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice></note>"
+                + "</measure></part></score-partwise>";
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":2}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(source, command);
+
+        assertFalse(validation.isOk());
+        assertEquals("MEASURE_OVERFULL", validation.getDiagnostics().get(0).getCode());
+        assertEquals("Projected occupied time 5 exceeds capacity 4.", validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void timeIndexUsesTheUpstreamDescendantAttributesSelector() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<vendor-wrapper><attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type>"
+                + "</time></attributes></vendor-wrapper>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice></note>"
+                + "</measure></part></score-partwise>";
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":5}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(source, command);
+
+        assertFalse(validation.isOk());
+        assertEquals("MEASURE_OVERFULL", validation.getDiagnostics().get(0).getCode());
+        assertEquals("Projected occupied time 5 exceeds capacity 4.", validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void durationCommandReportsUnderfullWhenAFractionalGapCannotBecomeARest() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1.5</duration><voice>1</voice></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>0.5</duration><voice>1</voice></note>"
+                + "</measure></part></score-partwise>";
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":1}";
+
+        MusicXmlState.MusicXmlCommandApplyResult applied = MusicXmlState.applyMusicXmlCommandWithWarnings(source,
+                command);
+
+        assertEquals(1, applied.getWarnings().size());
+        assertEquals("MEASURE_UNDERFULL", applied.getWarnings().get(0).getCode());
+        assertEquals("Projected occupied time 1.5 is below capacity 4.", applied.getWarnings().get(0).getMessage());
+        assertTrue(applied.getOutput().contains("<duration>1</duration>"));
     }
 
     @Test
@@ -419,6 +807,48 @@ public class MusicXmlStateTest {
         assertTrue(xml.contains("<voice>1</voice>"));
         assertTrue(!xml.contains("<step>C</step>"));
         assertTrue(xml.contains("<step>D</step>"));
+    }
+
+    @Test
+    public void deleteUsesTheUpstreamNumberDurationSemantics() {
+        String command = "{\"type\":\"delete_note\",\"targetNodeId\":\"n1\",\"voice\":\"1\"}";
+
+        String fractional = MusicXmlState.applyMusicXmlCommand(fractionalDurationMusicXml("1.5"), command);
+        String hexadecimal = MusicXmlState.applyMusicXmlCommand(fractionalDurationMusicXml("0x2"), command);
+        String large = MusicXmlState.applyMusicXmlCommand(fractionalDurationMusicXml("1e20"), command);
+        String exponential = MusicXmlState.applyMusicXmlCommand(fractionalDurationMusicXml("1e21"), command);
+
+        assertTrue(fractional.contains("<rest/>") || fractional.contains("<rest></rest>"));
+        assertTrue(fractional.contains("<duration>1.5</duration>"));
+        // JavaScript Number("0x2") is 2 and XMLSerializer writes String(2).
+        assertTrue(hexadecimal.contains("<duration>2</duration>"));
+        assertTrue(large.contains("<duration>100000000000000000000</duration>"));
+        assertTrue(exponential.contains("<duration>1e+21</duration>"));
+    }
+
+    @Test
+    public void rejectsDeleteWithAnInvalidTargetDurationLikeScoreCore() {
+        String command = "{\"type\":\"delete_note\",\"targetNodeId\":\"n1\",\"voice\":\"1\"}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(
+                fractionalDurationMusicXml("0"), command);
+
+        assertFalse(validation.isOk());
+        assertEquals("MVP_INVALID_NOTE_DURATION", validation.getDiagnostics().get(0).getCode());
+        assertEquals("Target note has invalid duration.", validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void saveUsesFiniteFractionalTupletsForTheUpstreamRoundingTolerance() {
+        String xml = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>2.5</duration><voice>1</voice>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>2.5</duration><voice>1</voice>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>"
+                + "</measure></part></score-partwise>";
+
+        assertTrue(MusicXmlState.validateMusicXmlForSave(xml, false).isOk());
     }
 
     @Test
@@ -637,6 +1067,35 @@ public class MusicXmlStateTest {
     }
 
     @Test
+    public void genericMusicXmlCommandsDoNotTreatPrivateLookingVendorAttributesAsNodeIds() throws Exception {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<note data-mikuscore-java-internal-node-id-1=\"mksj:n999\"><pitch><step>C</step>"
+                + "<octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>"
+                + "</measure></part></score-partwise>";
+
+        String output = MusicXmlState.applyMusicXmlCommand(source,
+                "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"1\","
+                        + "\"pitch\":{\"step\":\"D\",\"octave\":4}}");
+
+        assertTrue(output.contains("<step>D</step>"));
+        assertTrue(output.contains("data-mikuscore-java-internal-node-id-1=\"mksj:n999\""));
+    }
+
+    @Test
+    public void insertionUsesJavaScriptStringificationForAnUncheckedVoiceValue() throws Exception {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>"
+                + "</measure></part></score-partwise>";
+
+        String output = MusicXmlState.applyMusicXmlCommand(source,
+                "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":false,\"note\":{"
+                        + "\"duration\":1,\"pitch\":{\"step\":\"D\",\"octave\":4}}}");
+
+        assertTrue(output.contains("<voice>false</voice>"));
+        assertFalse(output.contains("<voice>1</voice>"));
+    }
+
+    @Test
     public void changeToPitchPreservesExistingBeamXml() throws Exception {
         String command = "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n3\",\"voice\":\"1\",\"pitch\":{\"step\":\"B\",\"octave\":5}}";
 
@@ -658,6 +1117,39 @@ public class MusicXmlStateTest {
     }
 
     @Test
+    public void saveUsesTheUpstreamDocumentWideNoteSelector() {
+        String xml = "<score-partwise version=\"4.0\"><vendor-data><note><pitch><step>C</step><octave>4</octave>"
+                + "</pitch><duration>0</duration><voice>1</voice></note></vendor-data></score-partwise>";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlForSave(xml, false);
+
+        assertFalse(validation.isOk());
+        assertEquals("MVP_INVALID_NOTE_DURATION", validation.getDiagnostics().get(0).getCode());
+    }
+
+    @Test
+    public void saveUsesTheUpstreamDocumentWideMeasureSelectorForOverfullValidation() {
+        String xml = "<score-partwise version=\"4.0\"><vendor-wrapper><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>5</duration><voice>1</voice></note>"
+                + "</measure></part></vendor-wrapper></score-partwise>";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlForSave(xml, false);
+
+        assertFalse(validation.isOk());
+        assertEquals("MEASURE_OVERFULL", validation.getDiagnostics().get(0).getCode());
+    }
+
+    @Test
+    public void saveUsesTheUpstreamDescendantPitchSelectors() {
+        String xml = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<note><pitch><vendor-pitch><step>C</step><octave>4</octave><alter>0</alter></vendor-pitch></pitch>"
+                + "<duration>1</duration><voice>1</voice></note></measure></part></score-partwise>";
+
+        assertTrue(MusicXmlState.validateMusicXmlForSave(xml, false).isOk());
+    }
+
+    @Test
     public void warnsUnderfullInsertNoteAfter() {
         String command = "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":\"1\",\"note\":{\"duration\":1,\"pitch\":{\"step\":\"A\",\"octave\":4}}}";
 
@@ -671,6 +1163,18 @@ public class MusicXmlStateTest {
     }
 
     @Test
+    public void applyRetainsUnderfullWarningForInsertNoteAfter() {
+        String command = "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":\"1\",\"note\":{\"duration\":1,\"pitch\":{\"step\":\"A\",\"octave\":4}}}";
+
+        MusicXmlState.MusicXmlCommandApplyResult applied = MusicXmlState.applyMusicXmlCommandWithWarnings(
+                sampleUnderfullInsertMusicXml("Apply warning insert"), command);
+
+        assertEquals(1, applied.getWarnings().size());
+        assertEquals("MEASURE_UNDERFULL", applied.getWarnings().get(0).getCode());
+        assertTrue(applied.getOutput().contains("<step>A</step>"));
+    }
+
+    @Test
     public void rejectsInvalidInsertNoteAfterPayload() {
         String command = "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":\"1\",\"note\":{\"duration\":0,\"pitch\":{\"step\":\"A\",\"octave\":4}}}";
 
@@ -679,6 +1183,37 @@ public class MusicXmlStateTest {
 
         assertEquals(false, validation.isOk());
         assertEquals("MVP_INVALID_COMMAND_PAYLOAD", validation.getDiagnostics().get(0).getCode());
+        assertEquals("insert_note_after.note.duration must be a positive integer.",
+                validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void reportsTheUpstreamSpecificInvalidInsertPitchDiagnostic() {
+        String command = "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":\"1\",\"note\":{\"duration\":1,\"pitch\":{\"step\":\"H\",\"octave\":4}}}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(
+                sampleMusicXmlWithDivisions("Reject insert pitch"), command);
+
+        assertFalse(validation.isOk());
+        assertEquals("MVP_INVALID_COMMAND_PAYLOAD", validation.getDiagnostics().get(0).getCode());
+        assertEquals("insert_note_after.note.pitch is invalid.", validation.getDiagnostics().get(0).getMessage());
+    }
+
+    @Test
+    public void preservesUpstreamChildOrderWhenConvertingRestToPitchAndPitchToRest() throws Exception {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<note><rest/><duration>1</duration><voice>1</voice><vendor-data/></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice>"
+                + "<tie type=\"start\"/><notations><tied type=\"start\"/></notations><vendor-data/></note>"
+                + "</measure></part></score-partwise>";
+
+        String pitched = MusicXmlState.applyMusicXmlCommand(source,
+                "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"pitch\":{\"step\":\"C\",\"octave\":4}}");
+        assertEquals("pitch,duration,voice,vendor-data", directChildTagNames(pitched, 0));
+
+        String rested = MusicXmlState.applyMusicXmlCommand(pitched,
+                "{\"type\":\"delete_note\",\"targetNodeId\":\"n2\",\"voice\":\"1\"}");
+        assertEquals("rest,duration,voice,vendor-data", directChildTagNames(rested, 1));
     }
 
     @Test
@@ -711,6 +1246,25 @@ public class MusicXmlStateTest {
     }
 
     @Test
+    public void extendingDurationConsumesPartOfAFiniteFractionalRestLikeScoreCore() {
+        String source = "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>"
+                + "<note><rest/><duration>1.5</duration><voice>1</voice></note>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>0.5</duration><voice>1</voice></note>"
+                + "</measure></part></score-partwise>";
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n2\",\"voice\":\"1\",\"duration\":2}";
+
+        MusicXmlCommandValidation validation = MusicXmlState.validateMusicXmlCommand(source, command);
+        String xml = MusicXmlState.applyMusicXmlCommand(source, command);
+
+        assertTrue(validation.isOk());
+        assertTrue(xml.contains("<duration>0.5</duration>"));
+        assertTrue(MusicXmlState.validateMusicXmlForSave(xml, true).isOk());
+    }
+
+    @Test
     public void shorteningDurationAutoFillsTrailingRest() {
         String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":1}";
 
@@ -723,6 +1277,18 @@ public class MusicXmlStateTest {
         assertTrue(xml.contains("<type>quarter</type>"));
         assertTrue(xml.contains("<step>D</step>"));
         assertTrue(xml.contains("<step>E</step>"));
+    }
+
+    @Test
+    public void applyRetainsUnderfullWarningWhenDurationCannotFillAcrossBackup() throws Exception {
+        String command = "{\"type\":\"change_duration\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"duration\":1}";
+
+        MusicXmlState.MusicXmlCommandApplyResult applied = MusicXmlState.applyMusicXmlCommandWithWarnings(
+                sampleBoundaryMusicXml("Apply warning duration"), command);
+
+        assertEquals(1, applied.getWarnings().size());
+        assertEquals("MEASURE_UNDERFULL", applied.getWarnings().get(0).getCode());
+        assertEquals("1:C:4:1|2:E:4:2", noteSignatureSequence(applied.getOutput()));
     }
 
     @Test
@@ -837,6 +1403,18 @@ public class MusicXmlStateTest {
         assertEquals("n3", validation.getChangedNodeIds().get(1));
         assertEquals("1:C:4:1|1:C:4:1|2:E:4:2", noteSignatureSequence(xml));
         assertTrue(MusicXmlState.validateMusicXmlForSave(xml, true).isOk());
+    }
+
+    @Test
+    public void applySplitBeforeBackupPreservesLaneTiming() throws Exception {
+        String command = "{\"type\":\"split_note\",\"targetNodeId\":\"n1\",\"voice\":\"1\"}";
+
+        MusicXmlState.MusicXmlCommandApplyResult applied = MusicXmlState.applyMusicXmlCommandWithWarnings(
+                sampleBoundaryMusicXml("Apply split timing"), command);
+
+        assertEquals(0, applied.getWarnings().size());
+        assertEquals("1:C:4:1|1:C:4:1|2:E:4:2", noteSignatureSequence(applied.getOutput()));
+        assertTrue(MusicXmlState.validateMusicXmlForSave(applied.getOutput(), true).isOk());
     }
 
     @Test
@@ -1155,6 +1733,28 @@ public class MusicXmlStateTest {
                 + "</score-partwise>\n";
     }
 
+    private static String fractionalDurationMusicXml(String duration) {
+        return "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>" + duration
+                + "</duration><voice>1</voice></note></measure></part></score-partwise>";
+    }
+
+    private static String fractionalTimingContextMusicXml(String divisions, String duration) {
+        return "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>" + divisions
+                + "</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>" + duration
+                + "</duration><voice>1</voice></note></measure></part></score-partwise>";
+    }
+
+    private static String numericPitchMusicXml(String octaveXml, String alterXml) {
+        return "<score-partwise version=\"4.0\"><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step>" + alterXml + octaveXml
+                + "</pitch><duration>4</duration><voice>1</voice></note></measure></part></score-partwise>";
+    }
+
     private static int countOccurrences(String text, String pattern) {
         int count = 0;
         int index = 0;
@@ -1238,6 +1838,23 @@ public class MusicXmlStateTest {
             }
         }
         return builder.toString();
+    }
+
+    private static String directChildTagNames(String xml, int noteIndex) throws Exception {
+        Document doc = parseTestXml(xml);
+        Element note = (Element) doc.getElementsByTagName("note").item(noteIndex);
+        StringBuilder result = new StringBuilder();
+        Node child = note.getFirstChild();
+        while (child != null) {
+            if (child instanceof Element) {
+                if (result.length() > 0) {
+                    result.append(",");
+                }
+                result.append(((Element) child).getTagName());
+            }
+            child = child.getNextSibling();
+        }
+        return result.toString();
     }
 
     private static int sumDurationForMeasureVoice(String xml, String measureNumber, String voice) throws Exception {

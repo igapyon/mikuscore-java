@@ -56,6 +56,11 @@ public final class StaffClefPolicy {
     }
 
     public static int pickStaffByPitchWithHysteresis(int midiKey, Integer previousStaff) {
+        return pickStaffByPitchWithHysteresis((double) midiKey, previousStaff);
+    }
+
+    /** Mirrors the Node number-based staff threshold comparison without an int bound. */
+    public static int pickStaffByPitchWithHysteresis(double midiKey, Integer previousStaff) {
         if (previousStaff != null && previousStaff.intValue() == 1) {
             return midiKey >= UPPER_STAFF_HOLD_MIN ? 1 : 2;
         }

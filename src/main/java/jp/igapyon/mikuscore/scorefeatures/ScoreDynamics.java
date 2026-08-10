@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import org.w3c.dom.Element;
@@ -22,12 +23,12 @@ public final class ScoreDynamics {
     }
 
     public static String normalizeDynamicMark(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return DYNAMIC_MARK_SET.contains(normalized) ? normalized : null;
     }
 
     public static String velocityToDynamicMark(Object velocity) {
-        double numeric = toNumber(velocity);
+        double numeric = velocity instanceof Number ? ((Number) velocity).doubleValue() : Double.NaN;
         int v = (int) Math.round(Double.isNaN(numeric) || Double.isInfinite(numeric) ? 64 : numeric);
         v = Math.max(1, Math.min(127, v));
         if (v <= 15) {
@@ -58,30 +59,25 @@ public final class ScoreDynamics {
         if (feature == null) {
             return "";
         }
-        String placement = normalizePlacement(feature.getPlacement());
-        String placementAttr = placement == null ? "" : " placement=\"" + placement + "\"";
+        String placementAttr = isJavaScriptTruthyText(feature.getPlacement())
+                ? " placement=\"" + feature.getPlacement() + "\""
+                : "";
         Integer offset = positiveRounded(feature.getOffsetDiv());
         String offsetXml = offset == null ? "" : "<offset>" + offset + "</offset>";
-        String voiceXml = isBlank(feature.getVoice()) ? "" : "<voice>" + xmlEscape(feature.getVoice()) + "</voice>";
+        String voiceXml = isJavaScriptTruthyText(feature.getVoice())
+                ? "<voice>" + xmlEscape(feature.getVoice()) + "</voice>"
+                : "";
         String staffXml = feature.getStaff() == null || String.valueOf(feature.getStaff()).trim().length() == 0 ? ""
                 : "<staff>" + xmlEscape(String.valueOf(feature.getStaff())) + "</staff>";
 
         String directionType;
         if ("dynamic".equals(feature.getKind())) {
-            String mark = normalizeDynamicMark(feature.getMark());
-            if (mark == null) {
-                return "";
-            }
-            directionType = "<dynamics><" + mark + "/></dynamics>";
-        } else if ("wedge".equals(feature.getKind())) {
-            String wedgeType = normalizeWedgeType(feature.getWedgeType());
-            if (wedgeType == null) {
-                return "";
-            }
-            String numberAttr = isBlank(feature.getNumber()) ? "" : " number=\"" + xmlEscape(feature.getNumber()) + "\"";
-            directionType = "<wedge type=\"" + wedgeType + "\"" + numberAttr + "/>";
+            directionType = "<dynamics><" + String.valueOf(feature.getMark()) + "/></dynamics>";
         } else {
-            return "";
+            String numberAttr = isJavaScriptTruthyText(feature.getNumber())
+                    ? " number=\"" + xmlEscape(feature.getNumber()) + "\""
+                    : "";
+            directionType = "<wedge type=\"" + String.valueOf(feature.getWedgeType()) + "\"" + numberAttr + "/>";
         }
 
         return "<direction" + placementAttr + "><direction-type>" + directionType + "</direction-type>" + offsetXml
@@ -93,28 +89,23 @@ public final class ScoreDynamics {
         if (direction == null) {
             return features;
         }
-        Integer offset = null;
-        String voice = null;
-        String staff = null;
-        for (Element child : directChildElements(direction)) {
-            String tag = child.getTagName();
-            if ("offset".equals(tag)) {
-                offset = positiveRounded(child.getTextContent());
-            } else if ("voice".equals(tag)) {
-                voice = trimToNull(child.getTextContent());
-            } else if ("staff".equals(tag)) {
-                staff = trimToNull(child.getTextContent());
-            }
-        }
+        Element offsetNode = directChild(direction, "offset");
+        Element voiceNode = directChild(direction, "voice");
+        Element staffNode = directChild(direction, "staff");
+        Integer offset = offsetNode == null ? null : positiveRounded(offsetNode.getTextContent());
+        String voice = voiceNode == null ? null : trimToNull(voiceNode.getTextContent());
+        String staff = staffNode == null ? null : trimToNull(staffNode.getTextContent());
         String placement = normalizePlacement(direction.getAttribute("placement"));
 
+        List<DynamicFeature> dynamics = new ArrayList<DynamicFeature>();
+        List<DynamicFeature> wedges = new ArrayList<DynamicFeature>();
         for (Element directionType : directChildElements(direction, "direction-type")) {
             for (Element child : directChildElements(directionType)) {
                 if ("dynamics".equals(child.getTagName())) {
                     for (Element dynamicNode : directChildElements(child)) {
                         String mark = normalizeDynamicMark(dynamicNode.getTagName());
                         if (mark != null) {
-                            features.add(DynamicFeature.dynamic(mark, offset, voice, staff, placement));
+                            dynamics.add(DynamicFeature.dynamic(mark, offset, voice, staff, placement));
                         }
                     }
                 } else if ("wedge".equals(child.getTagName())) {
@@ -122,21 +113,23 @@ public final class ScoreDynamics {
                     if (wedgeType != null) {
                         DynamicFeature feature = DynamicFeature.wedge(wedgeType, trimToNull(child.getAttribute("number")),
                                 offset, voice, staff, placement);
-                        features.add(feature);
+                        wedges.add(feature);
                     }
                 }
             }
         }
+        features.addAll(dynamics);
+        features.addAll(wedges);
         return features;
     }
 
     private static String normalizePlacement(String value) {
-        String normalized = value == null ? "" : value.trim().toLowerCase();
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         return "above".equals(normalized) || "below".equals(normalized) ? normalized : null;
     }
 
     private static String normalizeWedgeType(String value) {
-        String normalized = value == null ? "" : value.trim().toLowerCase();
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
         return "crescendo".equals(normalized) || "diminuendo".equals(normalized) || "stop".equals(normalized)
                 ? normalized
                 : null;
@@ -154,15 +147,38 @@ public final class ScoreDynamics {
         if (value == null) {
             return Double.NaN;
         }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue() ? 1 : 0;
+        }
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
         String text = String.valueOf(value).trim();
         if (text.length() == 0) {
-            return Double.NaN;
+            return 0;
+        }
+        if (text.startsWith("0x") || text.startsWith("0X")) {
+            return parseRadixNumber(text.substring(2), 16);
+        }
+        if (text.startsWith("0b") || text.startsWith("0B")) {
+            return parseRadixNumber(text.substring(2), 2);
+        }
+        if (text.startsWith("0o") || text.startsWith("0O")) {
+            return parseRadixNumber(text.substring(2), 8);
         }
         try {
             return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return Double.NaN;
+        }
+    }
+
+    private static double parseRadixNumber(String digits, int radix) {
+        if (digits.isEmpty()) {
+            return Double.NaN;
+        }
+        try {
+            return Long.parseLong(digits, radix);
         } catch (NumberFormatException ex) {
             return Double.NaN;
         }
@@ -182,13 +198,20 @@ public final class ScoreDynamics {
         return out;
     }
 
+    private static Element directChild(Element parent, String tagName) {
+        for (Element child : directChildElements(parent, tagName)) {
+            return child;
+        }
+        return null;
+    }
+
     private static String trimToNull(String value) {
         String trimmed = value == null ? "" : value.trim();
         return trimmed.length() == 0 ? null : trimmed;
     }
 
-    private static boolean isBlank(String value) {
-        return value == null || value.trim().length() == 0;
+    private static boolean isJavaScriptTruthyText(String value) {
+        return value != null && value.length() > 0;
     }
 
     private static String xmlEscape(String value) {

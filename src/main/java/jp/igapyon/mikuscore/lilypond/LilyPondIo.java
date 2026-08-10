@@ -18,6 +18,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 import jp.igapyon.mikuscore.abc.AbcIo;
+import jp.igapyon.mikuscore.core.StaffClefPolicy;
 import jp.igapyon.mikuscore.musicxml.MusicXmlIo;
 
 public final class LilyPondIo {
@@ -224,10 +225,20 @@ public final class LilyPondIo {
     }
 
     public static String convertLilyPondToMusicXml(String lilySource) {
+        return convertLilyPondToMusicXml(lilySource, new LilyPondImportOptions());
+    }
+
+    /**
+     * Imports LilyPond using the same public metadata and serialization switches
+     * as the Node facade. {@code debugMetadata} is retained for API compatibility;
+     * the pinned Node implementation does not currently use it to change output.
+     */
+    public static String convertLilyPondToMusicXml(String lilySource, LilyPondImportOptions options) {
         String rawSource = String.valueOf(lilySource == null ? "" : lilySource);
+        LilyPondImportOptions safeOptions = options == null ? new LilyPondImportOptions() : options;
         String laneRoundtripXml = extractMksLanesRoundtripXml(rawSource);
         if (!laneRoundtripXml.isEmpty()) {
-            return laneRoundtripXml;
+            return finalizeLilyPondImportedMusicXml(laneRoundtripXml, rawSource, safeOptions);
         }
         String source = expandLilyVariables(rawSource);
         String title = parseHeaderField(source, "title");
@@ -241,21 +252,23 @@ public final class LilyPondIo {
         LilyStaffBlock staffBlock = staffBlocks.isEmpty() ? null : staffBlocks.get(0);
         String body = staffBlock == null ? extractFirstMusicBody(source) : staffBlock.getContent();
         if (body.isEmpty()) {
-            throw new IllegalArgumentException("LilyPond music block not found.");
+            throw noParseableLilyPondEvents();
         }
         if (staffBlocks.size() > 1) {
             String xml = convertLilyStaffBlocksToMusicXml(source, title, composer, meter, key, staffBlocks);
             xml = addNativeLyricsToMusicXml(xml, source);
-            return composer.isEmpty() ? xml : addComposerToMusicXml(xml, composer);
+            xml = composer.isEmpty() ? xml : addComposerToMusicXml(xml, composer);
+            return finalizeLilyPondImportedMusicXml(xml, rawSource, safeOptions);
         }
         String partName = staffBlock == null ? parseFirstStaffName(source) : staffBlock.getPartName();
-        String clef = parseClefText(body);
+        String explicitClef = parseClefText(body);
+        String clef = explicitClef;
         if (clef.isEmpty()) {
             clef = inferClefText(body);
         }
         String abcBody = parseLilyBodyToAbc(body);
         if (abcBody.trim().isEmpty()) {
-            throw new IllegalArgumentException("LilyPond playable body not found.");
+            throw noParseableLilyPondEvents();
         }
         StringBuilder abc = new StringBuilder();
         abc.append("X:1\n");
@@ -286,13 +299,18 @@ public final class LilyPondIo {
         abc.append("K:").append(key).append('\n');
         abc.append(abcBody).append('\n');
         String xml = MusicXmlIo.normalizeImportedMusicXmlText(
-                AbcIo.musicXmlFromAbc(abc.toString(), new AbcIo.AbcImportOptions()));
+                AbcIo.musicXmlFromAbc(abc.toString(), new AbcIo.AbcImportOptions(Boolean.FALSE, Boolean.FALSE,
+                        Boolean.FALSE, null)));
         xml = addLilyOverfullCarryDiagnostics(xml);
         xml = addNativeRepeatVoltaToMusicXml(xml, body);
         xml = addNativeAlternativeEndingsToMusicXml(xml, body);
         xml = addNativePedalCommandsToMusicXml(xml, body);
         xml = addNativeLyricsToMusicXml(xml, source);
-        return composer.isEmpty() ? xml : addComposerToMusicXml(xml, composer);
+        if (staffBlock != null && explicitClef.isEmpty()) {
+            xml = autoSplitLilyPondWideRangeStaff(xml);
+        }
+        xml = composer.isEmpty() ? xml : addComposerToMusicXml(xml, composer);
+        return finalizeLilyPondImportedMusicXml(xml, rawSource, safeOptions);
     }
 
     public static String exportMusicXmlDomToLilyPond(Document doc) {
@@ -389,7 +407,7 @@ public final class LilyPondIo {
             return workTitle;
         }
         String movementTitle = directChildText(root, "movement-title");
-        return movementTitle.isEmpty() ? "mikuscore export" : movementTitle;
+        return movementTitle.isEmpty() ? "miku-score export" : movementTitle;
     }
 
     private static String firstMusicXmlTransposeMetadata(Document doc, String voiceId) {
@@ -998,16 +1016,22 @@ public final class LilyPondIo {
             }
         }
         abc.append("K:").append(key).append('\n');
+        boolean hasPlayableBody = false;
         for (int index = 0; index < staffBlocks.size(); index++) {
             String abcBody = parseLilyBodyToAbc(staffBlocks.get(index).getContent());
             if (abcBody.trim().isEmpty()) {
                 continue;
             }
+            hasPlayableBody = true;
             abc.append("V:").append(index + 1).append('\n');
             abc.append(abcBody).append('\n');
         }
+        if (!hasPlayableBody) {
+            throw noParseableLilyPondEvents();
+        }
         String xml = MusicXmlIo.normalizeImportedMusicXmlText(
-                AbcIo.musicXmlFromAbc(abc.toString(), new AbcIo.AbcImportOptions()));
+                AbcIo.musicXmlFromAbc(abc.toString(), new AbcIo.AbcImportOptions(Boolean.FALSE, Boolean.FALSE,
+                        Boolean.FALSE, null)));
         xml = addLilyOverfullCarryDiagnostics(xml);
         xml = addNativeRepeatVoltaToMusicXml(xml, staffBlocks.get(0).getContent());
         xml = addNativeAlternativeEndingsToMusicXml(xml, staffBlocks.get(0).getContent());
@@ -1024,13 +1048,335 @@ public final class LilyPondIo {
         for (int index = 0; index < doc.getElementsByTagName("miscellaneous-field").getLength(); index++) {
             Element field = (Element) doc.getElementsByTagName("miscellaneous-field").item(index);
             String text = field.getTextContent() == null ? "" : field.getTextContent();
-            if (text.indexOf("code=OVERFULL_REFLOWED") < 0 || text.indexOf("message=") >= 0) {
+            if (text.indexOf("code=OVERFULL_REFLOWED") < 0) {
                 continue;
             }
-            field.setTextContent(text + ";message=carried event to next measure");
+            field.setTextContent("level=warn;code=LILYPOND_IMPORT_WARNING;fmt=lilypond"
+                    + ";message=staff 1: overfull measure; carried event to next measure.");
             changed = true;
         }
         return changed ? MusicXmlIo.prettyPrintMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc)) : xml;
+    }
+
+    private static IllegalArgumentException noParseableLilyPondEvents() {
+        return new IllegalArgumentException("No parseable notes/rests were found in LilyPond source.");
+    }
+
+
+    /**
+     * Mirrors the direct Node importer policy for an explicit {@code \new Staff}
+     * with no clef: a genuinely wide pitch range becomes two score parts, with
+     * events classified by the shared hysteresis policy. Bare Lily blocks never
+     * reach this method, matching the upstream conservative single-staff rule.
+     */
+    private static String autoSplitLilyPondWideRangeStaff(String xml) {
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        if (doc == null || doc.getDocumentElement() == null) {
+            return xml;
+        }
+        Element root = doc.getDocumentElement();
+        List<Element> parts = directChildren(root, "part");
+        if (parts.size() != 1) {
+            return xml;
+        }
+        Element upperPart = parts.get(0);
+        List<Integer> allKeys = collectLilyPondPartKeys(upperPart);
+        if (!StaffClefPolicy.shouldUseGrandStaffByRange(allKeys)) {
+            return xml;
+        }
+
+        List<List<Integer>> assignmentsByMeasure = new ArrayList<List<Integer>>();
+        Integer previousStaff = null;
+        boolean upperHasPitch = false;
+        boolean lowerHasPitch = false;
+        for (Element measure : directChildren(upperPart, "measure")) {
+            List<Integer> assignments = new ArrayList<Integer>();
+            for (List<Element> group : collectLilyPondMeasureNoteGroups(measure)) {
+                List<Integer> groupKeys = collectLilyPondNoteGroupKeys(group);
+                if (groupKeys.isEmpty()) {
+                    assignments.add(Integer.valueOf(1));
+                    continue;
+                }
+                int minKey = groupKeys.get(0).intValue();
+                int maxKey = minKey;
+                for (Integer key : groupKeys) {
+                    minKey = Math.min(minKey, key.intValue());
+                    maxKey = Math.max(maxKey, key.intValue());
+                }
+                int staff = StaffClefPolicy.pickStaffForClusterWithHysteresis(minKey, maxKey, previousStaff);
+                previousStaff = Integer.valueOf(staff);
+                assignments.add(Integer.valueOf(staff));
+                if (staff == 1) {
+                    upperHasPitch = true;
+                } else {
+                    lowerHasPitch = true;
+                }
+            }
+            assignmentsByMeasure.add(assignments);
+        }
+        if (!upperHasPitch || !lowerHasPitch) {
+            return xml;
+        }
+
+        Element lowerPart = (Element) upperPart.cloneNode(true);
+        List<Element> upperMeasures = directChildren(upperPart, "measure");
+        List<Element> lowerMeasures = directChildren(lowerPart, "measure");
+        for (int measureIndex = 0; measureIndex < upperMeasures.size(); measureIndex++) {
+            List<List<Element>> upperGroups = collectLilyPondMeasureNoteGroups(upperMeasures.get(measureIndex));
+            List<List<Element>> lowerGroups = collectLilyPondMeasureNoteGroups(lowerMeasures.get(measureIndex));
+            List<Integer> assignments = assignmentsByMeasure.get(measureIndex);
+            for (int groupIndex = 0; groupIndex < assignments.size(); groupIndex++) {
+                if (assignments.get(groupIndex).intValue() == 1) {
+                    removeLilyPondNoteGroup(lowerGroups.get(groupIndex));
+                } else {
+                    removeLilyPondNoteGroup(upperGroups.get(groupIndex));
+                }
+            }
+            appendLilyPondEmptyMeasureRestIfNeeded(doc, lowerMeasures.get(measureIndex));
+            appendLilyPondEmptyMeasureRestIfNeeded(doc, upperMeasures.get(measureIndex));
+        }
+
+        String originalPartId = upperPart.getAttribute("id").trim();
+        if (originalPartId.isEmpty()) {
+            originalPartId = "P1";
+        }
+        String upperPartId = originalPartId + "_s1";
+        String lowerPartId = originalPartId + "_s2";
+        upperPart.setAttribute("id", upperPartId);
+        lowerPart.setAttribute("id", lowerPartId);
+        setLilyPondPartInitialClef(upperPart, "G", "2");
+        setLilyPondPartInitialClef(lowerPart, "F", "4");
+
+        Element partList = firstDirectChild(root, "part-list");
+        Element scorePart = findLilyPondScorePart(partList, originalPartId);
+        if (partList == null || scorePart == null) {
+            return xml;
+        }
+        Element lowerScorePart = (Element) scorePart.cloneNode(true);
+        scorePart.setAttribute("id", upperPartId);
+        lowerScorePart.setAttribute("id", lowerPartId);
+        partList.insertBefore(lowerScorePart, scorePart.getNextSibling());
+        root.insertBefore(lowerPart, upperPart.getNextSibling());
+        return MusicXmlIo.prettyPrintMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc));
+    }
+
+    private static List<Integer> collectLilyPondPartKeys(Element part) {
+        List<Integer> keys = new ArrayList<Integer>();
+        for (Element measure : directChildren(part, "measure")) {
+            for (List<Element> group : collectLilyPondMeasureNoteGroups(measure)) {
+                keys.addAll(collectLilyPondNoteGroupKeys(group));
+            }
+        }
+        return keys;
+    }
+
+    private static List<List<Element>> collectLilyPondMeasureNoteGroups(Element measure) {
+        List<List<Element>> groups = new ArrayList<List<Element>>();
+        List<Element> current = null;
+        for (Element note : directChildren(measure, "note")) {
+            boolean chordContinuation = firstDirectChild(note, "chord") != null;
+            if (!chordContinuation || current == null) {
+                current = new ArrayList<Element>();
+                groups.add(current);
+            }
+            current.add(note);
+        }
+        return groups;
+    }
+
+    private static List<Integer> collectLilyPondNoteGroupKeys(List<Element> group) {
+        List<Integer> keys = new ArrayList<Integer>();
+        if (group == null) {
+            return keys;
+        }
+        for (Element note : group) {
+            Element pitch = firstDirectChild(note, "pitch");
+            if (pitch == null) {
+                continue;
+            }
+            Integer key = pitchToMidiKey(directChildText(pitch, "step"),
+                    parseInteger(directChildText(pitch, "alter"), 0),
+                    parseInteger(directChildText(pitch, "octave"), 3));
+            if (key != null) {
+                keys.add(key);
+            }
+        }
+        return keys;
+    }
+
+    private static void removeLilyPondNoteGroup(List<Element> group) {
+        if (group == null) {
+            return;
+        }
+        for (Element note : group) {
+            if (note != null && note.getParentNode() != null) {
+                note.getParentNode().removeChild(note);
+            }
+        }
+    }
+
+    private static void appendLilyPondEmptyMeasureRestIfNeeded(Document doc, Element measure) {
+        if (measure == null || !directChildren(measure, "note").isEmpty()) {
+            return;
+        }
+        Element note = doc.createElement("note");
+        note.appendChild(doc.createElement("rest"));
+        Element duration = doc.createElement("duration");
+        duration.setTextContent(Integer.toString(resolveLilyPondMeasureCapacity(measure)));
+        note.appendChild(duration);
+        Element voice = doc.createElement("voice");
+        voice.setTextContent("1");
+        note.appendChild(voice);
+        Element type = doc.createElement("type");
+        type.setTextContent("whole");
+        note.appendChild(type);
+        measure.appendChild(note);
+    }
+
+    private static int resolveLilyPondMeasureCapacity(Element measure) {
+        Element attributes = firstDirectChild(measure, "attributes");
+        int divisions = parseInteger(directChildText(attributes, "divisions"), 960);
+        Element time = firstDirectChild(attributes, "time");
+        int beats = parseInteger(directChildText(time, "beats"), 4);
+        int beatType = parseInteger(directChildText(time, "beat-type"), 4);
+        return Math.max(1, Math.round((divisions * 4.0f * Math.max(1, beats)) / Math.max(1, beatType)));
+    }
+
+    private static void setLilyPondPartInitialClef(Element part, String sign, String line) {
+        Element firstMeasure = firstDirectChild(part, "measure");
+        if (firstMeasure == null) {
+            return;
+        }
+        Element attributes = firstDirectChild(firstMeasure, "attributes");
+        if (attributes == null) {
+            return;
+        }
+        Element clef = firstDirectChild(attributes, "clef");
+        if (clef == null) {
+            clef = part.getOwnerDocument().createElement("clef");
+            attributes.appendChild(clef);
+        }
+        Element signNode = firstDirectChild(clef, "sign");
+        if (signNode == null) {
+            signNode = part.getOwnerDocument().createElement("sign");
+            clef.appendChild(signNode);
+        }
+        signNode.setTextContent(sign);
+        Element lineNode = firstDirectChild(clef, "line");
+        if (lineNode == null) {
+            lineNode = part.getOwnerDocument().createElement("line");
+            clef.appendChild(lineNode);
+        }
+        lineNode.setTextContent(line);
+    }
+
+    private static Element findLilyPondScorePart(Element partList, String partId) {
+        for (Element scorePart : directChildren(partList, "score-part")) {
+            if (partId.equals(scorePart.getAttribute("id").trim())) {
+                return scorePart;
+            }
+        }
+        return null;
+    }
+
+    private static String finalizeLilyPondImportedMusicXml(String xml, String rawSource,
+            LilyPondImportOptions options) {
+        Document doc = MusicXmlIo.parseMusicXmlDocument(xml);
+        if (doc == null || doc.getDocumentElement() == null) {
+            return xml;
+        }
+        LilyPondImportOptions safeOptions = options == null ? new LilyPondImportOptions() : options;
+        if (!Boolean.FALSE.equals(safeOptions.getSourceMetadata())) {
+            appendLilyPondSourceMetadata(doc, rawSource);
+        }
+        String normalized = MusicXmlIo.applyImplicitBeamsToMusicXmlText(MusicXmlIo.serializeMusicXmlDocument(doc));
+        if (!Boolean.FALSE.equals(safeOptions.getDebugPrettyPrint())) {
+            return MusicXmlIo.prettyPrintMusicXmlText(normalized);
+        }
+        Document compactDoc = MusicXmlIo.parseMusicXmlDocument(normalized);
+        if (compactDoc == null) {
+            return normalized;
+        }
+        removeLilyPondInsignificantWhitespace(compactDoc);
+        return MusicXmlIo.serializeMusicXmlDocument(compactDoc);
+    }
+
+    private static void removeLilyPondInsignificantWhitespace(Node node) {
+        if (node == null) {
+            return;
+        }
+        List<Node> removable = new ArrayList<Node>();
+        for (Node child = node.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child.getNodeType() == Node.TEXT_NODE && child.getTextContent().trim().isEmpty()) {
+                removable.add(child);
+            } else {
+                removeLilyPondInsignificantWhitespace(child);
+            }
+        }
+        for (Node child : removable) {
+            node.removeChild(child);
+        }
+    }
+
+    private static void appendLilyPondSourceMetadata(Document doc, String source) {
+        String raw = source == null ? "" : source;
+        if (raw.length() == 0 || doc == null || doc.getDocumentElement() == null) {
+            return;
+        }
+        Element part = firstDirectChild(doc.getDocumentElement(), "part");
+        Element measure = firstDirectChild(part, "measure");
+        if (measure == null) {
+            return;
+        }
+        Element attributes = firstDirectChild(measure, "attributes");
+        if (attributes == null) {
+            attributes = doc.createElement("attributes");
+            measure.insertBefore(attributes, measure.getFirstChild());
+        }
+        Element miscellaneous = firstDirectChild(attributes, "miscellaneous");
+        if (miscellaneous == null) {
+            miscellaneous = doc.createElement("miscellaneous");
+            attributes.appendChild(miscellaneous);
+        }
+        String encoded = raw.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n");
+        int chunkSize = 240;
+        int maxChunks = 512;
+        List<String> chunks = new ArrayList<String>();
+        for (int index = 0; index < encoded.length() && chunks.size() < maxChunks; index += chunkSize) {
+            chunks.add(encoded.substring(index, Math.min(encoded.length(), index + chunkSize)));
+        }
+        int capturedLength = 0;
+        for (String chunk : chunks) {
+            capturedLength += chunk.length();
+        }
+        boolean truncated = capturedLength < encoded.length();
+        appendLilyPondMiscField(doc, miscellaneous, "mks:src:lilypond:raw-encoding", "escape-v1");
+        appendLilyPondMiscField(doc, miscellaneous, "mks:src:lilypond:raw-length", Integer.toString(raw.length()));
+        appendLilyPondMiscField(doc, miscellaneous, "mks:src:lilypond:raw-encoded-length",
+                Integer.toString(encoded.length()));
+        appendLilyPondMiscField(doc, miscellaneous, "mks:src:lilypond:raw-chunks",
+                Integer.toString(chunks.size()));
+        appendLilyPondMiscField(doc, miscellaneous, "mks:src:lilypond:raw-truncated", truncated ? "1" : "0");
+        for (int index = 0; index < chunks.size(); index++) {
+            appendLilyPondMiscField(doc, miscellaneous, "mks:src:lilypond:raw-" + lilyPondZeroPad(index + 1, 4),
+                    chunks.get(index));
+        }
+    }
+
+    private static String lilyPondZeroPad(int value, int width) {
+        String text = Integer.toString(Math.max(0, value));
+        StringBuilder out = new StringBuilder();
+        for (int index = text.length(); index < Math.max(1, width); index++) {
+            out.append('0');
+        }
+        return out.append(text).toString();
+    }
+
+    private static void appendLilyPondMiscField(Document doc, Element miscellaneous, String name, String value) {
+        Element field = doc.createElement("miscellaneous-field");
+        field.setAttribute("name", name);
+        field.setTextContent(value == null ? "" : value);
+        miscellaneous.appendChild(field);
     }
 
     private static void appendLilyVoiceHeader(StringBuilder abc, int voiceNumber, String partName, String clef) {
@@ -2300,6 +2646,14 @@ public final class LilyPondIo {
         }
     }
 
+    private static int parseInteger(String text, int fallback) {
+        try {
+            return Integer.parseInt(String.valueOf(text == null ? "" : text).trim());
+        } catch (Exception ex) {
+            return fallback;
+        }
+    }
+
     private static int skipWhitespace(String text, int start) {
         int index = Math.max(0, start);
         while (index < text.length() && Character.isWhitespace(text.charAt(index))) {
@@ -2384,6 +2738,34 @@ public final class LilyPondIo {
             }
         }
         return null;
+    }
+
+    public static final class LilyPondImportOptions {
+        private final Boolean debugMetadata;
+        private final Boolean debugPrettyPrint;
+        private final Boolean sourceMetadata;
+
+        public LilyPondImportOptions() {
+            this(null, null, null);
+        }
+
+        public LilyPondImportOptions(Boolean debugMetadata, Boolean debugPrettyPrint, Boolean sourceMetadata) {
+            this.debugMetadata = debugMetadata;
+            this.debugPrettyPrint = debugPrettyPrint;
+            this.sourceMetadata = sourceMetadata;
+        }
+
+        public Boolean getDebugMetadata() {
+            return debugMetadata;
+        }
+
+        public Boolean getDebugPrettyPrint() {
+            return debugPrettyPrint;
+        }
+
+        public Boolean getSourceMetadata() {
+            return sourceMetadata;
+        }
     }
 
     public static final class Fraction {

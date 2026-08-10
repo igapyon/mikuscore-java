@@ -31,6 +31,10 @@ public final class MusicXmlCommandValidation {
         return ok;
     }
 
+    public boolean isDirtyChanged() {
+        return dirtyChanged;
+    }
+
     public List<String> getChangedNodeIds() {
         return changedNodeIds;
     }

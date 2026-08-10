@@ -5,13 +5,16 @@
 package jp.igapyon.mikuscore.musicxml;
 
 import java.io.ByteArrayInputStream;
+import java.io.StringReader;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -77,17 +80,87 @@ public final class MusicXmlIo {
         }
     }
 
+    /**
+     * Runtime-independent input used by the shared MusicXML/ABC beam calculator.
+     */
+    public static final class BeamEventInfo {
+        private final boolean timed;
+        private final boolean chord;
+        private final boolean grace;
+        private final int durationDiv;
+        private final int levels;
+        private final String explicitMode;
+
+        public BeamEventInfo(boolean timed, boolean chord, boolean grace, int durationDiv, int levels,
+                String explicitMode) {
+            this.timed = timed;
+            this.chord = chord;
+            this.grace = grace;
+            this.durationDiv = durationDiv;
+            this.levels = levels;
+            this.explicitMode = trimToEmpty(explicitMode);
+        }
+
+        public boolean isTimed() {
+            return timed;
+        }
+
+        public boolean isChord() {
+            return chord;
+        }
+
+        public boolean isGrace() {
+            return grace;
+        }
+
+        public int getDurationDiv() {
+            return durationDiv;
+        }
+
+        public int getLevels() {
+            return levels;
+        }
+
+        public String getExplicitMode() {
+            return explicitMode;
+        }
+    }
+
+    /**
+     * A calculated MusicXML beam state and level count.
+     */
+    public static final class BeamAssignment {
+        private final String state;
+        private final int levels;
+
+        public BeamAssignment(String state, int levels) {
+            this.state = trimToEmpty(state);
+            this.levels = levels;
+        }
+
+        public String getState() {
+            return state;
+        }
+
+        public int getLevels() {
+            return levels;
+        }
+    }
+
     public static Document parseMusicXmlDocument(String xmlText) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(false);
             factory.setExpandEntityReferences(false);
             setFeatureIfAvailable(factory, XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            setFeatureIfAvailable(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
             setFeatureIfAvailable(factory, "http://xml.org/sax/features/external-general-entities", false);
             setFeatureIfAvailable(factory, "http://xml.org/sax/features/external-parameter-entities", false);
             setFeatureIfAvailable(factory, "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
             DocumentBuilder builder = factory.newDocumentBuilder();
+            // MusicXML samples commonly declare the public Recordare DTD. Node's
+            // XML parser accepts that declaration without fetching it, so retain
+            // the declaration while explicitly making every external entity empty.
+            builder.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
             builder.setErrorHandler(new QuietErrorHandler());
             return builder.parse(new InputSource(new ByteArrayInputStream(xmlText.getBytes(StandardCharsets.UTF_8))));
         } catch (Exception ex) {
@@ -110,7 +183,7 @@ public final class MusicXmlIo {
     }
 
     public static String prettyPrintMusicXmlText(String xml) {
-        String compact = String.valueOf(xml == null ? "" : xml).replaceAll(">\\s+<", "><").trim();
+        String compact = trimJavaScriptWhitespace(compactXmlTagWhitespace(String.valueOf(xml == null ? "" : xml)));
         if (compact.isEmpty()) {
             return "";
         }
@@ -139,6 +212,60 @@ public final class MusicXmlIo {
             }
         }
         return out.toString();
+    }
+
+    /** Mirrors the {@code />\s+</} compaction in musicxml-io.ts. */
+    private static String compactXmlTagWhitespace(String xml) {
+        StringBuilder compact = new StringBuilder();
+        int index = 0;
+        while (index < xml.length()) {
+            char current = xml.charAt(index);
+            compact.append(current);
+            index++;
+            if (current != '>') {
+                continue;
+            }
+            int cursor = index;
+            while (cursor < xml.length()) {
+                int codePoint = xml.codePointAt(cursor);
+                if (!isJavaScriptWhitespace(codePoint)) {
+                    break;
+                }
+                cursor += Character.charCount(codePoint);
+            }
+            if (cursor > index && cursor < xml.length() && xml.charAt(cursor) == '<') {
+                index = cursor;
+            }
+        }
+        return compact.toString();
+    }
+
+    /** ECMAScript String#trim and {@code \s} whitespace used by the Node source. */
+    private static String trimJavaScriptWhitespace(String text) {
+        int start = 0;
+        int end = text.length();
+        while (start < end) {
+            int codePoint = text.codePointAt(start);
+            if (!isJavaScriptWhitespace(codePoint)) {
+                break;
+            }
+            start += Character.charCount(codePoint);
+        }
+        while (start < end) {
+            int codePoint = text.codePointBefore(end);
+            if (!isJavaScriptWhitespace(codePoint)) {
+                break;
+            }
+            end -= Character.charCount(codePoint);
+        }
+        return text.substring(start, end);
+    }
+
+    private static boolean isJavaScriptWhitespace(int codePoint) {
+        return (codePoint >= 0x0009 && codePoint <= 0x000D) || codePoint == 0x0020 || codePoint == 0x00A0
+                || codePoint == 0x1680 || (codePoint >= 0x2000 && codePoint <= 0x200A) || codePoint == 0x2028
+                || codePoint == 0x2029 || codePoint == 0x202F || codePoint == 0x205F || codePoint == 0x3000
+                || codePoint == 0xFEFF;
     }
 
     public static String normalizeImportedMusicXmlText(String xml) {
@@ -172,7 +299,7 @@ public final class MusicXmlIo {
     }
 
     public static RenderDocBundle buildRenderDocWithNodeIds(Document sourceDoc, List<String> nodeIds, String idPrefix) {
-        Map<String, String> map = new HashMap<String, String>();
+        Map<String, String> map = new LinkedHashMap<String, String>();
         if (nodeIds == null || nodeIds.isEmpty()) {
             return new RenderDocBundle(sourceDoc, map, 0);
         }
@@ -181,7 +308,7 @@ public final class MusicXmlIo {
         int count = Math.min(notes.size(), nodeIds.size());
         for (int index = 0; index < count; index++) {
             String nodeId = nodeIds.get(index);
-            String svgId = String.valueOf(idPrefix == null ? "" : idPrefix) + "-" + nodeId;
+            String svgId = String.valueOf(idPrefix) + "-" + nodeId;
             Element note = notes.get(index);
             note.setAttribute("xml:id", svgId);
             note.setAttribute("id", svgId);
@@ -195,11 +322,18 @@ public final class MusicXmlIo {
         Map<String, String> directMap = renderBundle == null ? Collections.<String, String>emptyMap()
                 : renderBundle.getSvgIdToNodeId();
         List<String> rendered = renderedNoteIds == null ? Collections.<String>emptyList() : renderedNoteIds;
-        if (rendered.isEmpty() || directMap.keySet().containsAll(rendered)) {
+        boolean hasEmbeddedMikuScoreNoteId = false;
+        for (String renderedId : rendered) {
+            if (renderedId != null && renderedId.startsWith("mks-")) {
+                hasEmbeddedMikuScoreNoteId = true;
+                break;
+            }
+        }
+        if (rendered.isEmpty() || hasEmbeddedMikuScoreNoteId) {
             return new PreviewSvgIdMap(directMap, "direct");
         }
         List<String> nodes = noteNodeIds == null ? Collections.<String>emptyList() : noteNodeIds;
-        Map<String, String> fallback = new HashMap<String, String>();
+        Map<String, String> fallback = new LinkedHashMap<String, String>();
         int count = Math.min(nodes.size(), rendered.size());
         for (int index = 0; index < count; index++) {
             fallback.put(rendered.get(index), nodes.get(index));
@@ -231,8 +365,8 @@ public final class MusicXmlIo {
 
         Document dst = createDocumentWithRoot("score-partwise");
         Element dstRoot = dst.getDocumentElement();
-        String version = trimToEmpty(srcRoot.getAttribute("version"));
-        if (!version.isEmpty()) {
+        String version = srcRoot.getAttribute("version");
+        if (version != null && !version.isEmpty()) {
             dstRoot.setAttribute("version", version);
         }
 
@@ -292,6 +426,201 @@ public final class MusicXmlIo {
         }
         nextTargetMeasure.getParentNode().replaceChild(next.importNode(replacementForMain, true), nextTargetMeasure);
         return next;
+    }
+
+    /**
+     * String facade for extracting a self-contained MusicXML measure editor
+     * document. Mirrors {@code measure-operations.extractMeasureEditorMusicXml}
+     * in the Node implementation.
+     */
+    public static String extractMeasureEditorMusicXml(String sourceXml, String partId, String measureNumber) {
+        Document sourceDoc = parseMusicXmlDocument(sourceXml);
+        if (sourceDoc == null) {
+            return null;
+        }
+        Document extracted = extractMeasureEditorDocument(sourceDoc, partId, measureNumber);
+        return extracted == null ? null : serializeMusicXmlDocument(extracted);
+    }
+
+    /**
+     * String facade for replacing one MusicXML measure. Editor-only inherited
+     * attributes are removed by {@link #replaceMeasureInMainDocument} when the
+     * target measure did not originally declare attributes.
+     */
+    public static String replaceMeasureInMusicXml(String sourceXml, String partId, String measureNumber,
+            String measureXml) {
+        Document mainDoc = parseMusicXmlDocument(sourceXml);
+        Document measureDoc = parseMusicXmlDocument(measureXml);
+        if (mainDoc == null || measureDoc == null) {
+            return null;
+        }
+        Document merged = replaceMeasureInMainDocument(mainDoc, partId, measureNumber, measureDoc);
+        return merged == null ? null : serializeMusicXmlDocument(merged);
+    }
+
+    /**
+     * Append one full-measure rest to every part in a score. The rest duration
+     * inherits the final measure's effective time/divisions context. A treble
+     * and bass grand staff gets synchronized rests separated by a backup.
+     */
+    public static String appendMeasureToMusicXml(String sourceXml) {
+        Document doc = parseMusicXmlDocument(sourceXml);
+        Element root = scorePartwiseRoot(doc);
+        if (root == null) {
+            return null;
+        }
+        List<Element> parts = directChildren(root, "part");
+        if (parts.isEmpty()) {
+            return null;
+        }
+
+        for (Element part : parts) {
+            List<Element> measures = directChildren(part, "measure");
+            Element lastMeasure = measures.isEmpty() ? null : measures.get(measures.size() - 1);
+            if (lastMeasure == null) {
+                continue;
+            }
+
+            long capacity = resolveAppendMeasureCapacity(lastMeasure);
+            Element measure = doc.createElement("measure");
+            measure.setAttribute("number", deriveNextMeasureNumber(part));
+            int staves = resolveEffectiveStavesAtEnd(part);
+            boolean grandStaff = staves >= 2 && resolveHasTrebleBassGrandStaffAtEnd(part);
+            if (grandStaff) {
+                measure.appendChild(createMeasureRestNote(doc, capacity, "1", "1"));
+                Element backup = doc.createElement("backup");
+                Element backupDuration = doc.createElement("duration");
+                backupDuration.setTextContent(Long.toString(capacity));
+                backup.appendChild(backupDuration);
+                measure.appendChild(backup);
+                measure.appendChild(createMeasureRestNote(doc, capacity, "1", "2"));
+            } else {
+                measure.appendChild(createMeasureRestNote(doc, capacity, "1", null));
+            }
+            part.appendChild(measure);
+        }
+        return serializeMusicXmlDocument(doc);
+    }
+
+    private static Element createMeasureRestNote(Document doc, long duration, String voice, String staff) {
+        Element note = doc.createElement("note");
+        Element rest = doc.createElement("rest");
+        rest.setAttribute("measure", "yes");
+        note.appendChild(rest);
+        Element durationElement = doc.createElement("duration");
+        durationElement.setTextContent(Long.toString(duration));
+        note.appendChild(durationElement);
+        Element voiceElement = doc.createElement("voice");
+        voiceElement.setTextContent(voice);
+        note.appendChild(voiceElement);
+        if (staff != null) {
+            Element staffElement = doc.createElement("staff");
+            staffElement.setTextContent(staff);
+            note.appendChild(staffElement);
+        }
+        return note;
+    }
+
+    private static long resolveAppendMeasureCapacity(Element measure) {
+        if (measure == null || !(measure.getParentNode() instanceof Element)) {
+            return 3840L;
+        }
+        Element part = (Element) measure.getParentNode();
+        if (!"part".equals(part.getTagName())) {
+            return 3840L;
+        }
+        List<Element> measures = directChildren(part, "measure");
+        int measureIndex = measures.indexOf(measure);
+        if (measureIndex < 0) {
+            return 3840L;
+        }
+        Double beats = null;
+        Double beatType = null;
+        Double divisions = null;
+        for (int index = measureIndex; index >= 0; index--) {
+            Element attributes = directChild(measures.get(index), "attributes");
+            if (attributes == null) {
+                continue;
+            }
+            String divisionsText = directChildText(attributes, "divisions");
+            if (divisions == null && !trimToEmpty(divisionsText).isEmpty()) {
+                divisions = Double.valueOf(toNumber(divisionsText));
+            }
+            Element time = directChild(attributes, "time");
+            String beatsText = time == null ? null : directChildText(time, "beats");
+            if (beats == null && !trimToEmpty(beatsText).isEmpty()) {
+                beats = Double.valueOf(toNumber(beatsText));
+            }
+            String beatTypeText = time == null ? null : directChildText(time, "beat-type");
+            if (beatType == null && !trimToEmpty(beatTypeText).isEmpty()) {
+                beatType = Double.valueOf(toNumber(beatTypeText));
+            }
+            if (beats != null && beatType != null && divisions != null) {
+                break;
+            }
+        }
+        if (beats == null || beatType == null || divisions == null || !Double.isFinite(beats.doubleValue())
+                || !Double.isFinite(beatType.doubleValue()) || !Double.isFinite(divisions.doubleValue())
+                || beatType.doubleValue() <= 0d) {
+            return 3840L;
+        }
+        double capacity = beats.doubleValue() * ((4d / beatType.doubleValue()) * divisions.doubleValue());
+        if (!Double.isFinite(capacity)) {
+            return 3840L;
+        }
+        long rounded = Math.round(capacity);
+        return rounded > 0L ? rounded : 3840L;
+    }
+
+    private static int resolveEffectiveStavesAtEnd(Element part) {
+        int staves = 1;
+        for (Element measure : directChildren(part, "measure")) {
+            Element attributes = directChild(measure, "attributes");
+            Element stavesElement = directChild(attributes, "staves");
+            double parsed = toNumber(stavesElement == null ? null : stavesElement.getTextContent());
+            if (Double.isFinite(parsed) && parsed == Math.rint(parsed) && parsed > 0d
+                    && parsed <= Integer.MAX_VALUE) {
+                staves = (int) parsed;
+            }
+        }
+        return staves;
+    }
+
+    private static boolean resolveHasTrebleBassGrandStaffAtEnd(Element part) {
+        String clef1 = "";
+        String clef2 = "";
+        for (Element measure : directChildren(part, "measure")) {
+            Element attributes = directChild(measure, "attributes");
+            if (attributes == null) {
+                continue;
+            }
+            for (Element clef : directChildren(attributes, "clef")) {
+                String number = clef.getAttribute("number");
+                Element sign = directChild(clef, "sign");
+                String signText = sign == null ? "" : trimToEmpty(sign.getTextContent());
+                if ("1".equals(number) && !signText.isEmpty()) {
+                    clef1 = signText;
+                }
+                if ("2".equals(number) && !signText.isEmpty()) {
+                    clef2 = signText;
+                }
+            }
+        }
+        return "G".equals(clef1) && "F".equals(clef2);
+    }
+
+    private static String deriveNextMeasureNumber(Element part) {
+        List<Element> measures = directChildren(part, "measure");
+        Element lastMeasure = measures.isEmpty() ? null : measures.get(measures.size() - 1);
+        if (lastMeasure == null) {
+            return "1";
+        }
+        double parsed = toNumber(lastMeasure.getAttribute("number"));
+        if (Double.isFinite(parsed) && parsed == Math.rint(parsed) && parsed >= 0d
+                && parsed < Long.MAX_VALUE) {
+            return Long.toString((long) parsed + 1L);
+        }
+        return Integer.toString(measures.size() + 1);
     }
 
     private static void enrichImplicitBeamsInDocument(Document doc) {
@@ -391,62 +720,25 @@ public final class MusicXmlIo {
     }
 
     private static void applyImplicitBeamsToLaneTimeline(List<BeamTimelineEntry> timeline, int beatDiv) {
-        if (timeline.size() < 2) {
-            return;
+        List<BeamEventInfo> events = new ArrayList<BeamEventInfo>();
+        for (BeamTimelineEntry entry : timeline) {
+            events.add(new BeamEventInfo(entry.timed, entry.chord, entry.grace, entry.durationDiv, entry.levels, ""));
         }
-        List<Integer> currentGroup = new ArrayList<Integer>();
-        int cursorDiv = 0;
-        for (int index = 0; index < timeline.size(); index++) {
-            BeamTimelineEntry entry = timeline.get(index);
-            if (entry.timed && cursorDiv > 0 && cursorDiv % Math.max(1, beatDiv) == 0) {
-                flushBeamGroup(timeline, currentGroup);
-                currentGroup.clear();
-            }
-            if (!entry.chord || !isBeamableTimedEvent(entry)) {
-                flushBeamGroup(timeline, currentGroup);
-                currentGroup.clear();
-                if (entry.timed) {
-                    cursorDiv += Math.max(0, entry.durationDiv);
-                }
+        Map<Integer, BeamAssignment> assignments = computeBeamAssignments(events, beatDiv, true);
+        for (Map.Entry<Integer, BeamAssignment> assignmentEntry : assignments.entrySet()) {
+            BeamTimelineEntry entry = timeline.get(assignmentEntry.getKey().intValue());
+            if (entry.note == null || directChild(entry.note, "beam") != null) {
                 continue;
             }
-            currentGroup.add(Integer.valueOf(index));
-            if (entry.timed) {
-                cursorDiv += Math.max(0, entry.durationDiv);
-            }
-        }
-        flushBeamGroup(timeline, currentGroup);
-    }
-
-    private static boolean isBeamableTimedEvent(BeamTimelineEntry entry) {
-        return entry != null && entry.timed && !entry.grace && entry.levels > 0;
-    }
-
-    private static void flushBeamGroup(List<BeamTimelineEntry> timeline, List<Integer> indices) {
-        List<Integer> chordIndices = new ArrayList<Integer>();
-        for (Integer index : indices) {
-            BeamTimelineEntry entry = timeline.get(index.intValue());
-            if (entry.chord && !entry.grace) {
-                chordIndices.add(index);
-            }
-        }
-        if (chordIndices.size() < 2) {
-            return;
-        }
-        for (int groupIndex = 0; groupIndex < chordIndices.size(); groupIndex++) {
-            BeamTimelineEntry entry = timeline.get(chordIndices.get(groupIndex).intValue());
-            if (entry.note == null || entry.levels <= 0 || directChild(entry.note, "beam") != null) {
-                continue;
-            }
-            String state = groupIndex == 0 ? "begin" : (groupIndex == chordIndices.size() - 1 ? "end" : "continue");
-            for (int level = 1; level <= entry.levels; level++) {
-                appendBeamElement(entry.note, level, state);
+            BeamAssignment assignment = assignmentEntry.getValue();
+            for (int level = 1; level <= assignment.getLevels(); level++) {
+                appendBeamElement(entry.note, level, assignment.getState());
             }
         }
     }
 
     private static int beamLevelsFromType(String typeText) {
-        String type = trimToEmpty(typeText).toLowerCase();
+        String type = trimToEmpty(typeText).toLowerCase(Locale.ROOT);
         if ("eighth".equals(type)) {
             return 1;
         }
@@ -469,16 +761,134 @@ public final class MusicXmlIo {
     }
 
     public static String buildMusicXmlBeamItemsXml(String state, Object levels) {
-        int count = positiveRoundedInt(levels);
+        return buildMusicXmlBeamItemsXml(new BeamAssignment(state, positiveRoundedInt(levels)));
+    }
+
+    public static String buildMusicXmlBeamItemsXml(BeamAssignment assignment) {
+        if (assignment == null) {
+            return "";
+        }
+        int count = assignment.getLevels();
         if (count <= 0) {
             return "";
         }
         StringBuilder xml = new StringBuilder();
         for (int level = 1; level <= count; level++) {
-            xml.append("<beam number=\"").append(level).append("\">").append(xmlEscape(trimToEmpty(state)))
+            xml.append("<beam number=\"").append(level).append("\">").append(xmlEscape(assignment.getState()))
                     .append("</beam>");
         }
         return xml.toString();
+    }
+
+    /**
+     * Java counterpart of beam-common.ts computeBeamAssignments.  MusicXML and
+     * ABC both call this routine so their implicit and explicit beam boundaries
+     * stay aligned.
+     */
+    public static Map<Integer, BeamAssignment> computeBeamAssignments(List<BeamEventInfo> events, double beatDiv,
+            boolean splitAtBeatBoundaryWhenImplicit) {
+        Map<Integer, BeamAssignment> assignmentByIndex = new LinkedHashMap<Integer, BeamAssignment>();
+        if (events == null) {
+            return assignmentByIndex;
+        }
+        boolean hasExplicitBeamMode = false;
+        for (BeamEventInfo info : events) {
+            if (info != null && info.isTimed()
+                    && ("begin".equals(info.getExplicitMode()) || "mid".equals(info.getExplicitMode()))) {
+                hasExplicitBeamMode = true;
+                break;
+            }
+        }
+        int resolvedBeatDiv = Math.max(1, (int) Math.round(beatDiv));
+        if (!hasExplicitBeamMode) {
+            List<Integer> currentGroup = new ArrayList<Integer>();
+            int cursorDiv = 0;
+            for (int index = 0; index < events.size(); index++) {
+                BeamEventInfo info = events.get(index);
+                if (splitAtBeatBoundaryWhenImplicit && info != null && info.isTimed()
+                        && cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0) {
+                    flushBeamAssignments(events, currentGroup, assignmentByIndex);
+                    currentGroup.clear();
+                }
+                if (info == null || !info.isChord() || !isBeamableTimedEvent(info)) {
+                    flushBeamAssignments(events, currentGroup, assignmentByIndex);
+                    currentGroup.clear();
+                    if (info != null && info.isTimed()) {
+                        cursorDiv += Math.max(0, info.getDurationDiv());
+                    }
+                    continue;
+                }
+                currentGroup.add(Integer.valueOf(index));
+                cursorDiv += Math.max(0, info.getDurationDiv());
+            }
+            flushBeamAssignments(events, currentGroup, assignmentByIndex);
+            return assignmentByIndex;
+        }
+
+        List<Integer> activeGroup = new ArrayList<Integer>();
+        int cursorDiv = 0;
+        for (int index = 0; index < events.size(); index++) {
+            BeamEventInfo info = events.get(index);
+            if (info == null || !info.isTimed()) {
+                flushBeamAssignments(events, activeGroup, assignmentByIndex);
+                activeGroup.clear();
+                continue;
+            }
+            if (cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0) {
+                flushBeamAssignments(events, activeGroup, assignmentByIndex);
+                activeGroup.clear();
+            }
+            if (!isBeamableTimedEvent(info)) {
+                flushBeamAssignments(events, activeGroup, assignmentByIndex);
+                activeGroup.clear();
+                continue;
+            }
+            if ("begin".equals(info.getExplicitMode())) {
+                flushBeamAssignments(events, activeGroup, assignmentByIndex);
+                activeGroup.clear();
+                activeGroup.add(Integer.valueOf(index));
+            } else if ("mid".equals(info.getExplicitMode())) {
+                if (activeGroup.isEmpty()) {
+                    BeamEventInfo previous = index > 0 ? events.get(index - 1) : null;
+                    if (isBeamableTimedEvent(previous)) {
+                        activeGroup.add(Integer.valueOf(index - 1));
+                    }
+                }
+                activeGroup.add(Integer.valueOf(index));
+            } else {
+                activeGroup.add(Integer.valueOf(index));
+            }
+            cursorDiv += Math.max(0, info.getDurationDiv());
+        }
+        flushBeamAssignments(events, activeGroup, assignmentByIndex);
+        return assignmentByIndex;
+    }
+
+    private static boolean isBeamableTimedEvent(BeamEventInfo info) {
+        return info != null && info.isTimed() && !info.isGrace() && info.getLevels() > 0;
+    }
+
+    private static void flushBeamAssignments(List<BeamEventInfo> infos, List<Integer> indices,
+            Map<Integer, BeamAssignment> assignmentByIndex) {
+        List<Integer> chordIndices = new ArrayList<Integer>();
+        for (Integer index : indices) {
+            BeamEventInfo info = infos.get(index.intValue());
+            if (info != null && info.isChord() && !info.isGrace()) {
+                chordIndices.add(index);
+            }
+        }
+        if (chordIndices.size() < 2) {
+            return;
+        }
+        for (int groupIndex = 0; groupIndex < chordIndices.size(); groupIndex++) {
+            int index = chordIndices.get(groupIndex).intValue();
+            BeamEventInfo info = infos.get(index);
+            if (info == null || info.getLevels() <= 0) {
+                continue;
+            }
+            String state = groupIndex == 0 ? "begin" : (groupIndex == chordIndices.size() - 1 ? "end" : "continue");
+            assignmentByIndex.put(Integer.valueOf(index), new BeamAssignment(state, info.getLevels()));
+        }
     }
 
     private static void appendBeamElement(Element note, int number, String state) {
@@ -494,11 +904,18 @@ public final class MusicXmlIo {
     }
 
     private static void enrichTupletNotationsInDocument(Document doc) {
-        Element root = scorePartwiseRoot(doc);
-        if (root == null) {
+        if (doc == null) {
             return;
         }
-        for (Element part : directChildren(root, "part")) {
+        // musicxml-io.ts uses document.querySelectorAll("part > measure")
+        // here (unlike its score-partwise-scoped part-list and barline
+        // helpers), so intentionally include wrapped standalone parts too.
+        org.w3c.dom.NodeList parts = doc.getElementsByTagName("part");
+        for (int index = 0; index < parts.getLength(); index++) {
+            if (!(parts.item(index) instanceof Element)) {
+                continue;
+            }
+            Element part = (Element) parts.item(index);
             for (Element measure : directChildren(part, "measure")) {
                 enrichTupletNotationsInMeasure(measure);
             }
@@ -566,14 +983,14 @@ public final class MusicXmlIo {
         }
         Element existing = directTupletByType(notations, type);
         if (existing != null) {
-            if (trimToEmpty(existing.getAttribute("number")).isEmpty()) {
+            if (existing.getAttribute("number").isEmpty()) {
                 existing.setAttribute("number", Integer.toString(number));
             }
             if ("start".equals(type) && withDisplayAttrs) {
-                if (trimToEmpty(existing.getAttribute("bracket")).isEmpty()) {
+                if (existing.getAttribute("bracket").isEmpty()) {
                     existing.setAttribute("bracket", "yes");
                 }
-                if (trimToEmpty(existing.getAttribute("show-number")).isEmpty()) {
+                if (existing.getAttribute("show-number").isEmpty()) {
                     existing.setAttribute("show-number", "actual");
                 }
             }
@@ -591,7 +1008,7 @@ public final class MusicXmlIo {
 
     private static Element directTupletByType(Element notations, String type) {
         for (Element tuplet : directChildren(notations, "tuplet")) {
-            if (type.equals(trimToEmpty(tuplet.getAttribute("type")))) {
+            if (type.equals(tuplet.getAttribute("type"))) {
                 return tuplet;
             }
         }
@@ -599,14 +1016,13 @@ public final class MusicXmlIo {
     }
 
     private static String noteLaneKey(Element note) {
-        String voice = trimToEmpty(directChildText(note, "voice"));
-        String staff = trimToEmpty(directChildText(note, "staff"));
-        if (voice.isEmpty()) {
-            voice = "1";
-        }
-        if (staff.isEmpty()) {
-            staff = "1";
-        }
+        Element voiceElement = directChild(note, "voice");
+        Element staffElement = directChild(note, "staff");
+        // Optional chaining plus nullish coalescing in musicxml-io.ts uses the
+        // default only when the element is absent.  An existing empty element
+        // remains an empty lane token.
+        String voice = voiceElement == null ? "1" : trimToEmpty(voiceElement.getTextContent());
+        String staff = staffElement == null ? "1" : trimToEmpty(staffElement.getTextContent());
         return voice + "::" + staff;
     }
 
@@ -615,8 +1031,8 @@ public final class MusicXmlIo {
         if (timeModification == null) {
             return null;
         }
-        Integer actual = parsePositiveInteger(directChildText(timeModification, "actual-notes"));
-        Integer normal = parsePositiveInteger(directChildText(timeModification, "normal-notes"));
+        Long actual = positiveRoundedJavaScriptNumber(directChildText(timeModification, "actual-notes"));
+        Long normal = positiveRoundedJavaScriptNumber(directChildText(timeModification, "normal-notes"));
         if (actual == null || normal == null) {
             return null;
         }
@@ -673,10 +1089,11 @@ public final class MusicXmlIo {
         Set<String> scorePartIds = new HashSet<String>();
         for (Element scorePart : directChildren(partList, "score-part")) {
             String id = trimToEmpty(scorePart.getAttribute("id"));
-            if (!id.isEmpty()) {
-                scorePartIds.add(id);
-                ensurePartNameElement(scorePart);
+            if (id.isEmpty() || scorePartIds.contains(id)) {
+                continue;
             }
+            scorePartIds.add(id);
+            ensurePartNameElement(scorePart);
         }
         for (Element part : parts) {
             String id = trimToEmpty(part.getAttribute("id"));
@@ -717,7 +1134,7 @@ public final class MusicXmlIo {
         }
         Element lastMeasure = measures.get(measures.size() - 1);
         for (Element barline : directChildren(lastMeasure, "barline")) {
-            if ("right".equals(trimToEmpty(barline.getAttribute("location")))) {
+            if ("right".equals(barline.getAttribute("location"))) {
                 return;
             }
         }
@@ -730,11 +1147,20 @@ public final class MusicXmlIo {
     }
 
     private static Element scorePartwiseRoot(Document doc) {
-        Element root = doc == null ? null : doc.getDocumentElement();
-        if (root == null || !"score-partwise".equals(root.getTagName())) {
+        if (doc == null) {
             return null;
         }
-        return root;
+        Element root = doc.getDocumentElement();
+        if (root != null && "score-partwise".equals(root.getTagName())) {
+            return root;
+        }
+        org.w3c.dom.NodeList candidates = doc.getElementsByTagName("score-partwise");
+        for (int index = 0; index < candidates.getLength(); index++) {
+            if (candidates.item(index) instanceof Element) {
+                return (Element) candidates.item(index);
+            }
+        }
+        return null;
     }
 
     private static Document cloneXmlDocument(Document doc) {
@@ -765,7 +1191,7 @@ public final class MusicXmlIo {
             return null;
         }
         for (Element part : directChildren(root, "part")) {
-            if (trimToEmpty(part.getAttribute("id")).equals(String.valueOf(partId == null ? "" : partId))) {
+            if (part.getAttribute("id").equals(partId)) {
                 return part;
             }
         }
@@ -779,7 +1205,7 @@ public final class MusicXmlIo {
             return null;
         }
         for (Element scorePart : directChildren(partList, "score-part")) {
-            if (trimToEmpty(scorePart.getAttribute("id")).equals(String.valueOf(partId == null ? "" : partId))) {
+            if (scorePart.getAttribute("id").equals(partId)) {
                 return scorePart;
             }
         }
@@ -788,7 +1214,7 @@ public final class MusicXmlIo {
 
     private static Element findMeasureByNumber(Element part, String measureNumber) {
         for (Element measure : directChildren(part, "measure")) {
-            if (trimToEmpty(measure.getAttribute("number")).equals(String.valueOf(measureNumber == null ? "" : measureNumber))) {
+            if (measure.getAttribute("number").equals(measureNumber)) {
                 return measure;
             }
         }
@@ -796,11 +1222,19 @@ public final class MusicXmlIo {
     }
 
     private static Element firstPartMeasure(Document doc) {
-        Element root = scorePartwiseRoot(doc);
-        if (root == null) {
+        if (doc == null) {
             return null;
         }
-        for (Element part : directChildren(root, "part")) {
+        // This mirrors document.querySelector("part > measure") rather than
+        // assuming that the editor document has a score-partwise root.  The
+        // replacement helper intentionally consumes the first such measure
+        // even when it is supplied inside a wrapper document.
+        org.w3c.dom.NodeList parts = doc.getElementsByTagName("part");
+        for (int index = 0; index < parts.getLength(); index++) {
+            if (!(parts.item(index) instanceof Element)) {
+                continue;
+            }
+            Element part = (Element) parts.item(index);
             Element measure = directChild(part, "measure");
             if (measure != null) {
                 return measure;
@@ -836,8 +1270,8 @@ public final class MusicXmlIo {
                     staves = (Element) nextStaves.cloneNode(true);
                 }
                 for (Element clef : directChildren(attrs, "clef")) {
-                    String no = trimToEmpty(clef.getAttribute("number"));
-                    clefByNo.put(no.isEmpty() ? "1" : no, (Element) clef.cloneNode(true));
+                    String no = clef.hasAttribute("number") ? clef.getAttribute("number") : "1";
+                    clefByNo.put(no, (Element) clef.cloneNode(true));
                 }
             }
             if (measure == targetMeasure) {
@@ -875,12 +1309,11 @@ public final class MusicXmlIo {
 
         Set<String> existingClefNos = new HashSet<String>();
         for (Element clef : directChildren(targetAttributes, "clef")) {
-            String no = trimToEmpty(clef.getAttribute("number"));
-            existingClefNos.add(no.isEmpty() ? "1" : no);
+            String no = clef.hasAttribute("number") ? clef.getAttribute("number") : "1";
+            existingClefNos.add(no);
         }
         for (Element clef : directChildren(effectiveAttributes, "clef")) {
-            String no = trimToEmpty(clef.getAttribute("number"));
-            no = no.isEmpty() ? "1" : no;
+            String no = clef.hasAttribute("number") ? clef.getAttribute("number") : "1";
             if (existingClefNos.contains(no)) {
                 continue;
             }
@@ -983,24 +1416,55 @@ public final class MusicXmlIo {
     }
 
     private static Integer parsePositiveInteger(String text) {
-        try {
-            int value = Integer.parseInt(trimToEmpty(text));
-            if (value <= 0) {
-                return null;
-            }
-            return Integer.valueOf(value);
-        } catch (NumberFormatException ex) {
+        Integer value = parseJavaScriptDecimalInteger(text);
+        if (value == null || value.intValue() <= 0) {
             return null;
         }
+        return value;
     }
 
     private static Integer parseNonNegativeInteger(String text) {
+        Integer value = parseJavaScriptDecimalInteger(text);
+        if (value == null || value.intValue() < 0) {
+            return null;
+        }
+        return value;
+    }
+
+    /**
+     * JavaScript {@code Number.parseInt(text, 10)} for the finite int-sized
+     * values accepted by the Java beam timeline.  In particular, parsing
+     * stops at the first non-decimal character instead of requiring the full
+     * XML text node to be an integer.
+     */
+    private static Integer parseJavaScriptDecimalInteger(String text) {
+        String value = trimToEmpty(text);
+        if (value.isEmpty()) {
+            return null;
+        }
+        int index = 0;
+        boolean negative = false;
+        char first = value.charAt(0);
+        if (first == '+' || first == '-') {
+            negative = first == '-';
+            index++;
+        }
+        int digitStart = index;
+        while (index < value.length() && value.charAt(index) >= '0' && value.charAt(index) <= '9') {
+            index++;
+        }
+        if (index == digitStart) {
+            return null;
+        }
         try {
-            int value = Integer.parseInt(trimToEmpty(text));
-            if (value < 0) {
+            long parsed = Long.parseLong(value.substring(digitStart, index));
+            if (negative) {
+                parsed = -parsed;
+            }
+            if (parsed < Integer.MIN_VALUE || parsed > Integer.MAX_VALUE) {
                 return null;
             }
-            return Integer.valueOf(value);
+            return Integer.valueOf((int) parsed);
         } catch (NumberFormatException ex) {
             return null;
         }
@@ -1014,18 +1478,38 @@ public final class MusicXmlIo {
         return (int) Math.round(parsed);
     }
 
+    private static Long positiveRoundedJavaScriptNumber(String text) {
+        double parsed = toNumber(text);
+        if (Double.isNaN(parsed) || Double.isInfinite(parsed) || parsed <= 0) {
+            return null;
+        }
+        return Long.valueOf(Math.round(parsed));
+    }
+
     private static double toNumber(Object value) {
         if (value == null) {
-            return Double.NaN;
+            return 0d;
         }
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue() ? 1d : 0d;
+        }
         String text = String.valueOf(value).trim();
         if (text.length() == 0) {
-            return Double.NaN;
+            return 0d;
         }
         try {
+            if (text.startsWith("0x") || text.startsWith("0X")) {
+                return Long.parseLong(text.substring(2), 16);
+            }
+            if (text.startsWith("0b") || text.startsWith("0B")) {
+                return Long.parseLong(text.substring(2), 2);
+            }
+            if (text.startsWith("0o") || text.startsWith("0O")) {
+                return Long.parseLong(text.substring(2), 8);
+            }
             return Double.parseDouble(text);
         } catch (NumberFormatException ex) {
             return Double.NaN;
@@ -1038,7 +1522,7 @@ public final class MusicXmlIo {
     }
 
     private static String trimToEmpty(String text) {
-        return text == null ? "" : text.trim();
+        return text == null ? "" : trimJavaScriptWhitespace(text);
     }
 
     private static void setFeatureIfAvailable(DocumentBuilderFactory factory, String feature, boolean value) {

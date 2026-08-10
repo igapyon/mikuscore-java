@@ -48,6 +48,14 @@ public class AbcLexerTest {
         assertNote("", "C", "", "2", 2, AbcLexer.lexAbcNote("C2", -1));
     }
 
+    @Test
+    public void retainsSourceLexicalBoundaryBehaviorAtOffsets() {
+        assertLength("12/3", 5, AbcLexer.lexAbcLengthToken("x12/3C", 1));
+        assertAccidental("^=", 2, AbcLexer.lexAbcAccidental("^=C", 0));
+        assertAccidental("=^", 2, AbcLexer.lexAbcAccidental("=^C", 0));
+        assertNote("", "C", "", "//", 6, AbcLexer.lexAbcNote("padC//", 3));
+    }
+
     private static void assertLength(String token, int nextIdx, AbcLexer.AbcLengthTokenLex actual) {
         assertEquals(token, actual.getToken());
         assertEquals(nextIdx, actual.getNextIdx());

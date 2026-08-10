@@ -56,6 +56,9 @@ public final class ScoreClefs {
         if (value == null) {
             return 0;
         }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue() ? 1 : 0;
+        }
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
@@ -63,8 +66,28 @@ public final class ScoreClefs {
         if (text.isEmpty()) {
             return 0;
         }
+        if (text.startsWith("0x") || text.startsWith("0X")) {
+            return parseRadixNumber(text.substring(2), 16);
+        }
+        if (text.startsWith("0b") || text.startsWith("0B")) {
+            return parseRadixNumber(text.substring(2), 2);
+        }
+        if (text.startsWith("0o") || text.startsWith("0O")) {
+            return parseRadixNumber(text.substring(2), 8);
+        }
         try {
             return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return Double.NaN;
+        }
+    }
+
+    private static double parseRadixNumber(String digits, int radix) {
+        if (digits.isEmpty()) {
+            return Double.NaN;
+        }
+        try {
+            return Long.parseLong(digits, radix);
         } catch (NumberFormatException ex) {
             return Double.NaN;
         }

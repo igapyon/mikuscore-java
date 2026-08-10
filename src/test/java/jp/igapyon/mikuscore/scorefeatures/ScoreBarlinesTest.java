@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.Arrays;
+import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
@@ -37,6 +38,34 @@ public class ScoreBarlinesTest {
         assertEquals("middle", feature.getLocation());
         assertEquals("light-heavy", feature.getBarStyle());
         assertEquals(Arrays.asList("backward", "forward"), feature.getRepeats());
+    }
+
+    @Test
+    public void buildPreservesTypeCorrectFeatureValuesWithoutExtraNormalization() {
+        BarlineFeature feature = new BarlineFeature().setLocation("RIGHT").setBarStyle("<&")
+                .addRepeat("BACKWARD").setEnding(new EndingFeature(" 2 ", "STOP"));
+
+        assertEquals(
+                "<barline location=\"RIGHT\"><bar-style>&lt;&amp;</bar-style><repeat direction=\"BACKWARD\"/><ending number=\" 2 \" type=\"STOP\"/></barline>",
+                ScoreBarlines.buildMusicXmlBarlineXml(feature));
+    }
+
+    @Test
+    public void extractionUsesFirstDirectOptionalNodesAndJavaScriptCompatibleNormalization() {
+        Locale original = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+            Element barline = parseBarline(
+                    "<barline location=\"MIDDLE\"><bar-style> </bar-style><bar-style>light-heavy</bar-style><repeat direction=\"BACKWARD\"/><repeat direction=\"sideways\"/><ending type=\"unknown\" number=\"1\"/><ending type=\"stop\" number=\"2\"/></barline>");
+
+            BarlineFeature feature = ScoreBarlines.extractMusicXmlBarlineFeature(barline);
+            assertEquals("middle", feature.getLocation());
+            assertEquals(null, feature.getBarStyle());
+            assertEquals(Arrays.asList("backward"), feature.getRepeats());
+            assertEquals(null, feature.getEnding());
+        } finally {
+            Locale.setDefault(original);
+        }
     }
 
     private static Element parseBarline(String xml) {

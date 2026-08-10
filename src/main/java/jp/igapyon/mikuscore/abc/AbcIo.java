@@ -22,6 +22,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
 import jp.igapyon.mikuscore.core.StaffClefPolicy;
+import jp.igapyon.mikuscore.musicxml.MusicXmlIo;
 
 public final class AbcIo {
     private static final Fraction DEFAULT_UNIT = new Fraction(1, 8);
@@ -742,13 +743,9 @@ public final class AbcIo {
                 if (assignment == null || assignment.getLevels() <= 0) {
                     continue;
                 }
-                StringBuilder beamXml = new StringBuilder();
-                for (int level = 1; level <= assignment.getLevels(); level++) {
-                    beamXml.append("<beam number=\"").append(level).append("\">").append(assignment.getState())
-                            .append("</beam>");
-                }
                 AbcBeamNoteEvent target = primary.get(entry.getKey().intValue());
-                out.put(Integer.valueOf(target.getNoteIndex()), beamXml.toString());
+                out.put(Integer.valueOf(target.getNoteIndex()), MusicXmlIo.buildMusicXmlBeamItemsXml(
+                        new MusicXmlIo.BeamAssignment(assignment.getState(), assignment.getLevels())));
             }
         }
         return out;
@@ -2417,7 +2414,7 @@ public final class AbcIo {
                 ? Integer.valueOf(clampRoundedTempo(meta.getTempoBpm().intValue()))
                 : null;
         return new AbcMusicXmlExportContext(resolvedParts, measureCount,
-                trimToEmpty(meta.getTitle()).length() == 0 ? "mikuscore" : meta.getTitle(),
+                trimToEmpty(meta.getTitle()).length() == 0 ? "miku-score" : meta.getTitle(),
                 trimToEmpty(meta.getComposer()).length() == 0 ? "Unknown" : meta.getComposer(),
                 beats, beatType, defaultFifths, divisions, beatDiv, measureDurationDiv, emptyMeasureRestType,
                 tempoBpm);
@@ -2546,7 +2543,7 @@ public final class AbcIo {
         for (AbcParsedPart part : parts) {
             measureCount = Math.max(measureCount, part.getMeasures().size());
         }
-        return new AbcParsedResult(new AbcParsedMeta(firstNonEmpty(headers.get("T"), "", "mikuscore"),
+        return new AbcParsedResult(new AbcParsedMeta(firstNonEmpty(headers.get("T"), "", "miku-score"),
                 firstNonEmpty(headers.get("C"), "", "Unknown"), meter, keyInfo, tempoBpm), parts, warnings,
                 diagnostics);
     }
@@ -2571,8 +2568,8 @@ public final class AbcIo {
 
         String title = firstNonEmpty(
                 directChildText(firstDescendantByPath(root, new String[] { "work" }), "work-title"),
-                directChildText(root, "movement-title"), "mikuscore");
-        String composer = firstNonEmpty(findMusicXmlCreator(root, "composer"), "", "Unknown");
+                directChildText(root, "movement-title"), "miku-score");
+        String composer = findMusicXmlCreator(root, "composer");
         Element firstMeasure = firstDescendantByPath(root, new String[] { "part", "measure" });
         Element firstAttributes = directChild(firstMeasure, "attributes");
         int beats = Math.max(1, (int) Math.round(parseDouble(directChildText(directChild(firstAttributes, "time"),
@@ -2589,7 +2586,9 @@ public final class AbcIo {
         List<String> metaLines = new ArrayList<String>();
         headerLines.add("X:1");
         headerLines.add("T:" + title);
-        headerLines.add("C:" + composer);
+        if (composer.length() > 0) {
+            headerLines.add("C:" + composer);
+        }
         headerLines.add("M:" + beats + "/" + beatType);
         headerLines.add("L:1/8");
         if (tempoHeader != null) {
@@ -4913,99 +4912,115 @@ public final class AbcIo {
             String scoreDirective) {
         List<AbcParsedPart> simpleParts = buildSimpleAbcParsedParts(voiceRegistry, voiceStores, keyHintFifthsByKey,
                 measureMetaByKey, transposeHintByVoiceId);
-        List<List<String>> scoreGroups = parseAbcScoreLayoutGroups(scoreDirective, simpleParts);
-        if (scoreGroups.size() == 0) {
-            return simpleParts;
+        Map<String, AbcParsedPart> normalizedVoiceDataById = new LinkedHashMap<String, AbcParsedPart>();
+        for (AbcParsedPart part : simpleParts) {
+            if (part != null) {
+                normalizedVoiceDataById.put(part.getVoiceId(), part);
+            }
         }
-        List<AbcParsedPart> result = new ArrayList<AbcParsedPart>();
-        for (List<String> groupVoiceIds : scoreGroups) {
-            if (groupVoiceIds == null || groupVoiceIds.size() == 0) {
-                continue;
-            }
-            AbcParsedPart base = findAbcParsedPartByVoiceId(simpleParts, groupVoiceIds.get(0));
-            if (base == null) {
-                return simpleParts;
-            }
-            if (groupVoiceIds.size() == 1) {
-                result.add(new AbcParsedPart("P" + (result.size() + 1), base.getPartName(), base.getVoiceId(),
-                        base.getClef(), base.getTranspose(), base.getStaffVoices(), base.getMeasures(),
-                        base.getKeyByMeasure(), base.getMeterByMeasure(), base.getTempoByMeasure(),
-                        base.getMeasureMetaByIndex()));
-                continue;
-            }
-            List<AbcParsedStaffVoice> staffVoices = new ArrayList<AbcParsedStaffVoice>();
-            List<String> partNames = new ArrayList<String>();
-            for (String voiceId : groupVoiceIds) {
-                AbcParsedPart part = findAbcParsedPartByVoiceId(simpleParts, voiceId);
-                if (part == null) {
-                    return simpleParts;
-                }
-                int staff = staffVoices.size() + 1;
-                staffVoices.add(new AbcParsedStaffVoice(voiceId, staff, part.getClef(), part.getMeasures()));
-                String partName = trimToEmpty(part.getPartName()).length() == 0 ? "Voice " + voiceId
-                        : part.getPartName();
-                if (!partNames.contains(partName)) {
-                    partNames.add(partName);
-                }
-            }
-            result.add(new AbcParsedPart("P" + (result.size() + 1), joinStringsWithSeparator(partNames, " / "),
-                    base.getVoiceId(), base.getClef(), base.getTranspose(), staffVoices, base.getMeasures(),
-                    base.getKeyByMeasure(), base.getMeterByMeasure(), base.getTempoByMeasure(),
-                    base.getMeasureMetaByIndex()));
-        }
-        return result.size() == 0 ? simpleParts : result;
+        return buildAbcParsedPartsFromLayout(parseAbcScoreLayout(scoreDirective,
+                voiceRegistry == null ? null : voiceRegistry.getDeclaredVoiceIds()), normalizedVoiceDataById);
     }
 
-    private static List<List<String>> parseAbcScoreLayoutGroups(String scoreDirective,
-            List<AbcParsedPart> simpleParts) {
-        List<List<String>> result = new ArrayList<List<String>>();
+    public static AbcScoreLayout parseAbcScoreLayout(String raw, List<String> declaredVoiceIds) {
+        List<String> ordered = new ArrayList<String>();
+        List<List<String>> groups = new ArrayList<List<String>>();
         List<String> seen = new ArrayList<String>();
-        String normalized = trimToEmpty(scoreDirective);
+        String normalized = trimToEmpty(raw);
         if (normalized.length() > 0) {
             Matcher chunkMatcher = Pattern.compile("\\(([^)]*)\\)|([^\\s()]+)").matcher(normalized);
             while (chunkMatcher.find()) {
                 String chunk = chunkMatcher.group(1) != null ? chunkMatcher.group(1) : chunkMatcher.group(2);
-                appendAbcScoreLayoutGroup(result, seen, chunk == null ? new String[0] : chunk.split("\\s+"));
-            }
-        }
-
-        if (simpleParts != null) {
-            for (AbcParsedPart part : simpleParts) {
-                if (part != null && !seen.contains(part.getVoiceId())) {
-                    appendAbcScoreLayoutGroup(result, seen, new String[] { part.getVoiceId() });
+                List<String> group = new ArrayList<String>();
+                for (String rawId : chunk == null ? new String[0] : chunk.split("\\s+")) {
+                    String voiceId = trimToEmpty(rawId);
+                    if (voiceId.matches("^[A-Za-z0-9_.-]+$") && !seen.contains(voiceId)) {
+                        seen.add(voiceId);
+                        ordered.add(voiceId);
+                        group.add(voiceId);
+                    }
+                }
+                if (!group.isEmpty()) {
+                    groups.add(group);
                 }
             }
         }
-        return result;
-    }
-
-    private static void appendAbcScoreLayoutGroup(List<List<String>> groups, List<String> seen, String[] rawIds) {
-        List<String> group = new ArrayList<String>();
-        if (rawIds != null) {
-            for (String token : rawIds) {
-                String voiceId = trimToEmpty(token);
-                if (voiceId.matches("^[A-Za-z0-9_.-]+$") && !seen.contains(voiceId)) {
+        if (declaredVoiceIds != null) {
+            for (String voiceId : declaredVoiceIds) {
+                if (voiceId != null && !seen.contains(voiceId)) {
                     seen.add(voiceId);
-                    group.add(voiceId);
+                    ordered.add(voiceId);
+                    groups.add(java.util.Arrays.asList(voiceId));
                 }
             }
         }
-        if (group.size() > 0) {
-            groups.add(group);
+        if (ordered.isEmpty()) {
+            ordered.add("1");
+            groups.add(java.util.Arrays.asList("1"));
         }
+        return new AbcScoreLayout(ordered, groups);
     }
 
-    private static AbcParsedPart findAbcParsedPartByVoiceId(List<AbcParsedPart> parts, String voiceId) {
-        String normalized = trimToEmpty(voiceId);
-        if (parts == null || normalized.length() == 0) {
-            return null;
+    public static List<AbcParsedPart> buildAbcParsedPartsFromLayout(AbcScoreLayout scoreLayout,
+            Map<String, AbcParsedPart> normalizedVoiceDataById) {
+        AbcScoreLayout safeLayout = scoreLayout == null ? parseAbcScoreLayout(null, null) : scoreLayout;
+        Map<String, AbcParsedPart> byVoiceId = normalizedVoiceDataById == null
+                ? new LinkedHashMap<String, AbcParsedPart>()
+                : normalizedVoiceDataById;
+        List<AbcParsedPart> parts = new ArrayList<AbcParsedPart>();
+        for (List<String> groupVoiceIds : safeLayout.getGroups()) {
+            if (groupVoiceIds == null || groupVoiceIds.isEmpty()) {
+                continue;
+            }
+            String primaryVoiceId = trimToEmpty(groupVoiceIds.get(0)).length() == 0 ? "1" : groupVoiceIds.get(0);
+            AbcParsedPart primary = byVoiceId.get(primaryVoiceId);
+            if (primary == null) {
+                primary = createFallbackAbcParsedPart(primaryVoiceId);
+            }
+            String partName = resolveAbcGroupedPartName(groupVoiceIds, byVoiceId, primary.getPartName());
+            List<AbcParsedStaffVoice> staffVoices = new ArrayList<AbcParsedStaffVoice>();
+            if (groupVoiceIds.size() > 1) {
+                for (int staffIndex = 0; staffIndex < groupVoiceIds.size(); staffIndex++) {
+                    String voiceId = groupVoiceIds.get(staffIndex);
+                    AbcParsedPart voiceData = byVoiceId.get(voiceId);
+                    if (voiceData == null) {
+                        voiceData = primary;
+                    }
+                    staffVoices.add(new AbcParsedStaffVoice(voiceId, staffIndex + 1, voiceData.getClef(),
+                            voiceData.getTranspose(), voiceData.getMeasures()));
+                }
+            }
+            parts.add(new AbcParsedPart("P" + (parts.size() + 1), partName, primary.getVoiceId(), primary.getClef(),
+                    primary.getTranspose(), staffVoices, primary.getMeasures(), primary.getKeyByMeasure(),
+                    primary.getMeterByMeasure(), primary.getTempoByMeasure(), primary.getMeasureMetaByIndex()));
         }
-        for (AbcParsedPart part : parts) {
-            if (part != null && normalized.equals(part.getVoiceId())) {
-                return part;
+        return parts;
+    }
+
+    private static AbcParsedPart createFallbackAbcParsedPart(String voiceId) {
+        String normalizedVoiceId = trimToEmpty(voiceId).length() == 0 ? "1" : trimToEmpty(voiceId);
+        return new AbcParsedPart("P1", "Voice " + normalizedVoiceId, normalizedVoiceId, "", null,
+                new ArrayList<AbcParsedStaffVoice>(),
+                java.util.Arrays.asList(new ArrayList<AbcMeasureNote>()), new LinkedHashMap<Integer, Integer>(),
+                new LinkedHashMap<Integer, AbcMeter>(), new LinkedHashMap<Integer, Integer>(),
+                new LinkedHashMap<Integer, AbcMeasureMeta>());
+    }
+
+    private static String resolveAbcGroupedPartName(List<String> groupVoiceIds,
+            Map<String, AbcParsedPart> normalizedVoiceDataById, String fallbackPartName) {
+        if (groupVoiceIds == null || groupVoiceIds.size() <= 1) {
+            return fallbackPartName;
+        }
+        List<String> names = new ArrayList<String>();
+        for (String voiceId : groupVoiceIds) {
+            AbcParsedPart voiceData = normalizedVoiceDataById.get(voiceId);
+            String name = voiceData == null ? "Voice " + voiceId : voiceData.getPartName();
+            if (trimToEmpty(name).length() > 0 && !names.contains(name)) {
+                names.add(name);
             }
         }
-        return null;
+        return names.size() <= 1 ? (names.isEmpty() ? fallbackPartName : names.get(0))
+                : joinStringsWithSeparator(names, " / ");
     }
 
     private static List<AbcParsedPart> buildSimpleAbcParsedParts(AbcImportVoiceRegistry voiceRegistry,
@@ -6177,99 +6192,21 @@ public final class AbcIo {
     private static Map<Integer, AbcBeamAssignment> computeAbcBeamAssignments(List<AbcBeamNoteEvent> events,
             int beatDiv, boolean splitAtBeatBoundaryWhenImplicit) {
         Map<Integer, AbcBeamAssignment> assignmentByIndex = new LinkedHashMap<Integer, AbcBeamAssignment>();
-        List<AbcBeamEventInfo> infos = new ArrayList<AbcBeamEventInfo>();
         if (events == null) {
             return assignmentByIndex;
         }
+        List<MusicXmlIo.BeamEventInfo> infos = new ArrayList<MusicXmlIo.BeamEventInfo>();
         for (AbcBeamNoteEvent event : events) {
-            infos.add(resolveAbcBeamEventInfo(event == null ? null : event.getNote()));
+            AbcBeamEventInfo info = resolveAbcBeamEventInfo(event == null ? null : event.getNote());
+            infos.add(new MusicXmlIo.BeamEventInfo(info.isTimed(), info.isChord(), info.isGrace(),
+                    info.getDurationDiv(), info.getLevels(), info.getExplicitMode()));
         }
-
-        boolean hasExplicitBeamMode = false;
-        for (AbcBeamEventInfo info : infos) {
-            if (info.isTimed() && ("begin".equals(info.getExplicitMode()) || "mid".equals(info.getExplicitMode()))) {
-                hasExplicitBeamMode = true;
-                break;
-            }
+        Map<Integer, MusicXmlIo.BeamAssignment> sharedAssignments = MusicXmlIo.computeBeamAssignments(infos,
+                beatDiv, splitAtBeatBoundaryWhenImplicit);
+        for (Map.Entry<Integer, MusicXmlIo.BeamAssignment> entry : sharedAssignments.entrySet()) {
+            MusicXmlIo.BeamAssignment assignment = entry.getValue();
+            assignmentByIndex.put(entry.getKey(), new AbcBeamAssignment(assignment.getState(), assignment.getLevels()));
         }
-        if (!hasExplicitBeamMode) {
-            List<Integer> currentGroup = new ArrayList<Integer>();
-            int cursorDiv = 0;
-            int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
-            for (int index = 0; index < infos.size(); index++) {
-                AbcBeamEventInfo info = infos.get(index);
-                if (splitAtBeatBoundaryWhenImplicit && info.isTimed()) {
-                    boolean startsAtBeatBoundary = cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0;
-                    if (startsAtBeatBoundary) {
-                        flushAbcBeamGroup(infos, currentGroup, assignmentByIndex);
-                        currentGroup.clear();
-                    }
-                }
-                if (!info.isChord() || !isAbcBeamableTimedEvent(info)) {
-                    flushAbcBeamGroup(infos, currentGroup, assignmentByIndex);
-                    currentGroup.clear();
-                    if (info.isTimed()) {
-                        cursorDiv += Math.max(0, info.getDurationDiv());
-                    }
-                    continue;
-                }
-                currentGroup.add(Integer.valueOf(index));
-                if (info.isTimed()) {
-                    cursorDiv += Math.max(0, info.getDurationDiv());
-                }
-            }
-            flushAbcBeamGroup(infos, currentGroup, assignmentByIndex);
-            return assignmentByIndex;
-        }
-
-        List<Integer> activeGroup = new ArrayList<Integer>();
-        int cursorDiv = 0;
-        int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
-        for (int index = 0; index < infos.size(); index++) {
-            AbcBeamEventInfo info = infos.get(index);
-            if (!info.isTimed()) {
-                flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
-                activeGroup.clear();
-                continue;
-            }
-            boolean startsAtBeatBoundary = cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0;
-            if (startsAtBeatBoundary) {
-                flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
-                activeGroup.clear();
-            }
-            if (!isAbcBeamableTimedEvent(info)) {
-                flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
-                activeGroup.clear();
-                continue;
-            }
-            if ("begin".equals(info.getExplicitMode())) {
-                flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
-                activeGroup.clear();
-                activeGroup.add(Integer.valueOf(index));
-                cursorDiv += Math.max(0, info.getDurationDiv());
-                continue;
-            }
-            if ("mid".equals(info.getExplicitMode())) {
-                if (activeGroup.isEmpty()) {
-                    AbcBeamEventInfo previous = index > 0 ? infos.get(index - 1) : null;
-                    if (isAbcBeamableTimedEvent(previous)) {
-                        activeGroup.add(Integer.valueOf(index - 1));
-                    }
-                    activeGroup.add(Integer.valueOf(index));
-                } else {
-                    activeGroup.add(Integer.valueOf(index));
-                }
-                cursorDiv += Math.max(0, info.getDurationDiv());
-                continue;
-            }
-            if (activeGroup.isEmpty()) {
-                activeGroup.add(Integer.valueOf(index));
-            } else {
-                activeGroup.add(Integer.valueOf(index));
-            }
-            cursorDiv += Math.max(0, info.getDurationDiv());
-        }
-        flushAbcBeamGroup(infos, activeGroup, assignmentByIndex);
         return assignmentByIndex;
     }
 
@@ -6278,33 +6215,6 @@ public final class AbcIo {
         return new AbcBeamEventInfo(true, note != null && !note.isRest(), note != null && note.isGrace(),
                 note != null && note.isGrace() ? 0 : Math.max(1, note == null ? 1 : note.getDuration()),
                 beamLevelsFromType(type), note == null ? "" : note.getBeamMode());
-    }
-
-    private static boolean isAbcBeamableTimedEvent(AbcBeamEventInfo info) {
-        return info != null && info.isTimed() && !info.isGrace() && info.getLevels() > 0;
-    }
-
-    private static void flushAbcBeamGroup(List<AbcBeamEventInfo> infos, List<Integer> indices,
-            Map<Integer, AbcBeamAssignment> assignmentByIndex) {
-        List<Integer> chordIndices = new ArrayList<Integer>();
-        for (Integer index : indices) {
-            AbcBeamEventInfo info = infos.get(index.intValue());
-            if (info.isChord() && !info.isGrace()) {
-                chordIndices.add(index);
-            }
-        }
-        if (chordIndices.size() < 2) {
-            return;
-        }
-        for (int groupIndex = 0; groupIndex < chordIndices.size(); groupIndex++) {
-            int index = chordIndices.get(groupIndex).intValue();
-            AbcBeamEventInfo info = infos.get(index);
-            if (info.getLevels() <= 0) {
-                continue;
-            }
-            String state = groupIndex == 0 ? "begin" : (groupIndex == chordIndices.size() - 1 ? "end" : "continue");
-            assignmentByIndex.put(Integer.valueOf(index), new AbcBeamAssignment(state, info.getLevels()));
-        }
     }
 
     private static int beamLevelsFromType(String typeText) {
@@ -6372,6 +6282,24 @@ public final class AbcIo {
         }
     }
 
+    public static final class AbcScoreLayout {
+        private final List<String> orderedVoiceIds;
+        private final List<List<String>> groups;
+
+        public AbcScoreLayout(List<String> orderedVoiceIds, List<List<String>> groups) {
+            this.orderedVoiceIds = orderedVoiceIds == null ? new ArrayList<String>() : orderedVoiceIds;
+            this.groups = groups == null ? new ArrayList<List<String>>() : groups;
+        }
+
+        public List<String> getOrderedVoiceIds() {
+            return orderedVoiceIds;
+        }
+
+        public List<List<String>> getGroups() {
+            return groups;
+        }
+    }
+
     public static final class AbcKeyInfo {
         private final int fifths;
 
@@ -6420,16 +6348,23 @@ public final class AbcIo {
         private final String voiceId;
         private final int staff;
         private final String clef;
+        private final AbcTransposeMeta transpose;
         private final List<List<AbcMeasureNote>> measures;
 
         public AbcParsedStaffVoice(int staff, String clef) {
-            this("", staff, clef, new ArrayList<List<AbcMeasureNote>>());
+            this("", staff, clef, null, new ArrayList<List<AbcMeasureNote>>());
         }
 
         public AbcParsedStaffVoice(String voiceId, int staff, String clef, List<List<AbcMeasureNote>> measures) {
+            this(voiceId, staff, clef, null, measures);
+        }
+
+        public AbcParsedStaffVoice(String voiceId, int staff, String clef, AbcTransposeMeta transpose,
+                List<List<AbcMeasureNote>> measures) {
             this.voiceId = trimToEmpty(voiceId);
             this.staff = staff;
             this.clef = trimToEmpty(clef);
+            this.transpose = transpose;
             this.measures = measures == null ? new ArrayList<List<AbcMeasureNote>>() : measures;
         }
 
@@ -6443,6 +6378,10 @@ public final class AbcIo {
 
         public String getClef() {
             return clef;
+        }
+
+        public AbcTransposeMeta getTranspose() {
+            return transpose;
         }
 
         public List<AbcMeasureNote> getMeasure(int measureIndex) {
@@ -6663,7 +6602,7 @@ public final class AbcIo {
         private final Integer tempoBpm;
 
         public AbcParsedMeta() {
-            this("mikuscore", "Unknown", new AbcMeter(4, 4), new AbcKeyInfo(0), null);
+            this("miku-score", "Unknown", new AbcMeter(4, 4), new AbcKeyInfo(0), null);
         }
 
         public AbcParsedMeta(String title, String composer, AbcMeter meter, AbcKeyInfo keyInfo, Integer tempoBpm) {

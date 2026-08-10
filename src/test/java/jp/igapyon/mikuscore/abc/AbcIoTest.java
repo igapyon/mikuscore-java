@@ -99,6 +99,44 @@ public class AbcIoTest {
     }
 
     @Test
+    public void parsesAndBuildsAbcScoreLayoutsWithFallbackVoices() {
+        AbcIo.AbcScoreLayout layout = AbcIo.parseAbcScoreLayout("(lead bass) lead bad! solo",
+                Arrays.asList("lead", "bass", "solo"));
+        assertEquals(Arrays.asList("lead", "bass", "solo"), layout.getOrderedVoiceIds());
+        assertEquals(Arrays.asList(Arrays.asList("lead", "bass"), Arrays.asList("solo")), layout.getGroups());
+
+        Map<String, AbcIo.AbcParsedPart> byVoiceId = new LinkedHashMap<String, AbcIo.AbcParsedPart>();
+        byVoiceId.put("lead", layoutPart("Upper", "lead", "treble", new AbcIo.AbcTransposeMeta(2, null)));
+        byVoiceId.put("bass", layoutPart("Lower", "bass", "bass", new AbcIo.AbcTransposeMeta(-3, null)));
+        byVoiceId.put("solo", layoutPart("Solo", "solo", "alto", null));
+
+        List<AbcIo.AbcParsedPart> parts = AbcIo.buildAbcParsedPartsFromLayout(layout, byVoiceId);
+        assertEquals(2, parts.size());
+        assertEquals("P1", parts.get(0).getPartId());
+        assertEquals("Upper / Lower", parts.get(0).getPartName());
+        assertEquals("lead", parts.get(0).getVoiceId());
+        assertEquals(2, parts.get(0).getStaffVoices().size());
+        assertEquals("bass", parts.get(0).getStaffVoices().get(1).getVoiceId());
+        assertEquals(Integer.valueOf(-3), parts.get(0).getStaffVoices().get(1).getTranspose().getChromatic());
+        assertEquals("P2", parts.get(1).getPartId());
+        assertEquals("Solo", parts.get(1).getPartName());
+
+        AbcIo.AbcScoreLayout fallbackLayout = AbcIo.parseAbcScoreLayout("(ghost lead)",
+                Arrays.asList("lead"));
+        List<AbcIo.AbcParsedPart> fallback = AbcIo.buildAbcParsedPartsFromLayout(fallbackLayout,
+                java.util.Collections.singletonMap("lead", byVoiceId.get("lead")));
+        assertEquals("Voice ghost / Upper", fallback.get(0).getPartName());
+        assertEquals("ghost", fallback.get(0).getVoiceId());
+        assertEquals(1, fallback.get(0).getMeasures().size());
+        assertEquals(Arrays.asList("ghost", "lead"), Arrays.asList(fallback.get(0).getStaffVoices().get(0).getVoiceId(),
+                fallback.get(0).getStaffVoices().get(1).getVoiceId()));
+
+        AbcIo.AbcScoreLayout defaultLayout = AbcIo.parseAbcScoreLayout("", new ArrayList<String>());
+        assertEquals(Arrays.asList("1"), defaultLayout.getOrderedVoiceIds());
+        assertEquals(Arrays.asList(Arrays.asList("1")), defaultLayout.getGroups());
+    }
+
+    @Test
     public void estimatesMeasureContentDurationByVoice() {
         assertEquals(0, AbcIo.estimateAbcMeasureContentDiv(null));
         assertEquals(960, AbcIo.estimateAbcMeasureContentDiv(Arrays.asList(
@@ -692,6 +730,43 @@ public class AbcIoTest {
     }
 
     @Test
+    public void musicXmlFromAbcHonorsPublicMetadataAndPrettyPrintOptions() throws Exception {
+        String abc = "X:1\nT:Debug test\nM:4/4\nL:1/4\nK:C\nC D E F |";
+
+        String defaults = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        assertEquals(true, defaults.contains("mks:dbg:abc:meta:count"), defaults);
+        String rawTruncated = "";
+        String rawChunk = "";
+        NodeList fields = parseElement(defaults).getElementsByTagName("miscellaneous-field");
+        for (int index = 0; index < fields.getLength(); index++) {
+            Element field = (Element) fields.item(index);
+            if ("mks:src:abc:raw-truncated".equals(field.getAttribute("name"))) {
+                rawTruncated = field.getTextContent().trim();
+            } else if ("mks:src:abc:raw-0001".equals(field.getAttribute("name"))) {
+                rawChunk = field.getTextContent();
+            }
+        }
+        assertEquals("0", rawTruncated);
+        assertEquals(true, rawChunk.contains("X:1"), rawChunk);
+        assertEquals(true, defaults.contains("\n"), defaults);
+
+        String noDebug = AbcIo.musicXmlFromAbc(abc,
+                new AbcIo.AbcImportOptions(Boolean.FALSE, null, null, null));
+        assertEquals(false, noDebug.contains("mks:dbg:abc:meta:"), noDebug);
+        assertEquals(true, noDebug.contains("mks:src:abc:raw-encoding"), noDebug);
+        assertEquals(false, noDebug.contains("\n"), noDebug);
+
+        String compact = AbcIo.musicXmlFromAbc(abc,
+                new AbcIo.AbcImportOptions(Boolean.TRUE, Boolean.FALSE, null, null));
+        assertEquals(false, compact.contains("\n"), compact);
+
+        String noSource = AbcIo.musicXmlFromAbc(abc,
+                new AbcIo.AbcImportOptions(null, null, Boolean.FALSE, null));
+        assertEquals(true, noSource.contains("mks:dbg:abc:meta:count"), noSource);
+        assertEquals(false, noSource.contains("mks:src:abc:raw-"), noSource);
+    }
+
+    @Test
     public void buildsAbcMeasureNotesXmlCoreSubset() {
         assertEquals("<note><rest/><duration>1440</duration><voice>1</voice><type>quarter</type><staff>2</staff></note>",
                 AbcIo.buildAbcEmptyMeasureNotesXml(1440, "quarter", Integer.valueOf(2)));
@@ -1098,6 +1173,24 @@ public class AbcIoTest {
         assertEquals("3840", directChildText(directChild(measure, "backup"), "duration"));
         assertEquals(Arrays.asList("1", "1", "1", "1", "2", "2", "2", "2"), staffNumbers(measure));
         assertEquals(false, xml.contains("mks:diag:count"), xml);
+    }
+
+    @Test
+    public void abcImportRetainsUnknownScoreLayoutVoiceAsFallbackStaff() throws Exception {
+        String abc = "X:1\nT:Layout fallback\nM:4/4\nL:1/4\nK:C\n"
+                + "%%score (ghost 1)\n"
+                + "V:1 name=Lead clef=treble\n"
+                + "[V:1] C D E F |\n";
+
+        Element root = parseElement(AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions()));
+        Element part = directChildren(root, "part").get(0);
+        Element measure = directChildren(part, "measure").get(0);
+
+        assertEquals(1, directChildren(root, "part").size());
+        assertEquals("Voice ghost / Lead", directChildText(
+                directChildren(directChild(root, "part-list"), "score-part").get(0), "part-name"));
+        assertEquals("2", directChildText(directChild(measure, "attributes"), "staves"));
+        assertEquals(Arrays.asList("1", "2", "2", "2", "2"), staffNumbers(measure));
     }
 
     @Test
@@ -3041,6 +3134,64 @@ public class AbcIoTest {
 
         assertEquals(true, abc.contains("Q:1/4=90"), abc);
         assertEquals(false, abc.contains("Q:1/4=116"), abc);
+    }
+
+    @Test
+    public void musicXmlToAbcUsesPublicHeaderFallbacksAndOmitsMissingComposer() {
+        String fallbackXml = "<score-partwise version=\"3.1\"><movement-title>Fallback Title</movement-title>"
+                + "<part-list><score-part id=\"P1\"><part-name>Part 1</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>eighth</type></note></measure></part></score-partwise>";
+
+        String fallbackAbc = AbcIo.musicXmlToAbc(fallbackXml);
+        assertEquals(true, fallbackAbc.contains("T:Fallback Title"), fallbackAbc);
+        assertEquals(false, fallbackAbc.contains("\nC:"), fallbackAbc);
+        assertEquals(true, fallbackAbc.contains("M:4/4"), fallbackAbc);
+        assertEquals(true, fallbackAbc.contains("K:C"), fallbackAbc);
+
+        String preferredXml = "<score-partwise version=\"3.1\"><work><work-title>  Primary Title  </work-title></work>"
+                + "<movement-title>Secondary Title</movement-title><identification><creator type=\"composer\">"
+                + "  Composer Name  </creator></identification><part-list><score-part id=\"P1\">"
+                + "<part-name>Part 1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><key><fifths>3</fifths></key><time><beats>4</beats>"
+                + "<beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>eighth</type></note></measure></part></score-partwise>";
+
+        String preferredAbc = AbcIo.musicXmlToAbc(preferredXml);
+        assertEquals(true, preferredAbc.contains("T:Primary Title"), preferredAbc);
+        assertEquals(false, preferredAbc.contains("Secondary Title"), preferredAbc);
+        assertEquals(true, preferredAbc.contains("C:Composer Name"), preferredAbc);
+        assertEquals(true, preferredAbc.contains("K:A"), preferredAbc);
+    }
+
+    @Test
+    public void abcRoundtripKeepsGrandStaffLanesValidAndVoiceNumbersPositive() throws Exception {
+        String xml = "<score-partwise version=\"3.1\"><part-list><score-part id=\"P1\">"
+                + "<part-name>Piano</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>960</divisions><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "<staves>2</staves><clef number=\"1\"><sign>G</sign><line>2</line></clef>"
+                + "<clef number=\"2\"><sign>F</sign><line>4</line></clef></attributes>"
+                + "<note><rest measure=\"yes\"/><duration>3840</duration><voice>1</voice><staff>1</staff>"
+                + "<type>whole</type></note><backup><duration>3840</duration></backup>"
+                + "<note><rest measure=\"yes\"/><duration>3840</duration><voice>1</voice><staff>2</staff>"
+                + "<type>whole</type></note></measure></part></score-partwise>";
+
+        String abc = AbcIo.musicXmlToAbc(xml);
+        String roundtripped = AbcIo.musicXmlFromAbc(abc, new AbcIo.AbcImportOptions());
+        Element root = parseElement(roundtripped);
+        List<Element> parts = directChildren(root, "part");
+
+        assertEquals(2, parts.size(), roundtripped);
+        NodeList notes = root.getElementsByTagName("note");
+        for (int index = 0; index < notes.getLength(); index++) {
+            Element note = (Element) notes.item(index);
+            assertEquals(true, directChildText(note, "voice").matches("^[1-9]\\d*$"), roundtripped);
+        }
+        assertNoOverfullMeasures(root);
+        assertEquals(true, MusicXmlState.validateMusicXmlForSave(roundtripped, true).isOk(), roundtripped);
     }
 
     @Test
@@ -7690,6 +7841,15 @@ public class AbcIoTest {
         return factory.newDocumentBuilder()
                 .parse(new ByteArrayInputStream(xml.getBytes("UTF-8")))
                 .getDocumentElement();
+    }
+
+    private static AbcIo.AbcParsedPart layoutPart(String partName, String voiceId, String clef,
+            AbcIo.AbcTransposeMeta transpose) {
+        return new AbcIo.AbcParsedPart("unused", partName, voiceId, clef, transpose,
+                new ArrayList<AbcIo.AbcParsedStaffVoice>(),
+                Arrays.asList(new ArrayList<AbcIo.AbcMeasureNote>()), new LinkedHashMap<Integer, Integer>(),
+                new LinkedHashMap<Integer, AbcIo.AbcMeter>(), new LinkedHashMap<Integer, Integer>(),
+                new LinkedHashMap<Integer, AbcIo.AbcMeasureMeta>());
     }
 
     private static Element directChild(Element parent, String tagName) {

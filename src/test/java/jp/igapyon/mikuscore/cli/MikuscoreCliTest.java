@@ -34,7 +34,8 @@ public class MikuscoreCliTest {
         assertTrue(out.contains("convert --from musicxml --to musicxml"));
         assertTrue(out.contains("state summarize"));
         assertTrue(out.contains("Commands:"));
-        assertTrue(out.contains("--diagnostics text|json is not yet implemented"));
+        assertTrue(out.contains("--diagnostics text|json"));
+        assertTrue(out.contains("diagnostics JSON to stderr"));
         assertEquals("", err);
     }
 
@@ -57,18 +58,78 @@ public class MikuscoreCliTest {
     }
 
     @Test
-    public void convertRejectsUnsupportedDiagnosticsOption() throws Exception {
+    public void printsThePinnedUpstreamPackageVersion() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "--version" },
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(0, exitCode);
+        assertEquals("0.6.1", outBytes.toString("UTF-8").trim());
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void stateHelpReturnsZeroAndListsPinnedStateCommands() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "state", "--help" },
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        String out = outBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(out.contains("Inspect canonical MusicXML state"));
+        assertTrue(out.contains("summarize"));
+        assertTrue(out.contains("inspect-measure"));
+        assertTrue(out.contains("validate-command"));
+        assertTrue(out.contains("apply-command"));
+        assertTrue(out.contains("diff"));
+        assertTrue(out.contains("selector"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertWritesStructuredDiagnosticsJson() throws Exception {
         ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
 
         int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "musicxml", "--to", "abc", "--diagnostics", "json" },
+                new ByteArrayInputStream(MusicXmlStateTest.sampleMusicXml("CLI diagnostics").getBytes(StandardCharsets.UTF_8)),
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(0, exitCode);
+        assertTrue(outBytes.toString("UTF-8").contains("X:1"));
+        String diagnostics = errBytes.toString("UTF-8");
+        assertTrue(diagnostics.contains("\"ok\": true"));
+        assertTrue(diagnostics.contains("\"diagnostics_version\": 1"));
+        assertTrue(diagnostics.contains("\"command\": \"convert\""));
+        assertTrue(diagnostics.contains("\"status\": \"success\""));
+        assertTrue(diagnostics.contains("\"mode\":\"stdin\""));
+        assertTrue(diagnostics.contains("\"mode\":\"stdout\""));
+    }
+
+    @Test
+    public void convertWritesStructuredUsageDiagnosticsJson() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "abc", "--diagnostics", "json" },
                 new ByteArrayInputStream(new byte[0]),
                 new PrintStream(outBytes, true, "UTF-8"),
                 new PrintStream(errBytes, true, "UTF-8"));
 
         assertEquals(2, exitCode);
         assertEquals("", outBytes.toString("UTF-8"));
-        assertTrue(errBytes.toString("UTF-8").contains("Unsupported option: --diagnostics"));
+        String diagnostics = errBytes.toString("UTF-8");
+        assertTrue(diagnostics.contains("\"ok\": false"));
+        assertTrue(diagnostics.contains("\"error_type\": \"usage_error\""));
+        assertTrue(diagnostics.contains("\"error_code\": \"missing_from_to\""));
+        assertTrue(diagnostics.contains("\"exit_code\": 2"));
     }
 
     @Test
@@ -266,6 +327,146 @@ public class MikuscoreCliTest {
             assertEquals("", errBytes.toString("UTF-8"));
         } finally {
             Files.deleteIfExists(output);
+        }
+    }
+
+    @Test
+    public void convertAbcToMidiWritesBytesToStdout() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                "X:1\nT:CLI ABC MIDI stdout\nM:4/4\nL:1/4\nK:C\nC D E F|]\n".getBytes(StandardCharsets.UTF_8));
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "abc", "--to", "midi" },
+                inBytes, new PrintStream(outBytes, true, "UTF-8"), new PrintStream(errBytes, true, "UTF-8"));
+
+        byte[] midi = outBytes.toByteArray();
+        assertEquals(0, exitCode);
+        assertTrue(midi.length > 4);
+        assertEquals('M', midi[0]);
+        assertEquals('T', midi[1]);
+        assertEquals('h', midi[2]);
+        assertEquals('d', midi[3]);
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void convertOutDashUsesStdoutForFileBackedInput() throws Exception {
+        Path input = Files.createTempFile("mikuscore-convert-stdout", ".abc");
+        try {
+            Files.write(input, "X:1\nT:CLI stdout dash\nM:4/4\nL:1/4\nK:C\nC D E F|]\n"
+                    .getBytes(StandardCharsets.UTF_8));
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+            int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "abc", "--to", "musicxml",
+                    "--in", input.toString(), "--out", "-" }, new ByteArrayInputStream(new byte[0]),
+                    new PrintStream(outBytes, true, "UTF-8"), new PrintStream(errBytes, true, "UTF-8"));
+
+            assertEquals(0, exitCode);
+            assertTrue(outBytes.toString("UTF-8").contains("<work-title>CLI stdout dash</work-title>"));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(input);
+        }
+    }
+
+    @Test
+    public void convertAbcFileInputWritesMusicXmlFile() throws Exception {
+        Path input = Files.createTempFile("mikuscore-convert-file", ".abc");
+        Path output = Files.createTempFile("mikuscore-convert-file", ".musicxml");
+        try {
+            Files.write(input, "X:1\nT:CLI file output\nM:4/4\nL:1/4\nK:C\nC D E F|]\n"
+                    .getBytes(StandardCharsets.UTF_8));
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+            int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "abc", "--to", "musicxml",
+                    "--in", input.toString(), "--out", output.toString() }, new ByteArrayInputStream(new byte[0]),
+                    new PrintStream(outBytes, true, "UTF-8"), new PrintStream(errBytes, true, "UTF-8"));
+
+            assertEquals(0, exitCode);
+            assertEquals("", outBytes.toString("UTF-8"));
+            assertTrue(new String(Files.readAllBytes(output), StandardCharsets.UTF_8)
+                    .contains("<work-title>CLI file output</work-title>"));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(input);
+            Files.deleteIfExists(output);
+        }
+    }
+
+    @Test
+    public void missingStdinInputUsesThePinnedUsageErrorContract() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "convert", "--from", "abc", "--to", "musicxml" },
+                new ByteArrayInputStream(new byte[0]), new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(2, exitCode);
+        assertEquals("", outBytes.toString("UTF-8"));
+        assertTrue(errBytes.toString("UTF-8").contains("Input is required. Use --in <file> or pipe text via stdin."));
+    }
+
+    @Test
+    public void reportsPinnedConversionFailureContracts() throws Exception {
+        Path invalidAbc = Files.createTempFile("mikuscore-invalid", ".abc");
+        try {
+            ByteArrayOutputStream invalidAbcOut = new ByteArrayOutputStream();
+            ByteArrayOutputStream invalidAbcErr = new ByteArrayOutputStream();
+            int invalidAbcExit = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "abc", "--to", "musicxml", "--in", invalidAbc.toString() },
+                    new ByteArrayInputStream(new byte[0]), new PrintStream(invalidAbcOut, true, "UTF-8"),
+                    new PrintStream(invalidAbcErr, true, "UTF-8"));
+            assertEquals(1, invalidAbcExit);
+            assertEquals("", invalidAbcOut.toString("UTF-8"));
+            assertTrue(invalidAbcErr.toString("UTF-8").contains("Failed to parse ABC"));
+
+            ByteArrayOutputStream invalidMusicXmlErr = new ByteArrayOutputStream();
+            int invalidMusicXmlExit = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "musicxml", "--to", "abc" },
+                    new ByteArrayInputStream("<not-xml".getBytes(StandardCharsets.UTF_8)),
+                    new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"),
+                    new PrintStream(invalidMusicXmlErr, true, "UTF-8"));
+            assertEquals(1, invalidMusicXmlExit);
+            assertTrue(invalidMusicXmlErr.toString("UTF-8").contains("Failed to parse MusicXML"));
+
+            ByteArrayOutputStream invalidMeiErr = new ByteArrayOutputStream();
+            int invalidMeiExit = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "mei", "--to", "musicxml" },
+                    new ByteArrayInputStream("<mei".getBytes(StandardCharsets.UTF_8)),
+                    new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"),
+                    new PrintStream(invalidMeiErr, true, "UTF-8"));
+            assertEquals(1, invalidMeiExit);
+            assertTrue(invalidMeiErr.toString("UTF-8").contains("Failed to parse MEI"));
+
+            ByteArrayOutputStream invalidLilyPondErr = new ByteArrayOutputStream();
+            int invalidLilyPondExit = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "lilypond", "--to", "musicxml" },
+                    new ByteArrayInputStream("\\score { }".getBytes(StandardCharsets.UTF_8)),
+                    new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"),
+                    new PrintStream(invalidLilyPondErr, true, "UTF-8"));
+            assertEquals(1, invalidLilyPondExit);
+            assertTrue(invalidLilyPondErr.toString("UTF-8").contains("Failed to parse LilyPond"));
+
+            ByteArrayOutputStream unsupportedPairErr = new ByteArrayOutputStream();
+            int unsupportedPairExit = MikuscoreCli.run(
+                    new String[] { "convert", "--from", "midi", "--to", "abc" },
+                    new ByteArrayInputStream(new byte[0]), new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"),
+                    new PrintStream(unsupportedPairErr, true, "UTF-8"));
+            assertEquals(2, unsupportedPairExit);
+            assertTrue(unsupportedPairErr.toString("UTF-8").contains("Unsupported conversion pair"));
+
+            ByteArrayOutputStream missingPairErr = new ByteArrayOutputStream();
+            int missingPairExit = MikuscoreCli.run(new String[] { "convert", "--from", "abc" },
+                    new ByteArrayInputStream(new byte[0]), new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"),
+                    new PrintStream(missingPairErr, true, "UTF-8"));
+            assertEquals(2, missingPairExit);
+            assertTrue(missingPairErr.toString("UTF-8").contains("convert requires both --from <format> and --to <format>"));
+        } finally {
+            Files.deleteIfExists(invalidAbc);
         }
     }
 
@@ -473,6 +674,7 @@ public class MikuscoreCliTest {
         assertTrue(out.contains("<score-partwise"));
         assertTrue(out.contains("<work-title>CLI MuseScore</work-title>"));
         assertTrue(out.contains("<step>C</step>"));
+        assertTrue(out.contains("<barline location=\"right\">"));
         assertEquals("", errBytes.toString("UTF-8"));
     }
 
@@ -496,6 +698,8 @@ public class MikuscoreCliTest {
             assertEquals("", outBytes.toString("UTF-8"));
             assertTrue(mscx.contains("<museScore version=\"4.0\">"));
             assertTrue(mscx.contains("<metaTag name=\"workTitle\">CLI MusicXML to MuseScore</metaTag>"));
+            assertTrue(mscx.contains("<Chord>"));
+            assertTrue(mscx.contains("<pitch>60</pitch>"));
             assertEquals("", errBytes.toString("UTF-8"));
         } finally {
             Files.deleteIfExists(output);
@@ -550,6 +754,27 @@ public class MikuscoreCliTest {
     }
 
     @Test
+    public void stateSummarizeDecodesMxlInputFile() throws Exception {
+        Path input = Files.createTempFile("miku-score-state", ".mxl");
+        try {
+            Files.write(input, MxlIo.makeMxlBytes(MusicXmlStateTest.sampleMusicXml("CLI MXL summary")));
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+            int exitCode = MikuscoreCli.run(new String[] { "state", "summarize", "--in", input.toString() },
+                    new ByteArrayInputStream(new byte[0]),
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            assertEquals(0, exitCode);
+            assertTrue(outBytes.toString("UTF-8").contains("\"title\": \"CLI MXL summary\""));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(input);
+        }
+    }
+
+    @Test
     public void stateInspectMeasureReadsStdinAndWritesJson() throws Exception {
         ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
@@ -583,7 +808,7 @@ public class MikuscoreCliTest {
 
         assertEquals(2, exitCode);
         assertEquals("", outBytes.toString("UTF-8"));
-        assertTrue(errBytes.toString("UTF-8").contains("Missing required option: --measure"));
+        assertTrue(errBytes.toString("UTF-8").contains("state inspect-measure requires --measure <number>."));
     }
 
     @Test
@@ -616,6 +841,21 @@ public class MikuscoreCliTest {
     }
 
     @Test
+    public void stateDiffRequiresBothFileOptions() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "state", "diff" },
+                new ByteArrayInputStream(new byte[0]),
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(2, exitCode);
+        assertEquals("", outBytes.toString("UTF-8"));
+        assertEquals("state diff requires both --before <file> and --after <file>.\n", errBytes.toString("UTF-8"));
+    }
+
+    @Test
     public void stateValidateCommandReadsStdinAndWritesJson() throws Exception {
         ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
@@ -634,6 +874,80 @@ public class MikuscoreCliTest {
         assertTrue(out.contains("\"ok\": true"));
         assertTrue(out.contains("\"changed_node_ids\": [\"n1\"]"));
         assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void stateValidateCommandAcceptsPinnedDirectNodeIdTargeting() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                MusicXmlStateTest.sampleMusicXml("CLI validate direct id").getBytes(StandardCharsets.UTF_8));
+        String command = "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"1\","
+                + "\"pitch\":{\"step\":\"G\",\"octave\":4}}";
+
+        int exitCode = MikuscoreCli.run(new String[] { "state", "validate-command", "--command", command },
+                inBytes, new PrintStream(outBytes, true, "UTF-8"), new PrintStream(errBytes, true, "UTF-8"));
+
+        String out = outBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(out.contains("\"kind\": \"musicxml_command_validation\""));
+        assertTrue(out.contains("\"ok\": true"));
+        assertTrue(out.contains("\"changed_node_ids\": [\"n1\"]"));
+        assertTrue(out.contains("\"affected_measure_numbers\": [\"1\"]"));
+        assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void stateValidateCommandReportsPinnedSelectorResolutionFailures() throws Exception {
+        String source = MusicXmlStateTest.sampleMusicXml("CLI selector failures");
+        String unresolved = "{\"type\":\"change_to_pitch\",\"selector\":{\"part_id\":\"P1\","
+                + "\"measure_number\":\"99\",\"measure_note_index\":1},\"pitch\":{\"step\":\"G\",\"octave\":4}}";
+        String ambiguous = "{\"type\":\"change_to_pitch\",\"selector\":{\"part_id\":\"P1\","
+                + "\"measure_number\":\"1\"},\"pitch\":{\"step\":\"G\",\"octave\":4}}";
+        String invalid = "{\"type\":\"change_to_pitch\",\"selector\":\"n1\","
+                + "\"pitch\":{\"step\":\"G\",\"octave\":4}}";
+
+        ByteArrayOutputStream unresolvedErr = new ByteArrayOutputStream();
+        int unresolvedExit = MikuscoreCli.run(
+                new String[] { "state", "validate-command", "--command", unresolved },
+                new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8)),
+                new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"),
+                new PrintStream(unresolvedErr, true, "UTF-8"));
+        assertEquals(1, unresolvedExit);
+        assertTrue(unresolvedErr.toString("UTF-8").contains("Failed to resolve CLI command selector"));
+
+        ByteArrayOutputStream ambiguousErr = new ByteArrayOutputStream();
+        int ambiguousExit = MikuscoreCli.run(
+                new String[] { "state", "validate-command", "--command", ambiguous },
+                new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8)),
+                new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"),
+                new PrintStream(ambiguousErr, true, "UTF-8"));
+        assertEquals(1, ambiguousExit);
+        assertTrue(ambiguousErr.toString("UTF-8").contains("matched multiple notes"));
+
+        ByteArrayOutputStream invalidErr = new ByteArrayOutputStream();
+        int invalidExit = MikuscoreCli.run(
+                new String[] { "state", "validate-command", "--command", invalid },
+                new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8)),
+                new PrintStream(new ByteArrayOutputStream(), true, "UTF-8"),
+                new PrintStream(invalidErr, true, "UTF-8"));
+        assertEquals(1, invalidExit);
+        assertTrue(invalidErr.toString("UTF-8").contains("selector must be an object"));
+    }
+
+    @Test
+    public void stateValidateCommandRequiresExactlyOneCommandPayload() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(new String[] { "state", "validate-command" },
+                new ByteArrayInputStream(MusicXmlStateTest.sampleMusicXml("CLI missing command")
+                        .getBytes(StandardCharsets.UTF_8)),
+                new PrintStream(outBytes, true, "UTF-8"), new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(2, exitCode);
+        assertEquals("", outBytes.toString("UTF-8"));
+        assertTrue(errBytes.toString("UTF-8").contains("requires exactly one of --command"));
     }
 
     @Test
@@ -850,6 +1164,28 @@ public class MikuscoreCliTest {
     }
 
     @Test
+    public void stateApplyCommandReportsSuccessfulUnderfullWarningInJsonDiagnostics() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                MusicXmlStateTest.sampleUnderfullInsertMusicXml("CLI timing warning").getBytes(StandardCharsets.UTF_8));
+        String command = "{\"type\":\"insert_note_after\",\"anchorNodeId\":\"n1\",\"voice\":\"1\",\"note\":{\"duration\":1,\"pitch\":{\"step\":\"A\",\"octave\":4}}}";
+
+        int exitCode = MikuscoreCli.run(new String[] { "state", "apply-command", "--command", command,
+                "--diagnostics", "json" }, inBytes, new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        String diagnostics = errBytes.toString("UTF-8");
+        assertEquals(0, exitCode);
+        assertTrue(outBytes.toString("UTF-8").contains("<step>A</step>"));
+        assertTrue(diagnostics.contains("\"ok\": true"));
+        assertTrue(diagnostics.contains("\"status\": \"warning\""));
+        assertTrue(diagnostics.contains("\"warning_count\": 1"));
+        assertTrue(diagnostics.contains("Projected occupied time"));
+        assertTrue(diagnostics.contains("\"errors\": []"));
+    }
+
+    @Test
     public void stateValidateCommandAcceptsUiNoop() throws Exception {
         ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
@@ -887,5 +1223,71 @@ public class MikuscoreCliTest {
         assertEquals(0, exitCode);
         assertEquals(xml, outBytes.toString("UTF-8"));
         assertEquals("", errBytes.toString("UTF-8"));
+    }
+
+    @Test
+    public void stateValidateCommandReadsCommandFile() throws Exception {
+        Path commandFile = Files.createTempFile("miku-score-command", ".json");
+        try {
+            String command = "{\"type\":\"change_to_pitch\",\"targetNodeId\":\"n1\",\"voice\":\"1\",\"pitch\":{\"step\":\"G\",\"octave\":4}}";
+            Files.write(commandFile, command.getBytes(StandardCharsets.UTF_8));
+            ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+            ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+            ByteArrayInputStream inBytes = new ByteArrayInputStream(
+                    MusicXmlStateTest.sampleMusicXml("CLI command file").getBytes(StandardCharsets.UTF_8));
+
+            int exitCode = MikuscoreCli.run(
+                    new String[] { "state", "validate-command", "--command-file", commandFile.toString() },
+                    inBytes,
+                    new PrintStream(outBytes, true, "UTF-8"),
+                    new PrintStream(errBytes, true, "UTF-8"));
+
+            assertEquals(0, exitCode);
+            assertTrue(outBytes.toString("UTF-8").contains("\"kind\": \"musicxml_command_validation\""));
+            assertTrue(outBytes.toString("UTF-8").contains("\"ok\": true"));
+            assertEquals("", errBytes.toString("UTF-8"));
+        } finally {
+            Files.deleteIfExists(commandFile);
+        }
+    }
+
+    @Test
+    public void stateValidateCommandRejectsInvalidCommandJsonAsUsageError() throws Exception {
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(
+                new String[] { "state", "validate-command", "--command", "{broken", "--diagnostics", "json" },
+                new ByteArrayInputStream(MusicXmlStateTest.sampleMusicXml("CLI invalid command")
+                        .getBytes(StandardCharsets.UTF_8)),
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(2, exitCode);
+        assertEquals("", outBytes.toString("UTF-8"));
+        String diagnostics = errBytes.toString("UTF-8");
+        assertTrue(diagnostics.contains("\"error_type\": \"usage_error\""));
+        assertTrue(diagnostics.contains("\"error_code\": \"invalid_command_json\""));
+    }
+
+    @Test
+    public void stateValidateCommandReportsUnreadableCommandFileAsProcessingError() throws Exception {
+        Path commandFile = Files.createTempFile("miku-score-missing-command", ".json");
+        Files.deleteIfExists(commandFile);
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+
+        int exitCode = MikuscoreCli.run(
+                new String[] { "state", "validate-command", "--command-file", commandFile.toString(),
+                        "--diagnostics", "json" },
+                new ByteArrayInputStream(new byte[0]),
+                new PrintStream(outBytes, true, "UTF-8"),
+                new PrintStream(errBytes, true, "UTF-8"));
+
+        assertEquals(1, exitCode);
+        assertEquals("", outBytes.toString("UTF-8"));
+        String diagnostics = errBytes.toString("UTF-8");
+        assertTrue(diagnostics.contains("\"error_type\": \"processing_error\""));
+        assertTrue(diagnostics.contains("\"error_code\": \"processing_error\""));
     }
 }

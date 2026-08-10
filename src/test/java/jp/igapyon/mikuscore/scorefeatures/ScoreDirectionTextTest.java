@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
@@ -27,6 +28,8 @@ public class ScoreDirectionTextTest {
         assertEquals("120", ScoreDirectionText.formatTempoBpm(Integer.valueOf(120)));
         assertEquals("92.5", ScoreDirectionText.formatTempoBpm(Double.valueOf(92.5)));
         assertEquals("92.35", ScoreDirectionText.formatTempoBpm(Double.valueOf(92.345)));
+        assertEquals(Double.valueOf(1), ScoreDirectionText.normalizeTempoBpm(Boolean.TRUE));
+        assertEquals("16", ScoreDirectionText.formatTempoBpm("0x10"));
     }
 
     @Test
@@ -36,6 +39,14 @@ public class ScoreDirectionTextTest {
                 ScoreDirectionText.buildMusicXmlWordsDirectionXml(new DirectionWordsFeature(" Allegro & bright ",
                         "above", "italic", Double.valueOf(120.5), Double.valueOf(2.6), "1", Integer.valueOf(2))));
         assertEquals("", ScoreDirectionText.buildMusicXmlWordsDirectionXml(new DirectionWordsFeature(" ")));
+    }
+
+    @Test
+    public void wordsBuilderRetainsRawPresentationValuesAndJavaScriptNumericCoercion() {
+        assertEquals(
+                "<direction placement=\"sideways\"><direction-type><words font-style=\"bold\">dolce</words></direction-type><offset>2</offset><voice> </voice><sound tempo=\"96\"/></direction>",
+                ScoreDirectionText.buildMusicXmlWordsDirectionXml(new DirectionWordsFeature(" dolce ", "sideways",
+                        "bold", "0x60", "0x2", " ", null)));
     }
 
     @Test
@@ -60,6 +71,21 @@ public class ScoreDirectionTextTest {
         assertEquals(Double.valueOf(88.5), ScoreDirectionText.extractMusicXmlSoundTempoBpm(direction));
         assertEquals("above", ScoreDirectionText.extractMusicXmlDirectionPlacement(direction));
         assertEquals(Double.valueOf(72.0), ScoreDirectionText.extractMusicXmlSoundTempoBpm(parseElement("<sound tempo=\"72\"/>")));
+    }
+
+    @Test
+    public void extractionNormalizesFontStyleWithoutDefaultLocaleDrift() {
+        Locale original = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+            List<DirectionWord> words = ScoreDirectionText.extractMusicXmlDirectionWords(parseElement(
+                    "<direction><direction-type><words font-style=\"ITALIC\">dolce</words></direction-type></direction>"));
+
+            assertEquals(1, words.size());
+            assertEquals("italic", words.get(0).getFontStyle());
+        } finally {
+            Locale.setDefault(original);
+        }
     }
 
     private static Element parseElement(String xml) {

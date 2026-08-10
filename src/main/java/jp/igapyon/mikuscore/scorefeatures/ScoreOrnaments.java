@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import org.w3c.dom.Element;
@@ -22,7 +23,7 @@ public final class ScoreOrnaments {
     }
 
     public static String normalizeOrnamentKind(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return ORNAMENT_KIND_SET.contains(normalized) ? normalized : null;
     }
 
@@ -61,27 +62,24 @@ public final class ScoreOrnaments {
             return;
         }
         if ("tremolo".equals(feature.getKind())) {
-            String type = normalizeTremoloType(feature.getTremoloType());
+            String type = feature.getTremoloType();
             int marks = normalizeTremoloMarks(feature.getMarks(), 1);
             String key = "tremolo:" + (type == null ? "" : type) + ":" + marks;
             if (!seen.add(key)) {
                 return;
             }
-            String typeAttr = type == null ? "" : " type=\"" + type + "\"";
+            String typeAttr = type == null || type.length() == 0 ? "" : " type=\"" + type + "\"";
             xml.append("<tremolo").append(typeAttr).append(">").append(marks).append("</tremolo>");
             return;
         }
-        String kind = normalizeOrnamentKind(feature.getKind());
-        if (kind == null) {
-            return;
-        }
+        String kind = feature.getKind();
         boolean slash = ("turn".equals(kind) || "inverted-turn".equals(kind)) && feature.isSlash();
         String slashAttr = slash ? " slash=\"yes\"" : "";
-        String key = kind + ":" + slash;
+        String key = kind + ":" + slashAttr;
         if (!seen.add(key)) {
             return;
         }
-        xml.append("<").append(kind).append(slashAttr).append("/>");
+        xml.append("<").append(xmlEscape(kind)).append(slashAttr).append("/>");
     }
 
     private static void collectDirectOrnamentFeatures(Element notations, LinkedHashSet<String> seen,
@@ -101,7 +99,7 @@ public final class ScoreOrnaments {
                 continue;
             }
             Element element = (Element) child;
-            String tag = element.getTagName().toLowerCase();
+            String tag = element.getTagName().toLowerCase(Locale.ROOT);
             if ("tremolo".equals(tag)) {
                 String type = normalizeTremoloType(element.getAttribute("type"));
                 Integer marks = normalizeTremoloMarksOrNull(element.getTextContent());
@@ -116,7 +114,7 @@ public final class ScoreOrnaments {
                 continue;
             }
             boolean slash = ("turn".equals(kind) || "inverted-turn".equals(kind))
-                    && "yes".equals(element.getAttribute("slash").trim().toLowerCase());
+                    && "yes".equals(element.getAttribute("slash").trim().toLowerCase(Locale.ROOT));
             String key = kind + ":" + slash;
             if (seen.add(key)) {
                 out.add(new OrnamentFeature(kind, slash, null, null));
@@ -125,7 +123,7 @@ public final class ScoreOrnaments {
     }
 
     private static String normalizeTremoloType(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return "single".equals(normalized) || "start".equals(normalized) || "stop".equals(normalized) ? normalized
                 : null;
     }
@@ -147,18 +145,46 @@ public final class ScoreOrnaments {
         if (value == null) {
             return Double.NaN;
         }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue() ? 1 : 0;
+        }
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
         String text = String.valueOf(value).trim();
         if (text.length() == 0) {
-            return Double.NaN;
+            return 0;
+        }
+        if (text.startsWith("0x") || text.startsWith("0X")) {
+            return parseRadixNumber(text.substring(2), 16);
+        }
+        if (text.startsWith("0b") || text.startsWith("0B")) {
+            return parseRadixNumber(text.substring(2), 2);
+        }
+        if (text.startsWith("0o") || text.startsWith("0O")) {
+            return parseRadixNumber(text.substring(2), 8);
         }
         try {
             return Double.parseDouble(text);
         } catch (NumberFormatException ex) {
             return Double.NaN;
         }
+    }
+
+    private static double parseRadixNumber(String digits, int radix) {
+        if (digits.isEmpty()) {
+            return Double.NaN;
+        }
+        try {
+            return Long.parseLong(digits, radix);
+        } catch (NumberFormatException ex) {
+            return Double.NaN;
+        }
+    }
+
+    private static String xmlEscape(String value) {
+        return String.valueOf(value == null ? "" : value).replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     public static final class OrnamentFeature {
