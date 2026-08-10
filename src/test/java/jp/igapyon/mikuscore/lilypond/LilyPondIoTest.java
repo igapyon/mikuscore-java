@@ -1808,6 +1808,78 @@ public class LilyPondIoTest {
         assertEquals("4", doc.getElementsByTagName("line").item(0).getTextContent().trim());
     }
 
+    @Test
+    public void honorsPublicLilyPondSourceMetadataAndPrettyPrintOptions() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\score { \\new Staff = \"P1\" { c'4 d'4 e'4 f'4 } }";
+
+        String defaultXml = LilyPondIo.convertLilyPondToMusicXml(lily);
+        assertEquals(true, defaultXml.contains("mks:src:lilypond:raw-encoding"));
+        assertEquals(false, defaultXml.contains("mks:src:abc:raw-encoding"));
+
+        String compactXml = LilyPondIo.convertLilyPondToMusicXml(lily,
+                new LilyPondIo.LilyPondImportOptions(null, Boolean.FALSE, Boolean.FALSE));
+        assertEquals(false, compactXml.contains("mks:src:lilypond:raw-encoding"));
+        assertEquals(false, compactXml.contains("\n"));
+    }
+
+    @Test
+    public void writesLilyPondImportWarningsUsingThePublicDiagnosticCode() {
+        String lily = "\\version \"2.24.0\"\n"
+                + "\\time 4/4\n"
+                + "\\key c \\major\n"
+                + "\\score { \\new Staff = \"P1\" { c1 c1 } }";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily,
+                new LilyPondIo.LilyPondImportOptions(Boolean.TRUE, null, Boolean.FALSE)));
+
+        assertEquals("1", directChildWithAttribute(
+                (Element) doc.getElementsByTagName("miscellaneous").item(0), "miscellaneous-field", "name",
+                "mks:diag:count").getTextContent().trim());
+        assertEquals(true, directChildWithAttribute(
+                (Element) doc.getElementsByTagName("miscellaneous").item(0), "miscellaneous-field", "name",
+                "mks:diag:0001").getTextContent().contains("code=LILYPOND_IMPORT_WARNING"));
+    }
+
+    @Test
+    public void autoSplitsWideRangeExplicitStaffWithoutClefUsingSharedPolicy() {
+        String lily = "\\version \"2.24.4\"\n"
+                + "\\score { \\new Staff = \"P1\" { c,4 g'4 c,4 g'4 } }";
+
+        Document doc = MusicXmlIo.parseMusicXmlDocument(LilyPondIo.convertLilyPondToMusicXml(lily));
+
+        List<Element> parts = directChildren(doc.getDocumentElement(), "part");
+        assertEquals(2, parts.size());
+        assertEquals("G", ((Element) parts.get(0).getElementsByTagName("sign").item(0)).getTextContent().trim());
+        assertEquals("F", ((Element) parts.get(1).getElementsByTagName("sign").item(0)).getTextContent().trim());
+        assertEquals(true, parts.get(0).getElementsByTagName("pitch").getLength() > 0);
+        assertEquals(true, parts.get(1).getElementsByTagName("pitch").getLength() > 0);
+    }
+
+    @Test
+    public void rejectsLilyPondWithoutParseableNotesUsingPublicFacadeMessage() {
+        IllegalArgumentException ex = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                new org.junit.jupiter.api.function.Executable() {
+                    public void execute() {
+                        LilyPondIo.convertLilyPondToMusicXml("\\version \"2.24.0\"");
+                    }
+                });
+
+        assertEquals("No parseable notes/rests were found in LilyPond source.", ex.getMessage());
+    }
+
+    @Test
+    public void rejectsMultipleEmptyStaffBodiesUsingTheSamePublicMessage() {
+        IllegalArgumentException ex = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                new org.junit.jupiter.api.function.Executable() {
+                    public void execute() {
+                        LilyPondIo.convertLilyPondToMusicXml("\\score { \\new Staff { \\clef bass } \\new Staff { \\clef treble } }");
+                    }
+                });
+
+        assertEquals("No parseable notes/rests were found in LilyPond source.", ex.getMessage());
+    }
+
     private static void assertLilyDuration(int duration, int dots, LilyPondIo.LilyDuration actual) {
         assertEquals(duration, actual.getDuration());
         assertEquals(dots, actual.getDots());

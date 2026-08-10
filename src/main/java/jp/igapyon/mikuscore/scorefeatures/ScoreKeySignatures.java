@@ -4,6 +4,8 @@
  */
 package jp.igapyon.mikuscore.scorefeatures;
 
+import java.util.Locale;
+
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
@@ -19,7 +21,7 @@ public final class ScoreKeySignatures {
         if (fifths == null) {
             return null;
         }
-        String mode = feature.getMode() == null ? "" : feature.getMode().trim().toLowerCase();
+        String mode = feature.getMode() == null ? "" : feature.getMode().trim().toLowerCase(Locale.ROOT);
         return new KeySignatureFeature(fifths, mode.length() == 0 ? null : mode);
     }
 
@@ -52,6 +54,9 @@ public final class ScoreKeySignatures {
         if (value == null) {
             return 0;
         }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue() ? 1 : 0;
+        }
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
@@ -59,8 +64,28 @@ public final class ScoreKeySignatures {
         if (text.isEmpty()) {
             return 0;
         }
+        if (text.startsWith("0x") || text.startsWith("0X")) {
+            return parseRadixNumber(text.substring(2), 16);
+        }
+        if (text.startsWith("0b") || text.startsWith("0B")) {
+            return parseRadixNumber(text.substring(2), 2);
+        }
+        if (text.startsWith("0o") || text.startsWith("0O")) {
+            return parseRadixNumber(text.substring(2), 8);
+        }
         try {
             return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return Double.NaN;
+        }
+    }
+
+    private static double parseRadixNumber(String digits, int radix) {
+        if (digits.isEmpty()) {
+            return Double.NaN;
+        }
+        try {
+            return Long.parseLong(digits, radix);
         } catch (NumberFormatException ex) {
             return Double.NaN;
         }

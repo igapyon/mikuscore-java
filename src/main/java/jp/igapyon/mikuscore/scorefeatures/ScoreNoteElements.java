@@ -5,6 +5,7 @@
 package jp.igapyon.mikuscore.scorefeatures;
 
 import java.util.List;
+import java.util.Locale;
 
 public final class ScoreNoteElements {
     private ScoreNoteElements() {
@@ -40,8 +41,12 @@ public final class ScoreNoteElements {
         return feature != null && feature.isSlash() ? "<grace slash=\"yes\"/>" : "<grace/>";
     }
 
+    public static String buildMusicXmlGraceXml() {
+        return buildMusicXmlGraceXml(null);
+    }
+
     public static String buildMusicXmlStemXml(Object value) {
-        String normalized = value == null ? "" : String.valueOf(value).trim().toLowerCase();
+        String normalized = value == null ? "" : String.valueOf(value).trim().toLowerCase(Locale.ROOT);
         return "up".equals(normalized) || "down".equals(normalized) ? "<stem>" + normalized + "</stem>" : "";
     }
 
@@ -102,12 +107,38 @@ public final class ScoreNoteElements {
     }
 
     private static Double parseFiniteNumber(Object value) {
+        if (value instanceof Boolean) {
+            return Double.valueOf(((Boolean) value).booleanValue() ? 1 : 0);
+        }
         try {
-            double n = value instanceof Number ? ((Number) value).doubleValue()
-                    : Double.parseDouble(String.valueOf(value).trim());
+            double n = value instanceof Number ? ((Number) value).doubleValue() : parseJavaScriptNumber(String.valueOf(value).trim());
             return Double.isNaN(n) || Double.isInfinite(n) ? null : Double.valueOf(n);
         } catch (RuntimeException ex) {
             return null;
+        }
+    }
+
+    private static double parseJavaScriptNumber(String text) {
+        if (text.startsWith("0x") || text.startsWith("0X")) {
+            return parseRadixNumber(text.substring(2), 16);
+        }
+        if (text.startsWith("0b") || text.startsWith("0B")) {
+            return parseRadixNumber(text.substring(2), 2);
+        }
+        if (text.startsWith("0o") || text.startsWith("0O")) {
+            return parseRadixNumber(text.substring(2), 8);
+        }
+        return Double.parseDouble(text);
+    }
+
+    private static double parseRadixNumber(String digits, int radix) {
+        if (digits.isEmpty()) {
+            return Double.NaN;
+        }
+        try {
+            return Long.parseLong(digits, radix);
+        } catch (NumberFormatException ex) {
+            return Double.NaN;
         }
     }
 

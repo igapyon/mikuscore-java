@@ -29,6 +29,18 @@ public class ScoreClefsTest {
     }
 
     @Test
+    public void normalizesJavaScriptBooleanAndRadixNumberInputs() {
+        ClefFeature booleanLine = ScoreClefs.normalizeClefFeature(new ClefFeature("G", Boolean.TRUE));
+        ClefFeature hexadecimalLine = ScoreClefs.normalizeClefFeature(new ClefFeature("F", "0x10"));
+
+        assertNotNull(booleanLine);
+        assertEquals(Integer.valueOf(1), booleanLine.getLine());
+        assertNotNull(hexadecimalLine);
+        assertEquals(Integer.valueOf(16), hexadecimalLine.getLine());
+        assertNull(ScoreClefs.normalizeClefFeature(new ClefFeature("C", Boolean.FALSE)));
+    }
+
+    @Test
     public void buildsMusicXmlClefFeatures() {
         assertEquals("<clef number=\"2\"><sign>F</sign><line>4</line></clef>",
                 ScoreClefs.buildMusicXmlClefXml(new ClefFeature("F", Integer.valueOf(4), Integer.valueOf(2))));

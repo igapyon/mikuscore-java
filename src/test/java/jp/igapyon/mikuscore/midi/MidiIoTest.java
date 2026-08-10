@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -49,6 +50,36 @@ public class MidiIoTest {
         assertEquals(24, MidiIo.instrumentByPreset("acoustic_guitar_nylon"));
         assertEquals(62, MidiIo.instrumentByPreset("synth_brass_1"));
         assertEquals(5, MidiIo.instrumentByPreset("unknown"));
+    }
+
+    @Test
+    public void resolvesPinnedMidiExportProfilesAndPlaybackBuildModes() {
+        MidiIo.MidiExportRuntimeOptions safe = MidiIo.resolveMidiExportRuntimeOptions("unknown", -1d);
+        assertEquals("safe", safe.getProfile());
+        assertEquals(480, safe.getTicksPerQuarter());
+        assertFalse(safe.isNormalizeForParity());
+        assertEquals("safe_midi", safe.getEventBuildPolicy());
+        assertFalse(safe.isIncludeGraceInPlaybackLikeMode());
+        assertFalse(safe.isIncludeOrnamentInPlaybackLikeMode());
+        assertFalse(safe.isIncludeTieInPlaybackLikeMode());
+        assertFalse(safe.isRawWriter());
+        assertEquals("midi", MidiIo.resolvePlaybackBuildModeForMidiExport(safe.getEventBuildPolicy()));
+
+        MidiIo.MidiExportRuntimeOptions parity = MidiIo.resolveMidiExportRuntimeOptions("musescore_parity", 960d);
+        assertEquals("musescore_parity", parity.getProfile());
+        assertEquals(480, parity.getTicksPerQuarter());
+        assertTrue(parity.isNormalizeForParity());
+        assertEquals("musescore_parity_tuned", parity.getEventBuildPolicy());
+        assertTrue(parity.isIncludeGraceInPlaybackLikeMode());
+        assertTrue(parity.isIncludeOrnamentInPlaybackLikeMode());
+        assertTrue(parity.isIncludeTieInPlaybackLikeMode());
+        assertTrue(parity.isRawWriter());
+        assertEquals("off_before_on", parity.getRawRetriggerPolicy());
+        assertEquals("playback", MidiIo.resolvePlaybackBuildModeForMidiExport(parity.getEventBuildPolicy()));
+
+        assertEquals("safe", MidiIo.normalizeMidiExportProfile(Boolean.TRUE));
+        assertEquals("musescore_parity", MidiIo.normalizeMidiExportProfile("musescore_parity"));
+        assertEquals(241, MidiIo.resolveMidiExportRuntimeOptions("safe", 240.5d).getTicksPerQuarter());
     }
 
     @Test
@@ -558,6 +589,42 @@ public class MidiIoTest {
         assertTrue(keptMidis.contains(Integer.valueOf(100)));
         assertFalse(keptMidis.contains(Integer.valueOf(36)));
         assertFalse(keptMidis.contains(Integer.valueOf(48)));
+    }
+
+    @Test
+    public void buildsPinnedPlaybackMeasureTimelineWithCrossPartPickupDetection() {
+        String xml = "<score-partwise version=\"4.0\"><part-list>"
+                + "<score-part id=\"P1\"><part-name>P1</part-name></score-part>"
+                + "<score-part id=\"P2\"><part-name>P2</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"0\"><attributes><divisions>4</divisions>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure><measure number=\"1\">"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>16</duration>"
+                + "<voice>1</voice><type>whole</type></note></measure></part>"
+                + "<part id=\"P2\"><measure number=\"0\"><attributes><divisions>4</divisions>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration>"
+                + "<voice>1</voice><type>quarter</type></note></measure><measure number=\"1\">"
+                + "<note><pitch><step>F</step><octave>4</octave></pitch><duration>16</duration>"
+                + "<voice>1</voice><type>whole</type></note></measure></part></score-partwise>";
+
+        List<MidiIo.PlaybackMeasureTimelineRange> timeline = MidiIo.buildMeasureTimelineForPart(
+                MusicXmlIo.parseMusicXmlDocument(xml), " P1 ", 480);
+
+        assertEquals(2, timeline.size());
+        assertEquals(0, timeline.get(0).getStartTick());
+        assertEquals(480, timeline.get(0).getEndTick());
+        assertEquals(480, timeline.get(1).getStartTick());
+        assertEquals("P1", timeline.get(1).getPartId());
+        assertEquals("1", timeline.get(1).getMeasureNumber());
+        assertTrue(MidiIo.buildMeasureTimelineForPart(MusicXmlIo.parseMusicXmlDocument(xml), "missing", 480)
+                .isEmpty());
+
+        List<MidiIo.PlaybackMeasureTimelineRange> zeroFallback = MidiIo.buildMeasureTimelineForPart(
+                MusicXmlIo.parseMusicXmlDocument(xml), "P1", 0);
+        assertEquals(1, zeroFallback.get(0).getEndTick());
+        assertEquals(1, zeroFallback.get(1).getStartTick());
     }
 
     @Test
@@ -1307,6 +1374,56 @@ public class MidiIoTest {
     }
 
     @Test
+    public void keepsPracticalNoteTimingAndPitchCloseForMoonlightGoldenFragment() {
+        Document source = parseMusicXmlFixture("abc-roundtrip/roundtrip_moonlight_m13_m16_like.musicxml");
+        Document roundtripped = roundtripMusicXmlFixtureThroughMidi(source);
+
+        List<MidiGoldenNote> sourceNotes = collectMidiGoldenNotes(source);
+        List<MidiGoldenNote> roundtrippedNotes = collectMidiGoldenNotes(roundtripped);
+        assertFalse(sourceNotes.isEmpty());
+        assertFalse(roundtrippedNotes.isEmpty());
+        assertTrue(practicalMidiGoldenDiffCount(sourceNotes, roundtrippedNotes) <= 90);
+    }
+
+    /**
+     * Redistributable equivalent of the upstream local-only Moonlight
+     * MusicXML/MIDI spot check. It retains the practical three-grid import
+     * contract without relying on the unavailable local source pair.
+     */
+    @Test
+    public void keepsCompactMoonlightEquivalentPracticalAcrossAllPinnedQuantizationGrids() {
+        Document source = parseMusicXmlFixture("abc-roundtrip/roundtrip_moonlight_m13_m16_like.musicxml");
+        List<MidiGoldenNote> sourceNotes = collectMidiGoldenNotes(source);
+        assertFalse(sourceNotes.isEmpty());
+
+        for (String quantization : Arrays.asList("1/8", "1/16", "1/32")) {
+            Document roundTripped = roundtripMusicXmlFixtureThroughMidi(source, quantization);
+            List<MidiGoldenNote> targetNotes = collectMidiGoldenNotes(roundTripped);
+            assertFalse(targetNotes.isEmpty(), quantization);
+            assertTrue(onsetPitchDurationRatioMidiGoldenDiffCount(sourceNotes, targetNotes, 0.5d, 2d) <= 220,
+                    quantization);
+        }
+    }
+
+    @Test
+    public void keepsOnsetAndPitchCloseForTripletGoldenFragmentWithDurationRatioTolerance() {
+        Document source = parseMusicXmlFixture("abc-roundtrip/roundtrip_triplet_m1_m4_like.musicxml");
+        Document roundtripped = roundtripMusicXmlFixtureThroughMidi(source);
+
+        List<MidiGoldenNote> sourceNotes = collectMidiGoldenNotes(source);
+        List<MidiGoldenNote> roundtrippedNotes = collectMidiGoldenNotes(roundtripped);
+        assertFalse(sourceNotes.isEmpty());
+        assertFalse(roundtrippedNotes.isEmpty());
+
+        int strictPractical = practicalMidiGoldenDiffCount(sourceNotes, roundtrippedNotes);
+        int ratioTolerant = onsetPitchDurationRatioMidiGoldenDiffCount(sourceNotes, roundtrippedNotes, 0.5d, 2d);
+        assertTrue(ratioTolerant <= strictPractical);
+        assertTrue(ratioTolerant <= 120,
+                "source=" + sourceNotes.size() + ", target=" + roundtrippedNotes.size()
+                        + ", strict=" + strictPractical + ", ratioTolerant=" + ratioTolerant);
+    }
+
+    @Test
     public void buildsMidiExportPlaybackTrackPlan() {
         Map<String, Integer> overrides = new LinkedHashMap<String, Integer>();
         overrides.put("p1", Integer.valueOf(40));
@@ -1412,6 +1529,42 @@ public class MidiIoTest {
         assertEquals("Lead", plan.getPlaybackTrackPlans().get(1).getTrackName());
         assertEquals(1, plan.getControlTrackPlans().size());
         assertEquals("p1::1", plan.getControlTrackPlans().get(0).getControlKey());
+    }
+
+    @Test
+    public void serializesWriterTrackPlanLikeBundledMidiWriterJs() {
+        List<MidiIo.RawMidiPlaybackEvent> events = Arrays.asList(
+                new MidiIo.RawMidiPlaybackEvent(64, 120, 120, 2, 70, "p2", "Lead"),
+                new MidiIo.RawMidiPlaybackEvent(60, 0, 120, 1, 80, "p1", "Piano"));
+        Map<String, Integer> overrides = new LinkedHashMap<String, Integer>();
+        overrides.put("p1", Integer.valueOf(40));
+        MidiIo.MidiExportWriterTrackPlan plan = MidiIo.buildMidiExportWriterTrackPlan("Meta",
+                Arrays.asList(MidiIo.buildTempoMetaEventData(0, 120)), false,
+                Collections.<String>emptyList(), Arrays.asList("title:Meta"),
+                MidiIo.buildMidiPlaybackTracksById(events), overrides, "electric_piano_2",
+                Arrays.asList(new MidiIo.RawMidiControlEvent("p1", "Piano", 0, 1, 64, 127)));
+
+        byte[] actual = MidiIo.buildMidiWriterCompatibleBytes(plan, 480);
+        // Generated directly with ../miku-score/src/js/midi-writer.js (MidiWriterJS 2.1.4)
+        // from the same four tracks and then with HEADER_CHUNK_DIVISION set to 480.
+        byte[] expected = Base64.getDecoder().decode(
+                "TVRoZAAAAAYAAQAEAeBNVHJrAAAAKQD/AwRNZXRhAP8EBE1ldGEA/1EDB6EgAP8BCnRpdGxlOk1ldGEA/y8ATVRyawAAACEA/wMFUGlhbm8A/wQFUGlhbm8AwCgAkDxmeIA8ZgD/LwBNVHJrAAAAHwD/AwRMZWFkAP8EBExlYWQAwQV4kUBZeIFAWQD/LwBNVHJrAAAAJgD/AwtQaWFubyBQZWRhbAD/BAtQaWFubyBQZWRhbACwQH8A/y8A");
+
+        assertArrayEquals(expected, actual);
+    }
+
+    @Test
+    public void clampsOnlyMidiWriterHeaderDivisionToBundledRuntimeLimit() {
+        MidiIo.MidiExportWriterTrackPlan plan = MidiIo.buildMidiExportWriterTrackPlan("Meta",
+                Collections.<byte[]>emptyList(), false, Collections.<String>emptyList(),
+                Collections.<String>emptyList(), MidiIo.buildMidiPlaybackTracksById(Arrays.asList(
+                        new MidiIo.RawMidiPlaybackEvent(60, 40000, 120, 1, 80, "p1", "Piano"))),
+                Collections.<String, Integer>emptyMap(), "electric_piano_2",
+                Collections.<MidiIo.RawMidiControlEvent>emptyList());
+
+        byte[] midi = MidiIo.buildMidiWriterCompatibleBytes(plan, 40000);
+
+        assertEquals(0x7fff, ((midi[12] & 0xff) << 8) | (midi[13] & 0xff));
     }
 
     @Test
@@ -3816,6 +3969,10 @@ public class MidiIoTest {
     }
 
     private static Document roundtripMusicXmlFixtureThroughMidi(Document source) {
+        return roundtripMusicXmlFixtureThroughMidi(source, "1/16");
+    }
+
+    private static Document roundtripMusicXmlFixtureThroughMidi(Document source, String quantization) {
         MidiIo.MidiPlaybackEventsResult playback = MidiIo.buildPlaybackEventsFromMusicXmlDoc(source, 128,
                 new MidiIo.MidiPlaybackExtractionOptions("midi"));
         assertEquals(true, playback.getEvents().size() > 0);
@@ -3826,14 +3983,209 @@ public class MidiIoTest {
                 MidiIo.collectMidiTempoEventsFromMusicXmlDoc(source, 128),
                 MidiIo.collectMidiTimeSignatureEventsFromMusicXmlDoc(source, 128),
                 MidiIo.collectMidiKeySignatureEventsFromMusicXmlDoc(source, 128),
-                true, true, true, 128, Collections.<String>emptyList(), false, "off_before_on",
+                false, true, true, 128, Collections.<String>emptyList(), false, "off_before_on",
                 "", "", "", 0);
-        MidiIo.MidiImportResult imported = MidiIo.convertMidiToMusicXml(exported.getRawBytes(),
-                new MidiIo.MidiImportOptions("1/16", null, null, null, null));
+        assertFalse(exported.isRawWriter());
+        MidiIo.MidiImportResult imported = MidiIo.convertMidiToMusicXml(
+                MidiIo.buildMidiWriterCompatibleBytes(exported.getWriterTrackPlan(), 480),
+                new MidiIo.MidiImportOptions(quantization, null, null, null, null));
         assertEquals(true, imported.isOk(), imported.getDiagnostics().toString());
         Document roundtripped = MusicXmlIo.parseMusicXmlDocument(imported.getXml());
         assertTrue(roundtripped != null);
         return roundtripped;
+    }
+
+    private static final class MidiGoldenNote {
+        private final int onsetAbs;
+        private final int duration;
+        private final String step;
+        private final String alter;
+        private final String octave;
+
+        private MidiGoldenNote(int onsetAbs, int duration, String step, String alter, String octave) {
+            this.onsetAbs = onsetAbs;
+            this.duration = duration;
+            this.step = step;
+            this.alter = alter;
+            this.octave = octave;
+        }
+
+        private String practicalKey() {
+            return onsetAbs + "|" + duration + "|" + step + "|" + alter + "|" + octave;
+        }
+
+        private String onsetPitchKey() {
+            return onsetAbs + "|" + step + "|" + alter + "|" + octave;
+        }
+    }
+
+    private static List<MidiGoldenNote> collectMidiGoldenNotes(Document document) {
+        List<MidiGoldenNote> notes = new ArrayList<MidiGoldenNote>();
+        Element part = firstElement(document, "part");
+        if (part == null) {
+            return notes;
+        }
+        int partOffset = 0;
+        for (int measureIndex = 0; measureIndex < part.getChildNodes().getLength(); measureIndex++) {
+            if (!(part.getChildNodes().item(measureIndex) instanceof Element)
+                    || !"measure".equals(((Element) part.getChildNodes().item(measureIndex)).getTagName())) {
+                continue;
+            }
+            Element measure = (Element) part.getChildNodes().item(measureIndex);
+            int cursor = 0;
+            int measureMax = 0;
+            for (int childIndex = 0; childIndex < measure.getChildNodes().getLength(); childIndex++) {
+                if (!(measure.getChildNodes().item(childIndex) instanceof Element)) {
+                    continue;
+                }
+                Element child = (Element) measure.getChildNodes().item(childIndex);
+                String tag = child.getTagName();
+                int duration = positiveRoundedChildDuration(child);
+                if ("backup".equals(tag)) {
+                    if (duration > 0) {
+                        cursor = Math.max(0, cursor - duration);
+                    }
+                    continue;
+                }
+                if ("forward".equals(tag)) {
+                    if (duration > 0) {
+                        cursor += duration;
+                        measureMax = Math.max(measureMax, cursor);
+                    }
+                    continue;
+                }
+                if (!"note".equals(tag)) {
+                    continue;
+                }
+                boolean chord = directChildElement(child, "chord") != null;
+                int onset = chord ? Math.max(0, cursor - duration) : cursor;
+                if (directChildElement(child, "rest") == null) {
+                    Element pitch = directChildElement(child, "pitch");
+                    String step = pitch == null ? "" : firstDirectChildText(pitch, "step");
+                    String octave = pitch == null ? "" : firstDirectChildText(pitch, "octave");
+                    if (step.length() > 0 && octave.length() > 0) {
+                        notes.add(new MidiGoldenNote(partOffset + onset, duration, step,
+                                pitch == null ? "" : firstDirectChildText(pitch, "alter"), octave));
+                    }
+                }
+                if (!chord && duration > 0) {
+                    cursor += duration;
+                    measureMax = Math.max(measureMax, cursor);
+                }
+            }
+            if (measureMax > 0) {
+                partOffset += measureMax;
+            }
+        }
+        return notes;
+    }
+
+    private static int practicalMidiGoldenDiffCount(List<MidiGoldenNote> source, List<MidiGoldenNote> target) {
+        Map<String, Integer> sourceCounts = midiGoldenCountsByKey(source, true);
+        Map<String, Integer> targetCounts = midiGoldenCountsByKey(target, true);
+        List<String> keys = new ArrayList<String>(sourceCounts.keySet());
+        for (String key : targetCounts.keySet()) {
+            if (!sourceCounts.containsKey(key)) {
+                keys.add(key);
+            }
+        }
+        int difference = 0;
+        for (String key : keys) {
+            difference += Math.abs(countForKey(sourceCounts, key) - countForKey(targetCounts, key));
+        }
+        return difference;
+    }
+
+    private static int onsetPitchDurationRatioMidiGoldenDiffCount(List<MidiGoldenNote> source,
+            List<MidiGoldenNote> target, double minRatio, double maxRatio) {
+        Map<String, List<Integer>> sourceBuckets = midiGoldenDurationBuckets(source);
+        Map<String, List<Integer>> targetBuckets = midiGoldenDurationBuckets(target);
+        List<String> keys = new ArrayList<String>(sourceBuckets.keySet());
+        for (String key : targetBuckets.keySet()) {
+            if (!sourceBuckets.containsKey(key)) {
+                keys.add(key);
+            }
+        }
+        int difference = 0;
+        for (String key : keys) {
+            List<Integer> sourceDurations = new ArrayList<Integer>(listForKey(sourceBuckets, key));
+            List<Integer> targetDurations = new ArrayList<Integer>(listForKey(targetBuckets, key));
+            Collections.sort(sourceDurations);
+            Collections.sort(targetDurations);
+            boolean[] used = new boolean[targetDurations.size()];
+            for (Integer sourceDuration : sourceDurations) {
+                boolean matched = false;
+                for (int index = 0; index < targetDurations.size(); index++) {
+                    if (used[index]) {
+                        continue;
+                    }
+                    double ratio = sourceDuration.intValue() > 0
+                            ? targetDurations.get(index).doubleValue() / sourceDuration.doubleValue()
+                            : Double.POSITIVE_INFINITY;
+                    if (ratio >= minRatio && ratio <= maxRatio) {
+                        used[index] = true;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    difference++;
+                }
+            }
+            for (boolean matched : used) {
+                if (!matched) {
+                    difference++;
+                }
+            }
+        }
+        return difference;
+    }
+
+    private static Map<String, Integer> midiGoldenCountsByKey(List<MidiGoldenNote> notes, boolean practical) {
+        Map<String, Integer> counts = new LinkedHashMap<String, Integer>();
+        for (MidiGoldenNote note : notes) {
+            String key = practical ? note.practicalKey() : note.onsetPitchKey();
+            counts.put(key, Integer.valueOf(countForKey(counts, key) + 1));
+        }
+        return counts;
+    }
+
+    private static Map<String, List<Integer>> midiGoldenDurationBuckets(List<MidiGoldenNote> notes) {
+        Map<String, List<Integer>> buckets = new LinkedHashMap<String, List<Integer>>();
+        for (MidiGoldenNote note : notes) {
+            List<Integer> durations = buckets.get(note.onsetPitchKey());
+            if (durations == null) {
+                durations = new ArrayList<Integer>();
+                buckets.put(note.onsetPitchKey(), durations);
+            }
+            durations.add(Integer.valueOf(note.duration));
+        }
+        return buckets;
+    }
+
+    private static int countForKey(Map<String, Integer> counts, String key) {
+        Integer value = counts.get(key);
+        return value == null ? 0 : value.intValue();
+    }
+
+    private static List<Integer> listForKey(Map<String, List<Integer>> buckets, String key) {
+        List<Integer> values = buckets.get(key);
+        return values == null ? Collections.<Integer>emptyList() : values;
+    }
+
+    private static Element directChildElement(Element parent, String name) {
+        for (int index = 0; index < parent.getChildNodes().getLength(); index++) {
+            if (parent.getChildNodes().item(index) instanceof Element
+                    && name.equals(((Element) parent.getChildNodes().item(index)).getTagName())) {
+                return (Element) parent.getChildNodes().item(index);
+            }
+        }
+        return null;
+    }
+
+    private static int positiveRoundedChildDuration(Element parent) {
+        Integer duration = roundedPositiveInteger(firstDirectChildText(parent, "duration"));
+        return duration == null ? 0 : duration.intValue();
     }
 
     private static Document parseMusicXmlFixture(String name) {

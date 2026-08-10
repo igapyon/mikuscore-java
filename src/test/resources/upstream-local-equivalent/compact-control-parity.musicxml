@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Original, compact fixture for the upstream local-only Mozart/Paganini/Moonlight
+  semantic checks. It intentionally contains only the observable constructs used
+  by those checks and has no dependency on their unavailable source assets.
+-->
+<score-partwise version="4.0">
+  <work><work-title>Local-equivalent control parity</work-title></work>
+  <part-list>
+    <score-part id="P1"><part-name>Control Piano</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="0" implicit="yes">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="138">
+      <direction><direction-type><dynamics><mf/></dynamics></direction-type></direction>
+      <direction><direction-type><segno/></direction-type></direction>
+      <direction><direction-type><words>Tema</words></direction-type></direction>
+      <direction><direction-type><words font-style="italic">sempre legato</words></direction-type></direction>
+      <direction><direction-type><words>Fine</words></direction-type><sound dalsegno="segno" tocoda="coda" fine="fine"/></direction>
+      <direction placement="above"><direction-type><octave-shift type="up" size="8" number="1"/></direction-type></direction>
+      <note><pitch><step>D</step><octave>7</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type><notations><technical><stopped/></technical><ornaments><trill-mark/><wavy-line type="start" number="1"/></ornaments></notations></note>
+      <note><rest/><duration>120</duration><voice>1</voice><type>16th</type></note>
+    </measure>
+    <measure number="140">
+      <direction><direction-type><coda/></direction-type></direction>
+      <direction placement="above"><direction-type><octave-shift type="stop" size="8" number="1"/></direction-type></direction>
+      <note><pitch><step>C</step><octave>7</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type><notations><ornaments><wavy-line type="stop" number="1"/></ornaments></notations></note>
+      <note><rest/><duration>120</duration><voice>1</voice><type>16th</type></note>
+    </measure>
+    <measure number="153">
+      <note><pitch><step>C</step><alter>1</alter><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>eighth</type><accidental>sharp</accidental></note>
+    </measure>
+  </part>
+</score-partwise>

@@ -7,6 +7,7 @@ package jp.igapyon.mikuscore.scorefeatures;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -17,33 +18,25 @@ public final class ScoreBarlines {
 
     public static String buildMusicXmlBarlineXml(BarlineFeature feature) {
         BarlineFeature safe = feature == null ? new BarlineFeature() : feature;
-        String location = normalizeLocation(safe.getLocation());
         StringBuilder xml = new StringBuilder();
         StringBuilder parts = new StringBuilder();
         if (safe.getBarStyle() != null && safe.getBarStyle().length() > 0) {
             parts.append("<bar-style>").append(xmlEscape(safe.getBarStyle())).append("</bar-style>");
         }
         for (String repeat : safe.getRepeats()) {
-            String direction = normalizeRepeatDirection(repeat);
-            if (direction != null) {
-                parts.append("<repeat direction=\"").append(direction).append("\"/>");
-            }
+            parts.append("<repeat direction=\"").append(String.valueOf(repeat)).append("\"/>");
         }
         EndingFeature ending = safe.getEnding();
         if (ending != null) {
-            String endingType = normalizeEndingType(ending.getType());
-            String number = ending.getNumber();
-            if (endingType != null && number != null && number.trim().length() > 0) {
-                parts.append("<ending number=\"").append(xmlEscape(number.trim())).append("\" type=\"")
-                        .append(endingType).append("\"/>");
-            }
+            parts.append("<ending number=\"").append(xmlEscape(ending.getNumber())).append("\" type=\"")
+                    .append(String.valueOf(ending.getType())).append("\"/>");
         }
         if (parts.length() == 0) {
             return "";
         }
         xml.append("<barline");
-        if (location != null) {
-            xml.append(" location=\"").append(location).append("\"");
+        if (safe.getLocation() != null && safe.getLocation().length() > 0) {
+            xml.append(" location=\"").append(safe.getLocation()).append("\"");
         }
         xml.append(">").append(parts).append("</barline>");
         return xml.toString();
@@ -55,12 +48,15 @@ public final class ScoreBarlines {
             return feature;
         }
         feature.setLocation(normalizeLocation(barline.getAttribute("location")));
+        boolean sawBarStyle = false;
+        Element endingNode = null;
         for (Node child = barline.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (!(child instanceof Element)) {
                 continue;
             }
             Element element = (Element) child;
-            if ("bar-style".equals(element.getTagName())) {
+            if ("bar-style".equals(element.getTagName()) && !sawBarStyle) {
+                sawBarStyle = true;
                 String text = element.getTextContent() == null ? "" : element.getTextContent().trim();
                 if (text.length() > 0) {
                     feature.setBarStyle(text);
@@ -70,30 +66,34 @@ public final class ScoreBarlines {
                 if (direction != null) {
                     feature.addRepeat(direction);
                 }
-            } else if ("ending".equals(element.getTagName())) {
-                String type = normalizeEndingType(element.getAttribute("type"));
-                String number = element.getAttribute("number") == null ? "" : element.getAttribute("number").trim();
-                if (type != null && number.length() > 0) {
-                    feature.setEnding(new EndingFeature(number, type));
-                }
+            } else if ("ending".equals(element.getTagName()) && endingNode == null
+                    && element.hasAttribute("type")) {
+                endingNode = element;
+            }
+        }
+        if (endingNode != null) {
+            String type = normalizeEndingType(endingNode.getAttribute("type"));
+            String number = endingNode.getAttribute("number").trim();
+            if (type != null && number.length() > 0) {
+                feature.setEnding(new EndingFeature(number, type));
             }
         }
         return feature;
     }
 
     private static String normalizeLocation(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return "left".equals(normalized) || "right".equals(normalized) || "middle".equals(normalized) ? normalized
                 : null;
     }
 
     private static String normalizeRepeatDirection(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return "forward".equals(normalized) || "backward".equals(normalized) ? normalized : null;
     }
 
     private static String normalizeEndingType(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return "start".equals(normalized) || "stop".equals(normalized) || "discontinue".equals(normalized)
                 ? normalized
                 : null;

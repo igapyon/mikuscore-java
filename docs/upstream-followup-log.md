@@ -4,49 +4,81 @@ This document records upstream-following questions, parity gaps, and conversion 
 
 ## Open Items
 
-### CLI diagnostics parity
+None. The original local reference assets are absent from the pinned upstream
+checkout, and their observable MIDI, MEI, and MuseScore predicates are covered
+by versioned compact behavior-equivalent Java fixtures.
 
-- Status: open, recorded 2026-08-06
-- Area: `scripts/mikuscore-cli.mjs`, `MikuscoreCli`
-- Upstream reference: `--diagnostics text|json` and the structured error
-  diagnostics produced by the Node.js CLI.
-- Note: Java currently keeps primary output on stdout and failures on stderr
-  with exit codes `0` / `1` / `2`, but does not accept a diagnostics-format
-  option or emit the upstream JSON diagnostics envelope. Preserve that
-  difference explicitly in help and mapping documents until a bounded,
-  testable Java parity slice is selected.
-
-### `change_duration` remaining timing parity
-
-- Status: open, narrowed 2026-05-09
-- Area: `core/ScoreCore.ts`, `core/timeIndex.ts`, `core/xmlUtils.ts`
-- Upstream reference: `change_duration` dispatch path in `ScoreCore.ts`
-- Note: Java migrates payload/target validation, `<duration>` mutation, simple notation metadata sync, triplet duration rejection without tuplet context, overfull validation, following/preceding rest consumption for duration expansion, and trailing rest fill for shortened durations. Remaining parity work is deeper timing-warning behavior around complex voice lanes.
-
-### `insert_note_after` timing parity
-
-- Status: open, narrowed 2026-05-09
-- Area: `core/ScoreCore.ts`, `core/timeIndex.ts`
-- Upstream reference: `insert_note_after` dispatch path in `ScoreCore.ts`
-- Note: Java currently migrates payload/anchor validation, adjacent pitched-note insertion, overfull validation, same-lane / backup-forward boundary checks, and the `MEASURE_UNDERFULL` warning subset for `validate-command`. Remaining parity work is preserving underfull warnings through a structured successful apply result if the Java apply API grows beyond XML-only success output.
-
-### `split_note` timing parity
-
-- Status: open, narrowed 2026-05-09
-- Area: `core/ScoreCore.ts`, `core/timeIndex.ts`
-- Upstream reference: `split_note` dispatch path in `ScoreCore.ts`
-- Note: Java currently migrates even-duration validation, clone-based adjacent split, forward-boundary rejection, and the overfull timing revalidation subset that rejects an already-overfull edited lane. Remaining parity work is the deeper post-split lane-timing invariant / restore behavior around complex backup-forward layouts.
-
-### SVG render runtime
-
-- Status: open
-- Area: `render svg`
-- Upstream reference: `src/ts/verovio-out.ts`, browser/runtime-related render flow
-- Note: Upstream `renderMusicXmlDomToSvg` depends on `window.verovio`, `verovio.js` runtime initialization, and browser DOM serialization. Java direct conversion is therefore not part of the current initial slice. Keep Java `render svg` unsupported until a Java-compatible renderer runtime or explicit external-runtime strategy is chosen.
-- 2026-05-14 note: The current Verovio JavaScript toolkit is an Emscripten WebAssembly / JS build of the C++ Verovio engine, not hand-written JavaScript that can be straight-converted to Java. The native Verovio Java binding uses JNI, which is outside the desired Java 1.8 pure-Java direction.
-- 2026-05-14 scale check: a shallow Verovio clone showed roughly 312K lines under `src`, roughly 357K lines for `src` + `include/vrv` + `tools`, and still roughly 156K lines after excluding bundled / large support areas such as Humdrum, pugi, MIDI, JSON, and `iohumdrum`. This scale is the practical background for keeping Java-side `render svg` unsupported in this repository.
+VSQX, Verovio/SVG, browser UI/WebAudio, and Node/Web packaging are explicit
+scope exclusions, documented in `remaining-migration-items.md`.
 
 ## Closed Items
+
+### MuseScore public conversion bridge
+
+- Status: closed for all versioned public source, unit, sample, integration,
+  and round-trip evidence on 2026-08-10
+- Area: upstream `src/ts/musescore-io.ts` / `src/ts/cli-api.ts`, Java
+  `MuseScoreIo` / `CoreApi` / `MikuscoreCli`
+- Note: Java now exposes public MusicXML DOM to MSCX and MSCX to MusicXML
+  conversion rather than emitting an empty score or reading just the first
+  voice. The bridge carries score metadata, parts, staffs, measures, voices,
+  pitched chords, rests, and key/time/clef basics, including `.mscz` I/O.
+  The 93 public cases and every public source export are individually mapped;
+  CFFP covers the shared cross-format semantics. The separately named
+  local-reference predicates are complete through the non-unit map's compact
+  equivalents.
+
+### Core state lifecycle bridge
+
+- Status: closed for the lifecycle slice on 2026-08-09
+- Area: upstream `core/ScoreCore.ts`, Java `core.ScoreCore` / `MusicXmlState`
+- Note: Java now provides a stateful `load` / `dispatch` / `save` facade with
+  clean-original versus dirty-serialized save modes, dirty state, deterministic
+  note IDs, and debug serialization. It delegates all command semantics to
+  `MusicXmlState`, so API and CLI validation agree. `editableVoice` is
+  normalized at construction, rejects non-configured voices before mutation,
+  and scopes save-time overfull timing validation to the configured voice.
+  Stable node identity is retained through pitch/duration edits, insert,
+  split, delete-to-rest, and chord-head deletion; internal markers are
+  stripped from debug and saved XML. The remaining core work is limited to
+  command-result and validator/XML utility edge behavior.
+
+### Voice-lane timing parity for state edits
+
+- Status: closed for the current Java core scope on 2026-08-09
+- Area: `core/ScoreCore.ts`, `core/timeIndex.ts`, `core/validators.ts`, and
+  Java `MusicXmlState` / `CoreApi` / `MikuscoreCli`
+- Upstream reference: `change_duration`, `insert_note_after`, and
+  `split_note` dispatch paths in `ScoreCore.ts`
+- Note: Java now preserves successful `MEASURE_UNDERFULL` warnings through
+  `applyMusicXmlCommandWithWarnings`, `CoreApi.CliResult`, text diagnostics,
+  and JSON diagnostics. Shortening a note where a backup/forward boundary
+  prevents gap fill emits the same underfull warning. Split records the lane
+  timing before mutation and rejects a changed occupied duration afterward;
+  the adjacent split immediately before `<backup>` remains allowed. Focused
+  `MusicXmlStateTest`, `CoreApiTest`, and `MikuscoreCliTest` regressions cover
+  these paths.
+
+### Canonical generated-name parity
+
+- Status: closed for the current Java core scope on 2026-08-09
+- Area: `src/ts/download-flow.ts`, `src/ts/abc-io.ts`, `src/ts/mei-io.ts`,
+  `src/ts/musescore-io.ts` and their Java counterparts
+- Note: user-facing fallback titles and generated download filename stems now
+  use the renamed canonical product name `miku-score`. The MIDI
+  `app=mikuscore` metadata identifier remains intentionally unchanged for
+  compatibility.
+
+### CLI diagnostics parity
+
+- Status: closed for the current Java CLI slice on 2026-08-09
+- Area: `scripts/miku-score-cli.mjs`, `MikuscoreCli`
+- Upstream reference: `--diagnostics text|json` and the structured diagnostics
+  envelope produced by the Node.js CLI.
+- Note: Java accepts `--diagnostics text|json`. JSON mode preserves the
+  primary stdout or `--out` result and emits a version 1 diagnostics envelope
+  to stderr, including command, I/O, outcome, error type, and error code.
+  Focused Java CLI tests cover successful and usage-error envelopes.
 
 ### `core/accidentalSpelling.ts` helper parity
 
@@ -81,6 +113,15 @@ This document records upstream-following questions, parity gaps, and conversion 
 - Status: closed for initial Java conversion scope
 - Area: `src/ts/vsqx-io.ts`
 - Note: VSQX conversion is intentionally excluded from the initial Java straight-conversion target because the upstream path depends on a bridge / dependency shape that is not a direct Java conversion slice.
+
+### Verovio-backed SVG rendering
+
+- Status: closed as excluded from Java parity scope on 2026-08-09
+- Area: `render svg`, `src/ts/verovio-out.ts`
+- Note: Upstream SVG rendering depends on `window.verovio`, browser DOM
+  serialization, and the Verovio JavaScript/WebAssembly runtime. No pure-Java
+  renderer or external-runtime strategy is selected, and SVG rendering is not
+  a Java parity goal. The CLI may retain its explicit unsupported response.
 
 ### `delete_note` structural parity
 

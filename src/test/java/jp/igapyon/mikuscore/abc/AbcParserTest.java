@@ -233,6 +233,7 @@ public class AbcParserTest {
         AbcParser.AbcParsedParenToken slurStart = AbcParser.parseAbcParenTokenAt("(C", 0);
         assertEquals("slur-start", slurStart.getKind());
         assertEquals(1, slurStart.getNextIdx());
+        assertEquals("slur-start", AbcParser.parseAbcParenTokenAt("(", 0).getKind());
         assertNull(AbcParser.parseAbcParenTokenAt("C", 0));
 
         AbcParser.AbcParsedBracketToken inline = AbcParser.parseAbcBracketTokenAt("[K:C] C", 0);
@@ -247,6 +248,7 @@ public class AbcParserTest {
         AbcParser.AbcParsedBracketToken chordStart = AbcParser.parseAbcBracketTokenAt("[CEG]2", 0);
         assertEquals("chord-start", chordStart.getKind());
         assertEquals(1, chordStart.getNextIdx());
+        assertEquals("chord-start", AbcParser.parseAbcBracketTokenAt("[", 0).getKind());
         assertNull(AbcParser.parseAbcBracketTokenAt("C", 0));
     }
 
@@ -278,6 +280,24 @@ public class AbcParserTest {
         assertEquals(1, tie.getTie().getNextIdx());
 
         assertNull(AbcParser.parseAbcBodyTokenAt("C", 0));
+    }
+
+    @Test
+    public void retainsPinnedPlayableFallbackAndUnterminatedDecorationDispatch() {
+        AbcParser.AbcParsedPlayableEvent fallback = AbcParser.parseAbcPlayableEventAt("x", 0);
+        assertEquals("playable", fallback.getKind());
+        assertEquals("note", fallback.getSource());
+        assertEquals("x", fallback.getPitchSources().get(0).getPitchChar());
+        assertEquals(1, fallback.getNextIdx());
+
+        AbcParser.AbcParsedBodyEntry entry = AbcParser.parseAbcBodyEntryAt("!", 0);
+        assertEquals("body-token", entry.getKind());
+        AbcParser.AbcParsedDecoration decoration = entry.getBodyToken().getDecoration();
+        assertEquals("", decoration.getRawDecoration());
+        assertEquals("", decoration.getDecoration());
+        assertEquals("!", decoration.getDelimiter());
+        assertEquals(1, decoration.getNextIdx());
+        assertEquals(false, decoration.isTerminated());
     }
 
     @Test

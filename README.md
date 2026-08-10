@@ -70,7 +70,7 @@ java -jar target/miku-score.jar --help
 
 Release asset workflow:
 
-- pushing a `v*` tag, for example `v0.5.1`, builds the CLI runtime and attaches release assets to the matching GitHub Release
+- pushing a `v*` tag, for example `v0.6.1`, builds the CLI runtime and attaches release assets to the matching GitHub Release
 - attached files are `miku-score-<version>.jar` and `miku-score-sources-<version>.jar`
 - the Release tag version must equal the Maven version or use its documented dot suffix
 
@@ -104,11 +104,11 @@ Current foundation commands:
 - `render svg [--from musicxml|abc] [--in <file>|-] [--out <file>|-]` (recognized but unsupported)
 - `state summarize [--in <file>|-]`
 - `state inspect-measure --measure <number> [--in <file>|-]`
-- `state validate-command --command <json> [--in <file>|-]`
-- `state apply-command --command <json> [--in <file>|-] [--out <file>|-]`
+- `state validate-command [--command <json>|--command-file <file>|-] [--in <file>|-]`
+- `state apply-command [--command <json>|--command-file <file>|-] [--in <file>|-] [--out <file>|-]`
 - `state diff --before <file> --after <file>`
 
-The current `state validate-command` / `state apply-command` slice supports the upstream basic command catalog for MusicXML text input:
+The current `state validate-command` / `state apply-command` slice supports the upstream basic command catalog for MusicXML input (text from standard input or a `.musicxml` / `.xml` / `.mxl` path):
 
 - `change_to_pitch`
 - `change_duration`
@@ -141,9 +141,10 @@ coverage and remaining parity work are maintained in
 - An explicit `--out <file>` replaces an existing file. This matches the
   upstream CLI behavior. Use an explicit output path for binary results in
   automation.
-- The upstream `--diagnostics text|json` option is not yet implemented by the
-  Java CLI. This is a documented parity follow-up, rather than an implied
-  supported option.
+- `--diagnostics text|json` is supported. Text diagnostics are the default;
+  JSON mode writes the version 1 diagnostics envelope to standard error while
+  preserving the primary result on standard output or the requested `--out`
+  path.
 - `render svg` is recognized but unsupported because the upstream path depends
   on the browser-oriented Verovio runtime.
 

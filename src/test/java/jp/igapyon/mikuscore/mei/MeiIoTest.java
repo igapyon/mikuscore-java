@@ -7,10 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+
+import jp.igapyon.mikuscore.musicxml.MxlIo;
 
 import org.junit.jupiter.api.Test;
 
@@ -626,6 +630,135 @@ public class MeiIoTest {
                 MeiIo.convertMeiToMusicXml("<mei>");
             }
         });
+    }
+
+    @Test
+    public void importsBundledMeiSampleCorpusThroughThePublicFacade() throws Exception {
+        Map<String, org.w3c.dom.Document> documents = new HashMap<String, org.w3c.dom.Document>();
+        for (String name : Arrays.asList("sample1", "sample2", "sample3", "sample4")) {
+            String xml = MeiIo.convertMeiToMusicXml(loadResourceText("mei-samples/" + name + ".mei"));
+            org.w3c.dom.Document document = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(xml);
+            documents.put(name, document);
+            assertEquals("score-partwise", document.getDocumentElement().getNodeName(), name);
+            assertTrue(document.getElementsByTagName("part").getLength() > 0, name);
+            assertTrue(document.getElementsByTagName("note").getLength() > 0, name);
+            assertTrue(jp.igapyon.mikuscore.musicxml.MusicXmlState.validateMusicXmlForSave(xml, true).isOk(), name);
+        }
+
+        org.w3c.dom.Element sample1Part1 = (org.w3c.dom.Element) documents.get("sample1")
+                .getElementsByTagName("part").item(0);
+        org.w3c.dom.Element sample1Measure2 = findMeasureByNumber(sample1Part1, "2");
+        org.w3c.dom.Element sample1SecondNote = (org.w3c.dom.Element) sample1Measure2.getElementsByTagName("note")
+                .item(1);
+        assertEquals("1", nestedText(sample1SecondNote, "alter"));
+        assertEquals("sharp", nestedText(sample1SecondNote, "accidental"));
+
+        org.w3c.dom.Element sample1Measure1 = findMeasureByNumber(sample1Part1, "1");
+        assertEquals("Allegretto moderato", nestedText(sample1Measure1, "words"));
+        assertEquals("116", ((org.w3c.dom.Element) sample1Measure1.getElementsByTagName("sound").item(0))
+                .getAttribute("tempo"));
+        org.w3c.dom.Element sample1Part2 = (org.w3c.dom.Element) documents.get("sample1")
+                .getElementsByTagName("part").item(1);
+        org.w3c.dom.Element sample1Part2Measure5 = findMeasureByNumber(sample1Part2, "5");
+        assertTrue(((org.w3c.dom.Element) sample1Part2Measure5.getElementsByTagName("note").item(1))
+                .getElementsByTagName("staccato").getLength() > 0);
+        org.w3c.dom.Element sample1Measure10 = findMeasureByNumber(sample1Part1, "10");
+        assertTrue(((org.w3c.dom.Element) sample1Measure10.getElementsByTagName("note").item(0))
+                .getElementsByTagName("staccatissimo").getLength() > 0);
+
+        org.w3c.dom.Element sample4Part1 = (org.w3c.dom.Element) documents.get("sample4")
+                .getElementsByTagName("part").item(0);
+        org.w3c.dom.Element sample4FirstMeasure = (org.w3c.dom.Element) sample4Part1.getElementsByTagName("measure")
+                .item(0);
+        org.w3c.dom.Element time = (org.w3c.dom.Element) sample4FirstMeasure.getElementsByTagName("time").item(0);
+        assertEquals("6", nestedText(time, "beats"));
+        assertEquals("8", nestedText(time, "beat-type"));
+    }
+
+    @Test
+    public void exportsPinnedMxlSamplesThroughThePublicMeiFacade() throws Exception {
+        String sample2Xml = MxlIo.extractMusicXmlTextFromMxl(loadResourceBytes("upstream-zip/sample2.mxl"));
+        String sample2Mei = MeiIo.exportMusicXmlDomToMei(
+                jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(sample2Xml));
+        assertTrue(sample2Mei.contains(
+                "<tempo staff=\"1\" tstamp=\"1\" midi.bpm=\"116\" place=\"above\">Allegretto moderato</tempo>"));
+        assertTrue(sample2Mei.contains(
+                "<tempo staff=\"1\" type=\"mscore-infer-from-text\" tstamp=\"1\" midi.bpm=\"60\">"));
+        assertTrue(sample2Mei.contains("<slur staff=\"1\" startid=\"#mkN"), sample2Mei);
+
+        String sample1Xml = MxlIo.extractMusicXmlTextFromMxl(loadResourceBytes("upstream-zip/sample1.mxl"));
+        String sample1Mei = MeiIo.exportMusicXmlDomToMei(
+                jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(sample1Xml));
+        org.w3c.dom.Document sample1Document = jp.igapyon.mikuscore.musicxml.MusicXmlIo
+                .parseMusicXmlDocument(sample1Mei);
+        org.w3c.dom.Element measure1 = findMeiMeasureByNumber(sample1Document, "1");
+        org.w3c.dom.NodeList staffs = measure1.getElementsByTagName("staff");
+        org.w3c.dom.Element staff2 = null;
+        for (int index = 0; index < staffs.getLength(); index++) {
+            org.w3c.dom.Element staff = (org.w3c.dom.Element) staffs.item(index);
+            if ("2".equals(staff.getAttribute("n"))) {
+                staff2 = staff;
+                break;
+            }
+        }
+        assertTrue(staff2 != null);
+        assertTrue(staff2.getElementsByTagName("artic").getLength() > 0);
+
+        org.w3c.dom.Element measure9 = findMeiMeasureByNumber(sample1Document, "9");
+        for (String staffNo : Arrays.asList("1", "2", "4")) {
+            double firstDynamic = -1;
+            double secondDynamic = -1;
+            org.w3c.dom.NodeList dynamics = measure9.getElementsByTagName("dynam");
+            for (int index = 0; index < dynamics.getLength(); index++) {
+                org.w3c.dom.Element dynamic = (org.w3c.dom.Element) dynamics.item(index);
+                if (!staffNo.equals(dynamic.getAttribute("staff"))) {
+                    continue;
+                }
+                if ("f".equals(dynamic.getTextContent().trim())) {
+                    firstDynamic = Double.parseDouble(dynamic.getAttribute("tstamp"));
+                } else if ("p".equals(dynamic.getTextContent().trim())) {
+                    secondDynamic = Double.parseDouble(dynamic.getAttribute("tstamp"));
+                }
+            }
+            assertTrue(firstDynamic >= 0, staffNo);
+            assertTrue(secondDynamic > firstDynamic, staffNo);
+        }
+    }
+
+    @Test
+    public void publicMeiImportClampsOverfullEventsOrFailsWhenStrict() {
+        final String mei = "<mei><music><body><mdiv><score>"
+                + "<scoreDef meter.count=\"3\" meter.unit=\"4\" key.sig=\"0\"><staffGrp>"
+                + "<staffDef n=\"1\" label=\"Lead\" clef.shape=\"G\" clef.line=\"2\"/>"
+                + "</staffGrp></scoreDef><section><measure n=\"1\"><staff n=\"1\"><layer n=\"1\">"
+                + "<rest dur=\"4\"/><rest dur=\"4\"/><note pname=\"d\" oct=\"4\" dur=\"8\"/>"
+                + "<note pname=\"a\" oct=\"3\" dur=\"8\"/><note pname=\"f\" oct=\"3\" dur=\"8\"/>"
+                + "</layer></staff></measure></section></score></mdiv></body></music></mei>";
+
+        String clamped = MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE, null);
+        org.w3c.dom.Document clampedDoc = jp.igapyon.mikuscore.musicxml.MusicXmlIo
+                .parseMusicXmlDocument(clamped);
+        String diagnosticCount = "";
+        String diagnostic = "";
+        for (int index = 0; index < clampedDoc.getElementsByTagName("miscellaneous-field").getLength(); index++) {
+            org.w3c.dom.Element field = (org.w3c.dom.Element) clampedDoc.getElementsByTagName("miscellaneous-field")
+                    .item(index);
+            if ("mks:diag:count".equals(field.getAttribute("name"))) {
+                diagnosticCount = field.getTextContent().trim();
+            } else if ("mks:diag:0001".equals(field.getAttribute("name"))) {
+                diagnostic = field.getTextContent();
+            }
+        }
+        assertEquals("1", diagnosticCount);
+        assertTrue(diagnostic.contains("code=OVERFULL_CLAMPED"));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                new org.junit.jupiter.api.function.Executable() {
+                    public void execute() {
+                        MeiIo.convertMeiToMusicXml(mei, Boolean.FALSE, Boolean.FALSE, Boolean.TRUE, null);
+                    }
+                });
+        assertTrue(ex.getMessage().contains("MEI overfull would drop events"));
     }
 
     @Test
@@ -1795,7 +1928,7 @@ public class MeiIoTest {
 
         String mei = MeiIo.buildMeiExportDocumentXml("Work & Title", "bad", "<scoreDef/>", "<measure n=\"A\"/>");
         assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><mei xmlns=\"http://www.music-encoding.org/ns/mei\" meiversion=\"5.1+basic\">"
-                + "<meiHead><fileDesc><titleStmt><title>Work &amp; Title</title></titleStmt><pubStmt><p>Generated by mikuscore</p></pubStmt></fileDesc></meiHead>"
+                + "<meiHead><fileDesc><titleStmt><title>Work &amp; Title</title></titleStmt><pubStmt><p>Generated by miku-score</p></pubStmt></fileDesc></meiHead>"
                 + "<music><body><mdiv><score><scoreDef/><section><measure n=\"A\"/></section></score></mdiv></body></music></mei>",
                 mei);
     }
@@ -3031,6 +3164,28 @@ public class MeiIoTest {
         assertEquals("480", stop.getElementsByTagName("offset").item(0).getTextContent().trim());
     }
 
+    /**
+     * Behavior-equivalent, redistributable replacement for the upstream
+     * local-only Paganini MEI round-trip spot check. The source asset is not in
+     * the pinned Node revision; these are its three observable checkpoints.
+     */
+    @Test
+    public void roundTripsCompactPaganiniEquivalentMeasureCheckpointsThroughMei() throws Exception {
+        String source = loadResourceText("upstream-local-equivalent/compact-control-parity.musicxml");
+        org.w3c.dom.Document sourceDoc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(source);
+        String mei = MeiIo.exportMusicXmlDomToMei(sourceDoc);
+        String roundTripped = MeiIo.convertMeiToMusicXml(mei);
+        org.w3c.dom.Document resultDoc = jp.igapyon.mikuscore.musicxml.MusicXmlIo.parseMusicXmlDocument(roundTripped);
+
+        assertEquals("D7", pitchToken(firstNoteOfMeasure(resultDoc, "138")));
+        assertEquals("120", directChildText(firstNoteOfMeasure(resultDoc, "138"), "duration"));
+        assertEquals("C7", pitchToken(firstNoteOfMeasure(resultDoc, "140")));
+        assertEquals("120", directChildText(firstNoteOfMeasure(resultDoc, "140"), "duration"));
+        assertEquals("C4", pitchToken(firstNoteOfMeasure(resultDoc, "153")));
+        assertEquals("1", nestedText(firstNoteOfMeasure(resultDoc, "153"), "alter"));
+        assertEquals("69", directChildText(firstNoteOfMeasure(resultDoc, "153"), "duration"));
+    }
+
     private static int countOccurrences(String text, String pattern) {
         int count = 0;
         int index = 0;
@@ -3043,6 +3198,26 @@ public class MeiIoTest {
             index = found + pattern.length();
         }
         return count;
+    }
+
+    private static String loadResourceText(String name) throws Exception {
+        InputStream stream = MeiIoTest.class.getClassLoader().getResourceAsStream(name);
+        assertTrue(stream != null, name);
+        try {
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } finally {
+            stream.close();
+        }
+    }
+
+    private static byte[] loadResourceBytes(String name) throws Exception {
+        InputStream stream = MeiIoTest.class.getClassLoader().getResourceAsStream(name);
+        assertTrue(stream != null, name);
+        try {
+            return stream.readAllBytes();
+        } finally {
+            stream.close();
+        }
     }
 
     private static org.w3c.dom.Element firstNoteOfMeasure(org.w3c.dom.Document doc, String measureNumber) {
@@ -3058,6 +3233,28 @@ public class MeiIoTest {
             }
         }
         throw new AssertionError("measure not found: " + measureNumber);
+    }
+
+    private static org.w3c.dom.Element findMeasureByNumber(org.w3c.dom.Element part, String measureNumber) {
+        org.w3c.dom.NodeList measures = part.getElementsByTagName("measure");
+        for (int i = 0; i < measures.getLength(); i++) {
+            org.w3c.dom.Element measure = (org.w3c.dom.Element) measures.item(i);
+            if (measureNumber.equals(measure.getAttribute("number"))) {
+                return measure;
+            }
+        }
+        throw new AssertionError("measure not found in part: " + measureNumber);
+    }
+
+    private static org.w3c.dom.Element findMeiMeasureByNumber(org.w3c.dom.Document doc, String measureNumber) {
+        org.w3c.dom.NodeList measures = doc.getElementsByTagName("measure");
+        for (int i = 0; i < measures.getLength(); i++) {
+            org.w3c.dom.Element measure = (org.w3c.dom.Element) measures.item(i);
+            if (measureNumber.equals(measure.getAttribute("n"))) {
+                return measure;
+            }
+        }
+        throw new AssertionError("MEI measure not found: " + measureNumber);
     }
 
     private static String directChildText(org.w3c.dom.Element element, String childName) {

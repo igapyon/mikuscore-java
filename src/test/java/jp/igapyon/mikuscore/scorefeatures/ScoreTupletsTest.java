@@ -29,6 +29,16 @@ public class ScoreTupletsTest {
     }
 
     @Test
+    public void normalizesJavaScriptBooleanAndRadixNumberInputs() {
+        TimeModificationFeature normalized = ScoreTuplets
+                .normalizeTimeModificationFeature(new TimeModificationFeature(Boolean.TRUE, "0b10"));
+
+        assertNotNull(normalized);
+        assertEquals(Integer.valueOf(1), normalized.getActualNotes());
+        assertEquals(Integer.valueOf(2), normalized.getNormalNotes());
+    }
+
+    @Test
     public void buildsMusicXmlTimeModificationFeatures() {
         assertEquals(
                 "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>",

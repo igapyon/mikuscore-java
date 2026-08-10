@@ -40,6 +40,9 @@ public final class ScoreMeasureFlow {
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue() ? 1 : 0;
+        }
         String text = String.valueOf(value).trim();
         if (text.length() == 0) {
             return Double.NaN;

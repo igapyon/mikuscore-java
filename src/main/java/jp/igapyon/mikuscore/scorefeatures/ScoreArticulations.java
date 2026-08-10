@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import org.w3c.dom.Element;
@@ -22,7 +23,7 @@ public final class ScoreArticulations {
     }
 
     public static String normalizeArticulationKind(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return ARTICULATION_KIND_SET.contains(normalized) ? normalized : null;
     }
 

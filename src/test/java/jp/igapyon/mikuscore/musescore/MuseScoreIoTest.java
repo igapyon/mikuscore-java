@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -12,6 +15,12 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+
+import jp.igapyon.mikuscore.musicxml.MusicXmlIo;
+import jp.igapyon.mikuscore.musicxml.MxlIo;
 
 public class MuseScoreIoTest {
     @Test
@@ -576,7 +585,7 @@ public class MuseScoreIoTest {
 
         MuseScoreIo.MuseScoreExportMetadata defaultTitle = MuseScoreIo.readMusicXmlExportMetadataFromValues("", "",
                 null, null, null, null, null, null);
-        assertEquals("mikuscore export", defaultTitle.getTitle());
+        assertEquals("miku-score export", defaultTitle.getTitle());
     }
 
     @Test
@@ -2158,5 +2167,1532 @@ public class MuseScoreIoTest {
         assertEquals(3, last.getOttavaStopCount());
         assertEquals(true, last.isRepeatForwardAtStart());
         assertEquals(true, last.isRepeatBackwardAtStart());
+    }
+
+    @Test
+    public void routesPublicMuseScoreConversionOptionsToCutTimeAndImplicitBeamBehavior() {
+        String cutMscx = "<museScore version=\"3.02\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><TimeSig><subtype>2</subtype><sigN>4</sigN><sigD>4</sigD></TimeSig>"
+                + "<Chord><durationType>whole</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+        String normalizedCut = MuseScoreIo.convertMuseScoreToMusicXml(cutMscx, true, false);
+        assertEquals(true, normalizedCut.contains("<time symbol=\"cut\"><beats>2</beats><beat-type>2</beat-type>"));
+
+        String beamMscx = "<museScore version=\"3.02\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><TimeSig><sigN>6</sigN><sigD>8</sigD></TimeSig>"
+                + "<Chord><durationType>eighth</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "<Chord><durationType>eighth</durationType><Note><pitch>62</pitch></Note></Chord>"
+                + "<Chord><durationType>eighth</durationType><Note><pitch>64</pitch></Note></Chord>"
+                + "<Chord><durationType>eighth</durationType><Note><pitch>65</pitch></Note></Chord>"
+                + "<Chord><durationType>eighth</durationType><Note><pitch>67</pitch></Note></Chord>"
+                + "<Chord><durationType>eighth</durationType><Note><pitch>69</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+        String defaultBeamXml = MuseScoreIo.convertMuseScoreToMusicXml(beamMscx);
+        assertEquals(true, defaultBeamXml.contains("<beam number=\"1\">begin</beam>"));
+        assertEquals(true, defaultBeamXml.contains("<beam number=\"1\">continue</beam>"));
+        assertEquals(true, defaultBeamXml.contains("<beam number=\"1\">end</beam>"));
+        assertEquals(false, MuseScoreIo.convertMuseScoreToMusicXml(beamMscx, false, false)
+                .contains("<beam number=\"1\">"));
+    }
+
+    @Test
+    public void routesPublicMuseScoreSourceAndDebugMetadataOptions() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Note><pitch>60</pitch>"
+                + "</Note></Chord></voice></Measure></Staff></Score></museScore>";
+        String defaults = MuseScoreIo.convertMuseScoreToMusicXml(mscx);
+        assertEquals(true, defaults.contains("<miscellaneous-field name=\"mks:src:musescore:raw-encoding\">uri-v1"));
+        assertEquals(true, defaults.contains("name=\"mks:src:musescore:version\">4.0</miscellaneous-field>"));
+
+        String noMetadata = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+        assertEquals(false, noMetadata.contains("mks:src:musescore:"));
+        assertEquals(false, noMetadata.contains("mks:diag:"));
+    }
+
+    @Test
+    public void emitsPlaceholderWarningMetadataThroughThePublicMuseScoreImportFacade() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division></Score></museScore>";
+
+        String defaults = MuseScoreIo.convertMuseScoreToMusicXml(mscx);
+        assertEquals(true, defaults.contains("<miscellaneous-field name=\"mks:diag:count\">1</miscellaneous-field>"));
+        assertEquals(true, defaults.contains("No readable staff content found; created an empty placeholder score."));
+        assertEquals(true, defaults.contains("action=placeholder-created"));
+
+        String noDebug = MuseScoreIo.convertMuseScoreToMusicXml(mscx, true, false, false, true);
+        assertEquals(false, noDebug.contains("mks:diag:"));
+    }
+
+    @Test
+    public void routesPublicMuseScoreImportMetadataAndVBoxFallbacks() {
+        String mscx = "<museScore version=\"4.0\"><Score>"
+                + "<metaTag name=\"workTitle\"> Untitled Score </metaTag>"
+                + "<metaTag name=\"subtitle\"> Sub &amp; title </metaTag>"
+                + "<metaTag name=\"movementTitle\"> Movement </metaTag>"
+                + "<metaTag name=\"movementNumber\"> II </metaTag>"
+                + "<metaTag name=\"workNumber\"> Op. 42 </metaTag>"
+                + "<metaTag name=\"composer\"> Composer / Arranger </metaTag>"
+                + "<metaTag name=\"arranger\"> Arranger </metaTag>"
+                + "<metaTag name=\"lyricist\"> Lyricist </metaTag>"
+                + "<metaTag name=\"translator\"> Translator </metaTag>"
+                + "<metaTag name=\"copyright\"> Copyright </metaTag>"
+                + "<metaTag name=\"creationDate\"> 2026-08-09 </metaTag><Division>480</Division>"
+                + "<Staff id=\"1\"><VBox><Text><style>title</style><text> VBox title </text></Text>"
+                + "<Text><style>composer</style><text> VBox composer </text></Text></VBox>"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Note><pitch>60</pitch>"
+                + "</Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<work-title>VBox title</work-title><work-number>Op. 42</work-number>"));
+        assertEquals(true, musicXml.contains("<movement-title>Movement</movement-title><movement-number>II</movement-number>"));
+        assertEquals(true, musicXml.contains("<credit page=\"1\"><credit-type>subtitle</credit-type>"
+                + "<credit-words>Sub &amp; title</credit-words></credit>"));
+        assertEquals(true, musicXml.contains("<creator type=\"composer\">VBox composer</creator>"));
+        assertEquals(true, musicXml.contains("<creator type=\"arranger\">Arranger</creator>"));
+        assertEquals(true, musicXml.contains("<creator type=\"lyricist\">Lyricist</creator>"));
+        assertEquals(true, musicXml.contains("<creator type=\"translator\">Translator</creator>"));
+        assertEquals(true, musicXml.contains("<rights>Copyright</rights><encoding><encoding-date>2026-08-09"));
+    }
+
+    @Test
+    public void groupsUnclaimedMuseScoreStaffsAsSeparateFallbackParts() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division>"
+                + "<Staff id=\"1\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure></Staff>"
+                + "<Staff id=\"2\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>62</pitch></Note></Chord></voice></Measure></Staff>"
+                + "</Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<score-part id=\"P1\"><part-name>P1</part-name></score-part>"));
+        assertEquals(true, musicXml.contains("<score-part id=\"P2\"><part-name>P2</part-name></score-part>"));
+        assertEquals(2, musicXml.split("<part id=\"P", -1).length - 1);
+        assertEquals(true, musicXml.contains("<part id=\"P1\"><measure"));
+        assertEquals(true, musicXml.contains("<part id=\"P2\"><measure"));
+    }
+
+    @Test
+    public void skipsEmptyMuseScorePartsAndUsesUniqueDeclaredStaffsBeforeFallbacks() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division>"
+                + "<Part><trackName>Ignored empty part</trackName></Part>"
+                + "<Part><Instrument><longName>Lead</longName></Instrument><Staff id=\"1\"/></Part>"
+                + "<Part><trackName>Backup</trackName><Staff id=\"1\"/><Staff id=\"1\"/></Part>"
+                + "<Staff id=\"1\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure></Staff>"
+                + "<Staff id=\"2\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>62</pitch></Note></Chord></voice></Measure></Staff>"
+                + "<Staff id=\"3\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>64</pitch></Note></Chord></voice></Measure></Staff>"
+                + "</Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<score-part id=\"P1\"><part-name>Lead</part-name></score-part>"));
+        assertEquals(true, musicXml.contains("<score-part id=\"P2\"><part-name>Backup</part-name></score-part>"));
+        assertEquals(false, musicXml.contains("Ignored empty part"));
+        assertEquals(2, musicXml.split("<part id=\"P", -1).length - 1);
+        assertEquals(true, musicXml.contains("<part id=\"P2\"><measure number=\"1\"><attributes><divisions>480"
+                + "</divisions><staves>2</staves>"));
+    }
+
+    @Test
+    public void importsMuseScorePartTransposeAndUsesItsWrittenKey() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Part>"
+                + "<Instrument><transposeDiatonic>-1.2</transposeDiatonic>"
+                + "<transposeChromatic>-2</transposeChromatic></Instrument><Staff id=\"1\"/></Part>"
+                + "<Staff id=\"1\"><Measure><voice><KeySig><transposeKey>-2</transposeKey>"
+                + "<accidental>2</accidental><concertKey>3</concertKey></KeySig>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<key><fifths>-2</fifths><mode>major</mode></key>"));
+        assertEquals(true, musicXml.contains("<transpose><diatonic>-1</diatonic><chromatic>-2</chromatic>"
+                + "</transpose>"));
+    }
+
+    @Test
+    public void importsMuseScoreKeyModesFromTitleFallbackAndMeasureKeySignature() {
+        String titleFallbackMscx = "<museScore version=\"4.0\"><Score>"
+                + "<metaTag name=\"workTitle\">Nocturne in minor</metaTag><Division>480</Division>"
+                + "<Staff id=\"1\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+        String explicitModeMscx = "<museScore version=\"4.0\"><Score><Division>480</Division>"
+                + "<Staff id=\"1\"><Measure><voice><keysig><accidental>-3</accidental>"
+                + "<mode>major</mode></keysig><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String titleFallbackXml = MuseScoreIo.convertMuseScoreToMusicXml(titleFallbackMscx, false, false, false, false);
+        String explicitModeXml = MuseScoreIo.convertMuseScoreToMusicXml(explicitModeMscx, false, false, false, false);
+
+        assertEquals(true, titleFallbackXml.contains("<key><fifths>0</fifths><mode>minor</mode></key>"));
+        assertEquals(true, explicitModeXml.contains("<key><fifths>-3</fifths><mode>major</mode></key>"));
+    }
+
+    @Test
+    public void importsMuseScoreMeasureLengthAsAnImplicitPickupMeasure() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure len=\"1 / 4\"><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<measure number=\"0\" implicit=\"yes\">"));
+        assertEquals(true, musicXml.contains("<duration>480</duration>"));
+    }
+
+    @Test
+    public void importsMuseScoreRepeatAndDoubleBarlineMarkers() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure startRepeat=\"yes\"><BarLine><subtype>double</subtype></BarLine><voice>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure><Measure><voice><BarLine><subtype>end-repeat</subtype></BarLine>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<barline location=\"left\"><bar-style>light-light</bar-style>"
+                + "</barline><barline location=\"left\"><repeat direction=\"forward\"/></barline>"));
+        assertEquals(true, musicXml.contains("<barline location=\"right\"><bar-style>light-heavy</bar-style>"
+                + "<repeat direction=\"backward\"/></barline>"));
+    }
+
+    @Test
+    public void importsStaffSpecificMuseScoreClefsForGrandStaffParts() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division>"
+                + "<Part><Staff id=\"1\"/><Staff id=\"2\"/></Part>"
+                + "<Staff id=\"1\"><Measure><voice><Clef><concertClefType>G2</concertClefType></Clef>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff>"
+                + "<Staff id=\"2\"><Measure><voice><Clef><concertClefType>F4</concertClefType></Clef>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>48</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<staves>2</staves>"));
+        assertEquals(true, musicXml.contains("<clef number=\"1\"><sign>G</sign><line>2</line></clef>"));
+        assertEquals(true, musicXml.contains("<clef number=\"2\"><sign>F</sign><line>4</line></clef>"));
+    }
+
+    @Test
+    public void importsMuseScorePartDefaultAndInstrumentStaffClefs() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Part>"
+                + "<Staff id=\"1\"/><Staff id=\"2\"><defaultClef>F</defaultClef></Staff>"
+                + "<Instrument><clef>C3</clef><clef staff=\"2\">C4</clef></Instrument></Part>"
+                + "<Staff id=\"1\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure></Staff>"
+                + "<Staff id=\"2\"><Measure><voice><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>48</pitch></Note></Chord></voice></Measure></Staff>"
+                + "</Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<clef number=\"1\"><sign>C</sign><line>3</line></clef>"));
+        assertEquals(true, musicXml.contains("<clef number=\"2\"><sign>C</sign><line>4</line></clef>"));
+    }
+
+    @Test
+    public void prioritizesDirectMuseScoreSignaturesAndRetainsCutTimeSymbol() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><TimeSig><subtype>2</subtype><sigN>3</sigN><sigD>4</sigD></TimeSig>"
+                + "<KeySig><accidental>-2</accidental></KeySig><voice><TimeSig><sigN>4</sigN><sigD>4</sigD>"
+                + "</TimeSig><KeySig><accidental>4</accidental></KeySig><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure>"
+                + "<Measure><TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig><voice>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<key><fifths>-2</fifths><mode>major</mode></key>"));
+        assertEquals(true, musicXml.contains("<time symbol=\"cut\"><beats>3</beats><beat-type>4</beat-type>"));
+        assertEquals(true, musicXml.contains("<measure number=\"2\"><attributes><key><fifths>-2</fifths>"
+                + "<mode>major</mode></key><time symbol=\"cut\"><beats>2</beats><beat-type>4</beat-type>"));
+    }
+
+    @Test
+    public void importsMuseScoreGraceAndAcciaccaturaWithoutConsumingMeasureTime() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><grace/><durationType>eighth</durationType><Note><pitch>60</pitch>"
+                + "</Note></Chord><Chord><acciaccatura/><durationType>eighth</durationType><Note><pitch>62</pitch>"
+                + "</Note></Chord><Chord><durationType>quarter</durationType><Note><pitch>64</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<grace/><pitch><step>C</step>"));
+        assertEquals(true, musicXml.contains("<grace slash=\"yes\"/><pitch><step>D</step>"));
+        assertEquals(false, musicXml.contains("<grace/><pitch><step>C</step><octave>4</octave></pitch><duration>"));
+        assertEquals(true, musicXml.contains("<pitch><step>E</step><octave>4</octave></pitch><duration>480</duration>"));
+    }
+
+    @Test
+    public void importsMuseScoreNoteTieAndEndSpannerMarkers() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Note><pitch>60</pitch><Tie/>"
+                + "</Note></Chord><Chord><durationType>quarter</durationType><Note><pitch>60</pitch>"
+                + "<endSpanner/></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<tie type=\"start\"/><duration>480</duration>"));
+        assertEquals(true, musicXml.contains("<tie type=\"stop\"/><duration>480</duration>"));
+        assertEquals(true, musicXml.contains("<notations><tied type=\"start\"/></notations>"));
+        assertEquals(true, musicXml.contains("<notations><tied type=\"stop\"/></notations>"));
+    }
+
+    @Test
+    public void importsMuseScoreChordArticulationAndTechnicalSubtypes() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Articulation>"
+                + "<subtype>articStaccatoBelow</subtype></Articulation><Note><pitch>60</pitch></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Articulation><subtype>articTenutoAbove</subtype>"
+                + "</Articulation><Articulation><subtype>lhPizzicato</subtype></Articulation>"
+                + "<Note><pitch>62</pitch><Fingering>1</Fingering><String>3</String></Note></Chord></voice>"
+                + "</Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<notations><articulations><staccato/></articulations></notations>"));
+        assertEquals(true, musicXml.contains("<articulations><tenuto/></articulations><technical><stopped/>"));
+        assertEquals(true, musicXml.contains("<technical><stopped/><fingering>1</fingering><string>3</string>"
+                + "</technical>"));
+    }
+
+    @Test
+    public void importsMuseScoreChordSlurTransitionsAcrossMeasures() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Slur type=\"start\" id=\"4\"/>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure>"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Slur type=\"stop\" id=\"4\"/>"
+                + "<Note><pitch>62</pitch></Note></Chord></voice></Measure>"
+                + "</Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<slur type=\"start\" number=\"4\"/>"));
+        assertEquals(true, musicXml.contains("<slur type=\"stop\" number=\"4\"/>"));
+    }
+
+    @Test
+    public void importsMuseScoreChordLocalTrillOrnament() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Ornament>"
+                + "<subtype>ornamentTrill</subtype></Ornament><Note><pitch>60</pitch><Accidental>"
+                + "<subtype>accidentalFlat</subtype></Accidental></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<accidental>flat</accidental>"));
+        assertEquals(true, musicXml.contains("<notations><ornaments><trill-mark/><accidental-mark>flat</accidental-mark>"
+                + "</ornaments></notations>"));
+    }
+
+    @Test
+    public void routesMuseScoreEventTrackAndMoveIntoMusicXmlVoiceAndStaff() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Part><Staff id=\"1\"/>"
+                + "<Staff id=\"2\"/></Part><Staff id=\"1\"><Measure><voice>"
+                + "<Chord><track>1</track><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "<Chord><move>1</move><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>"
+                + "<Dynamic><track>2</track><move>1</move><subtype>mf</subtype></Dynamic>"
+                + "</voice></Measure></Staff><Staff id=\"2\"><Measure><voice><Rest><durationType>whole</durationType>"
+                + "</Rest></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>2</voice><type>quarter</type><staff>1</staff>"));
+        assertEquals(true, musicXml.contains("<pitch><step>D</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>3</voice><type>quarter</type><staff>2</staff>"));
+        assertEquals(true, musicXml.contains("<dynamics><mf/></dynamics></direction-type>"));
+        assertEquals(true, musicXml.contains("<staff>2</staff><voice>4</voice></direction>"));
+    }
+
+    @Test
+    public void assignsPartWideVoiceNumbersForMultipleMuseScoreVoiceLanes() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note>"
+                + "</Chord></voice><voice><Chord><durationType>quarter</durationType><Note><pitch>64</pitch>"
+                + "</Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type><staff>1</staff>"));
+        assertEquals(true, musicXml.contains("<backup><duration>1920</duration></backup>"));
+        assertEquals(true, musicXml.contains("<pitch><step>E</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>2</voice><type>quarter</type><staff>1</staff>"));
+    }
+
+    @Test
+    public void roundTripsUnpitchedMusicXmlNotesAsTimedMuseScoreChordEvents() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>Drums</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type>"
+                + "</time></attributes><note><unpitched><display-step>C</display-step><display-octave>5</display-octave>"
+                + "</unpitched><duration>480</duration><voice>1</voice><type>quarter</type></note><note>"
+                + "<unpitched><display-step>D</display-step><display-octave>5</display-octave></unpitched>"
+                + "<duration>480</duration><voice>1</voice><type>quarter</type></note></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(2, roundTripped.split("<duration>480</duration><voice>1</voice><type>quarter</type>", -1).length
+                - 1);
+        assertEquals(false, roundTripped.contains("<note><rest/><duration>480</duration>"));
+    }
+
+    @Test
+    public void roundTripsMusicXmlOctaveShiftAsMuseScoreOttavaSpanner() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type>"
+                + "</time></attributes><direction><direction-type><octave-shift type=\"down\" size=\"8\""
+                + " number=\"1\"/></direction-type></direction><note><pitch><step>A</step><octave>6</octave>"
+                + "</pitch><duration>960</duration><voice>1</voice><type>half</type></note></measure>"
+                + "<measure number=\"2\"><direction><direction-type><octave-shift type=\"stop\" size=\"8\""
+                + " number=\"1\"/></direction-type></direction><note><pitch><step>A</step><octave>5</octave>"
+                + "</pitch><duration>960</duration><voice>1</voice><type>half</type></note></measure>"
+                + "</part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, mscx.contains("<Spanner type=\"Ottava\"><Ottava><subtype>8vb</subtype></Ottava>"));
+        assertEquals(true, mscx.contains("<Spanner type=\"Ottava\"><prev>"));
+        assertEquals(true, roundTripped.contains("<octave-shift type=\"start\" size=\"8\" number=\"1\"/>"));
+        assertEquals(true, roundTripped.contains("<octave-shift type=\"stop\" size=\"8\" number=\"1\"/>"));
+    }
+
+    @Test
+    public void roundTripsMusicXmlTrillWavyLineAsMuseScoreSpanner() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type>"
+                + "</time></attributes><note><pitch><step>A</step><octave>3</octave></pitch><duration>960</duration>"
+                + "<voice>1</voice><type>half</type><notations><ornaments><trill-mark/><wavy-line type=\"start\""
+                + " number=\"1\"/></ornaments></notations></note></measure><measure number=\"2\"><note>"
+                + "<pitch><step>A</step><octave>3</octave></pitch><duration>960</duration><voice>1</voice>"
+                + "<type>half</type><notations><ornaments><wavy-line type=\"stop\" number=\"1\"/>"
+                + "</ornaments></notations></note></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, mscx.contains("<Spanner type=\"Trill\"><Trill><subtype>trill</subtype></Trill>"));
+        assertEquals(true, mscx.contains("<Spanner type=\"Trill\"><prev>"));
+        assertEquals(true, roundTripped.contains("<trill-mark/><wavy-line type=\"start\" number=\"1\"/>"));
+        assertEquals(true, roundTripped.contains("<wavy-line type=\"stop\" number=\"1\"/>"));
+    }
+
+    @Test
+    public void roundTripsMusicXmlTrillMarkOnlyAsMuseScoreChordOrnament() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions></attributes><note><pitch><step>C</step><octave>4</octave>"
+                + "</pitch><duration>480</duration><voice>1</voice><type>quarter</type><notations><ornaments>"
+                + "<trill-mark/></ornaments></notations></note></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, mscx.contains("<Ornament><subtype>ornamentTrill</subtype></Ornament>"));
+        assertEquals(false, mscx.contains("<Spanner type=\"Trill\"><Trill><subtype>trill</subtype></Trill><next>"));
+        assertEquals(true, roundTripped.contains("<trill-mark/>"));
+        assertEquals(false, roundTripped.contains("<wavy-line"));
+    }
+
+    @Test
+    public void exportsMusicXmlArticulationsAsMuseScoreSubtypes() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><notations><articulations><staccato/></articulations></notations></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><notations><articulations><accent/></articulations></notations></note>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><notations><articulations><tenuto/></articulations></notations></note>"
+                + "</measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        assertEquals(true, mscx.contains("<Articulation><subtype>articStaccatoAbove</subtype></Articulation>"));
+        assertEquals(true, mscx.contains("<Articulation><subtype>articAccentAbove</subtype></Articulation>"));
+        assertEquals(true, mscx.contains("<Articulation><subtype>articTenutoAbove</subtype></Articulation>"));
+    }
+
+    @Test
+    public void exportsMusicXmlTechnicalNotationAsMuseScoreArticulationAndNoteValues() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions></attributes><note><pitch><step>C</step><octave>4</octave>"
+                + "</pitch><duration>480</duration><voice>1</voice><type>quarter</type><notations><technical>"
+                + "<stopped/><up-bow/><open-string/><harmonic/><fingering>2</fingering><string>4</string>"
+                + "</technical></notations></note></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        assertEquals(true, mscx.contains("<Articulation><subtype>articLhPizzicatoAbove</subtype></Articulation>"));
+        assertEquals(true, mscx.contains("<Articulation><subtype>articUpBowAbove</subtype></Articulation>"));
+        assertEquals(true, mscx.contains("<Articulation><subtype>articOpenStringAbove</subtype></Articulation>"));
+        assertEquals(true, mscx.contains("<Articulation><subtype>articHarmonicAbove</subtype></Articulation>"));
+        assertEquals(true, mscx.contains("<Fingering>2</Fingering><String>4</String>"));
+    }
+
+    @Test
+    public void exportsMultiStaffPartScaffoldAndInstrumentShortNameToMuseScore() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>Piano</part-name><part-abbreviation>Pno.</part-abbreviation></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions><staves>2</staves>"
+                + "<clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign>"
+                + "<line>4</line></clef></attributes><note><pitch><step>C</step><octave>4</octave></pitch>"
+                + "<duration>480</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>"
+                + "<backup><duration>480</duration></backup><note><pitch><step>C</step><octave>3</octave></pitch>"
+                + "<duration>480</duration><voice>2</voice><type>quarter</type><staff>2</staff></note>"
+                + "</measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        assertEquals(true, mscx.contains("<Part id=\"1\"><Staff><defaultClef>G</defaultClef></Staff>"
+                + "<Staff><defaultClef>F</defaultClef></Staff><trackName>Piano</trackName>"));
+        assertEquals(true, mscx.contains("<Instrument><trackName>Piano</trackName><longName>Piano</longName>"
+                + "<shortName>Pno.</shortName><clef>G</clef><clef staff=\"2\">F</clef></Instrument>"));
+        assertEquals(true, mscx.contains("<Staff id=\"1\">"));
+        assertEquals(true, mscx.contains("<Staff id=\"2\">"));
+    }
+
+    @Test
+    public void exportsMusicXmlTieAndSlurAsMuseScoreMarkers() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions></attributes><note><pitch><step>C</step><octave>4</octave>"
+                + "</pitch><duration>480</duration><voice>1</voice><type>quarter</type><tie type=\"start\"/>"
+                + "<notations><tied type=\"start\"/><slur type=\"start\" number=\"3\"/></notations></note>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><tie type=\"stop\"/><notations><tied type=\"stop\"/>"
+                + "<slur type=\"stop\" number=\"3\"/></notations></note></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        assertEquals(true, mscx.contains("<Spanner type=\"Slur\"><Slur/><next><location><fractions>1/4"));
+        assertEquals(true, mscx.contains("<Spanner type=\"Slur\"><prev><location><fractions>-1/4"));
+        assertEquals(true, mscx.contains("<Tie/>"));
+        assertEquals(true, mscx.contains("<endSpanner/>"));
+    }
+
+    @Test
+    public void roundTripsMusicXmlMiddleEndStartRepeatThroughMuseScoreVoiceBarline() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type>"
+                + "</time></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note><barline location=\"middle\"><repeat direction=\"backward\"/>"
+                + "<repeat direction=\"forward\"/></barline><note><pitch><step>D</step><octave>4</octave>"
+                + "</pitch><duration>480</duration><voice>1</voice><type>quarter</type></note></measure></part>"
+                + "</score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, mscx.contains("<BarLine><subtype>end-start-repeat</subtype></BarLine>"));
+        assertEquals(true, roundTripped.contains("<barline location=\"middle\"><bar-style>light-heavy</bar-style>"
+                + "<repeat direction=\"backward\"/><repeat direction=\"forward\"/></barline>"));
+    }
+
+    @Test
+    public void emitsDetailedDiagnosticsForDroppedMuseScoreEvents() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Rest/><Chord><durationType>quarter</durationType></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, true, false, false);
+
+        assertEquals(true, musicXml.contains("<miscellaneous-field name=\"mks:diag:count\">2"));
+        assertEquals(true, musicXml.contains("level=warn;code=MUSESCORE_IMPORT_WARNING;fmt=mscx;"));
+        assertEquals(true, musicXml.contains("measure=1;staff=1;voice=1;atDiv=0;action=dropped;"
+                + "reason=unknown-duration;tag=Rest"));
+        assertEquals(true, musicXml.contains("measure=1;staff=1;voice=1;atDiv=0;action=dropped;"
+                + "reason=missing-pitch;tag=Chord"));
+    }
+
+    @Test
+    public void emitsOneSortedDiagnosticForUnsupportedMuseScoreElements() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><LayoutBreak/><Zeta/><Alpha/></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, true, false, false);
+
+        assertEquals(true, musicXml.contains("<miscellaneous-field name=\"mks:diag:count\">1"));
+        assertEquals(true, musicXml.contains("unsupported MuseScore elements skipped: alpha, zeta"));
+        assertEquals(true, musicXml.contains("action=skipped;reason=unsupported-elements"));
+    }
+
+    @Test
+    public void clampsOverfullMuseScoreVoiceTailAndEmitsItsDiagnostic() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig><voice>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>64</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, true, false, false);
+
+        assertEquals(2, musicXml.split("<pitch>", -1).length - 1);
+        assertEquals(false, musicXml.contains("<step>E</step>"));
+        assertEquals(true, musicXml.contains("action=clamped;reason=overfull;occupiedDiv=1440;capacityDiv=960"));
+    }
+
+    @Test
+    public void placesMuseScoreDirectionsInTheirSourceVoiceLane() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note>"
+                + "</Chord></voice><voice><Rest><durationType>quarter</durationType></Rest>"
+                + "<Dynamic><subtype>mf</subtype></Dynamic><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>64</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<dynamics><mf/></dynamics></direction-type><staff>1</staff>"
+                + "<voice>2</voice></direction>"));
+    }
+
+    @Test
+    public void emitsDiagnosticForUnsupportedMuseScoreTuplet() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tuplet><actualNotes>x</actualNotes><normalNotes>2</normalNotes></Tuplet>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, true, false, false);
+
+        assertEquals(true, musicXml.contains("message=measure 1: unsupported tuplet skipped.;measure=1;staff=1;"
+                + "voice=1;atDiv=0;action=skipped;reason=unsupported;tag=Tuplet"));
+    }
+
+    @Test
+    public void emitsDiagnosticsForUnsupportedMuseScoreDirectionLikeEvents() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Dynamic><subtype>unknown</subtype></Dynamic><Expression/>"
+                + "<Marker/><Jump/><Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note>"
+                + "</Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, true, false, false);
+
+        assertEquals(true, musicXml.contains("<miscellaneous-field name=\"mks:diag:count\">4"));
+        for (String tag : Arrays.asList("Dynamic", "Expression", "Marker", "Jump")) {
+            assertEquals(true, musicXml.contains("action=skipped;reason=unsupported;tag=" + tag));
+        }
+    }
+
+    @Test
+    public void importsMuseScoreKeyAccidentalsAndTpcPitchSpelling() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><TimeSig><sigN>5</sigN><sigD>4</sigD></TimeSig><KeySig><accidental>4</accidental></KeySig><voice>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>63</pitch></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>70</pitch><tpc>12</tpc></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>70</pitch><tpc>24</tpc></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(2, musicXml.split("<accidental>natural</accidental>", -1).length - 1);
+        assertEquals(true, musicXml.contains("<pitch><step>B</step><alter>-1</alter><octave>4</octave></pitch>"
+                + "<accidental>flat</accidental>"));
+        assertEquals(true, musicXml.contains("<pitch><step>A</step><alter>1</alter><octave>4</octave></pitch>"
+                + "<accidental>sharp</accidental>"));
+    }
+
+    @Test
+    public void importsMuseScoreMeasureDurationRestAtTheMeasureCapacity() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><TimeSig><sigN>3</sigN><sigD>4</sigD></TimeSig><voice><Rest>"
+                + "<durationType>measure</durationType></Rest></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<note><rest/><duration>1440</duration><voice>1</voice><type>half</type>"));
+    }
+
+    @Test
+    public void importsMuseScoreTupletReferencesWithWrittenTypeAndActualDuration() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tuplet id=\"T1\"><normalNotes>2</normalNotes><actualNotes>3</actualNotes>"
+                + "</Tuplet><Chord><durationType>quarter</durationType><Tuplet>T1</Tuplet><Note><pitch>60</pitch>"
+                + "</Note></Chord><Chord><durationType>quarter</durationType><Tuplet>T1</Tuplet><Note><pitch>62</pitch>"
+                + "</Note></Chord><Chord><durationType>quarter</durationType><Tuplet>T1</Tuplet><Note><pitch>64</pitch>"
+                + "</Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(3, musicXml.split("<duration>320</duration><voice>1</voice><type>quarter</type>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes>"
+                + "</time-modification>", -1).length - 1);
+        assertEquals(true, musicXml.contains("<notations><tuplet type=\"start\" number=\"1\"/></notations>"));
+        assertEquals(true, musicXml.contains("<notations><tuplet type=\"stop\" number=\"1\"/></notations>"));
+    }
+
+    @Test
+    public void importsMuseScoreStandaloneAndChordLocalOttavaSpannersWithDisplayPitchShift() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Spanner type=\"Ottava\"><Ottava><subtype>8va</subtype></Ottava><next/>"
+                + "</Spanner><Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure><Measure><voice><Chord><durationType>quarter</durationType><Note><pitch>62</pitch>"
+                + "</Note></Chord><Chord><durationType>quarter</durationType><Spanner type=\"Ottava\"><prev/>"
+                + "</Spanner><Note><pitch>64</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<octave-shift type=\"start\" size=\"8\" number=\"1\"/>"
+                + "</direction-type><staff>1</staff></direction>"));
+        assertEquals(true, musicXml.contains("<octave-shift type=\"stop\" size=\"8\" number=\"1\"/>"
+                + "</direction-type><staff>1</staff></direction>"));
+        assertEquals(true, musicXml.contains("<pitch><step>C</step><octave>5</octave></pitch>"));
+        assertEquals(true, musicXml.contains("<pitch><step>D</step><octave>5</octave></pitch>"));
+        assertEquals(true, musicXml.contains("<pitch><step>E</step><octave>4</octave></pitch>"));
+    }
+
+    @Test
+    public void importsMuseScoreStandaloneAndChordLocalTrillSpannersWithSharedNumbers() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Spanner type=\"Trill\"><Trill><subtype>trill</subtype></Trill><next/>"
+                + "</Spanner><Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure><Measure><voice><Chord><durationType>quarter</durationType><Spanner type=\"Trill\">"
+                + "<prev/></Spanner><Note><pitch>62</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<ornaments><trill-mark/><wavy-line type=\"start\" number=\"1\"/>"
+                + "</ornaments>"));
+        assertEquals(true, musicXml.contains("<ornaments><wavy-line type=\"stop\" number=\"1\"/></ornaments>"));
+    }
+
+    @Test
+    public void importsMuseScoreAbsoluteTicksAsMeasureRelativeVoiceForwards() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tick>480</Tick><Chord><durationType>quarter</durationType><Note><pitch>60</pitch>"
+                + "</Note></Chord></voice></Measure><Measure><voice><Tick>2400</Tick><Chord>"
+                + "<durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord></voice></Measure>"
+                + "</Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(2, musicXml.split("<forward><duration>480</duration><voice>1</voice><staff>1</staff></forward>", -1)
+                .length - 1);
+        assertEquals(true, musicXml.contains("<pitch><step>C</step><octave>4</octave></pitch>"));
+        assertEquals(true, musicXml.contains("<pitch><step>D</step><octave>4</octave></pitch>"));
+    }
+
+    @Test
+    public void importsMuseScoreMidMeasureRepeatBarlineAtItsTickPosition() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tick>480</Tick><BarLine><subtype>end-start-repeat</subtype></BarLine>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<forward><duration>480</duration><voice>1</voice><staff>1</staff>"
+                + "</forward><barline location=\"middle\"><bar-style>light-heavy</bar-style>"
+                + "<repeat direction=\"backward\"/><repeat direction=\"forward\"/></barline>"));
+    }
+
+    @Test
+    public void importsMuseScoreInlineTupletStartScaleAndEndNotation() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tuplet><normalNotes>2</normalNotes><actualNotes>3</actualNotes>"
+                + "<numberType>1</numberType><bracketType>1</bracketType></Tuplet>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>64</pitch></Note></Chord>"
+                + "<endTuplet/></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(3, musicXml.split("<duration>320</duration><voice>1</voice><type>quarter</type>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes>"
+                + "</time-modification>", -1).length - 1);
+        assertEquals(true, musicXml.contains("<tuplet type=\"start\" number=\"1\" bracket=\"yes\""
+                + " show-number=\"actual\"/>"));
+        assertEquals(true, musicXml.contains("<tuplet type=\"stop\" number=\"1\"/>"));
+    }
+
+    @Test
+    public void importsMuseScoreInlineTupletRestWithTimeModificationAndStop() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tuplet><normalNotes>2</normalNotes><actualNotes>3</actualNotes></Tuplet>"
+                + "<Rest><durationType>quarter</durationType></Rest><Rest><durationType>quarter</durationType></Rest>"
+                + "<Rest><durationType>quarter</durationType></Rest><endTuplet/></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(3, musicXml.split("<rest/><duration>320</duration><voice>1</voice><type>quarter</type>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes>"
+                + "</time-modification>", -1).length - 1);
+        assertEquals(true, musicXml.contains("<tuplet type=\"start\" number=\"1\" bracket=\"yes\"/>"));
+        assertEquals(true, musicXml.contains("<tuplet type=\"stop\" number=\"1\"/>"));
+    }
+
+    @Test
+    public void importsNestedMuseScoreInlineTupletsWithStackedDurationAndStops() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tuplet><normalNotes>2</normalNotes><actualNotes>3</actualNotes></Tuplet>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "<Tuplet><normalNotes>4</normalNotes><actualNotes>5</actualNotes></Tuplet>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord><endTuplet/>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>64</pitch></Note></Chord><endTuplet/>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<duration>256</duration><voice>1</voice><type>quarter</type>"
+                + "<time-modification><actual-notes>5</actual-notes><normal-notes>4</normal-notes>"
+                + "</time-modification>"));
+        assertEquals(true, musicXml.contains("<tuplet type=\"start\" number=\"1\" bracket=\"yes\"/>"));
+        assertEquals(true, musicXml.contains("<tuplet type=\"start\" number=\"2\" bracket=\"yes\"/>"));
+        assertEquals(true, musicXml.contains("<tuplet type=\"stop\" number=\"2\"/>"));
+        assertEquals(true, musicXml.contains("<tuplet type=\"stop\" number=\"1\"/>"));
+    }
+
+    @Test
+    public void importsLowercaseMuseScoreTupletDefinitionAndReference() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><tuplet id=\"T1\"><normalNotes>2</normalNotes><actualNotes>3</actualNotes>"
+                + "</tuplet><Chord><durationType>quarter</durationType><tuplet>T1</tuplet><Note><pitch>60</pitch>"
+                + "</Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<duration>320</duration><voice>1</voice><type>quarter</type>"
+                + "<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes>"
+                + "</time-modification>"));
+    }
+
+    @Test
+    public void importsMuseScoreChordSlurSpannerAcrossMeasures() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Spanner type=\"Slur\">"
+                + "<Slur/><next/></Spanner><Note><pitch>60</pitch></Note></Chord></voice></Measure>"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><spanner type=\"Slur\"><prev/>"
+                + "</spanner><Note><pitch>62</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, musicXml.contains("<slur type=\"start\" number=\"1\"/>"));
+        assertEquals(true, musicXml.contains("<slur type=\"stop\" number=\"1\"/>"));
+    }
+
+    @Test
+    public void routesPublicMuseScoreExportCutTimeOption() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time symbol=\"cut\"><beats>4</beats>"
+                + "<beat-type>4</beat-type></time></attributes><note><pitch><step>C</step><octave>4</octave>"
+                + "</pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>"
+                + "</measure></part></score-partwise>";
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml), true);
+        assertEquals(true, mscx.contains("<TimeSig><subtype>2</subtype><sigN>2</sigN><sigD>2</sigD></TimeSig>"));
+    }
+
+    @Test
+    public void routesMusicXmlDirectionsThroughPublicMuseScoreExport() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type>"
+                + "</time></attributes><direction><direction-type><dynamics><mf/></dynamics></direction-type>"
+                + "<sound dynamics=\"90\"/></direction><direction><direction-type><words font-style=\"italic\">"
+                + "dolce</words></direction-type></direction><note><pitch><step>C</step><octave>4</octave></pitch>"
+                + "<duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+        assertEquals(true, mscx.contains("<Dynamic><subtype>mf</subtype><velocity>81</velocity></Dynamic>"));
+        assertEquals(true, mscx.contains("<Expression><text><i></i>dolce</text></Expression>"));
+    }
+
+    @Test
+    public void routesMuseScoreDynamicThroughPublicMusicXmlImport() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tempo><tempo>2.0</tempo></Tempo><Dynamic><subtype>mf</subtype>"
+                + "<velocity>90</velocity></Dynamic><Expression><text><i></i>dolce</text></Expression>"
+                + "<Marker><subtype>segno</subtype><label>segno</label></Marker><Jump><text>D.S.</text>"
+                + "<jumpTo>segno</jumpTo></Jump>"
+                + "<Dynamic><subtype>f</subtype><visible>0</visible></Dynamic>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false);
+        assertEquals(true, musicXml.contains("<direction><direction-type><dynamics><mf/></dynamics></direction-type>"
+                + "<sound dynamics=\"100.00\"/><staff>1</staff><voice>1</voice></direction>"));
+        assertEquals(true, musicXml.contains("<metronome><beat-unit>quarter</beat-unit><per-minute>120</per-minute>"));
+        assertEquals(true, musicXml.contains("<words font-style=\"italic\">dolce</words>"));
+        assertEquals(true, musicXml.contains("<direction-type><segno/></direction-type>"));
+        assertEquals(true, musicXml.contains("<words>D.S.</words></direction-type><sound dalsegno=\"segno\"/>"));
+        assertEquals(false, musicXml.contains("<dynamics><f/></dynamics>"));
+    }
+
+    @Test
+    public void importsPinnedMsczSampleTwoWithPartNamesAndInstrumentClefs() throws Exception {
+        String mscx = MxlIo.extractTextFromZipByExtensions(readTestResource("upstream-zip/sample2.mscz"),
+                new String[] { ".mscx" });
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(4, musicXml.split("<part id=\\\"P", -1).length - 1);
+        assertEquals(true, musicXml.contains("<part-name>Violin 1</part-name>"));
+        assertEquals(true, musicXml.contains("<part-name>Violin 2</part-name>"));
+        assertEquals(true, musicXml.contains("<part-name>Viola</part-name>"));
+        assertEquals(true, musicXml.contains("<part-name>Violoncello</part-name>"));
+        assertEquals(true, musicXml.contains("<clef><sign>C</sign><line>3</line></clef>"));
+        assertEquals(true, musicXml.contains("<clef><sign>F</sign><line>4</line></clef>"));
+    }
+
+    @Test
+    public void roundTripsPinnedMsczSampleFourMidMeasureEndStartRepeats() throws Exception {
+        String source = MxlIo.extractTextFromZipByExtensions(readTestResource("upstream-zip/sample4.mscz"),
+                new String[] { ".mscx" });
+        String xml = MuseScoreIo.convertMuseScoreToMusicXml(source, false, false, false, true);
+        String roundTripped = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(xml));
+        assertEquals(true, countOccurrences(roundTripped, "<subtype>end-start-repeat</subtype>") >= 3);
+    }
+
+    @Test
+    public void importsPinnedMsczSampleFourStringQuartetClefs() throws Exception {
+        String source = MxlIo.extractTextFromZipByExtensions(readTestResource("upstream-zip/sample4.mscz"),
+                new String[] { ".mscx" });
+        String xml = MuseScoreIo.convertMuseScoreToMusicXml(source, false, false, false, true);
+        assertEquals(true, xml.contains("<clef><sign>C</sign><line>3</line></clef>"));
+        assertEquals(true, xml.contains("<clef><sign>F</sign><line>4</line></clef>"));
+        assertEquals(true, countOccurrences(xml, "<clef><sign>G</sign><line>2</line></clef>") >= 2);
+    }
+
+    @Test
+    public void exportsPinnedMxlSampleTwoWithViolaAndCelloClefDefaults() throws Exception {
+        String musicXml = MxlIo.extractMusicXmlTextFromMxl(readTestResource("upstream-zip/sample2.mxl"));
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        assertEquals(true, mscx.contains("<trackName>Viola</trackName>"));
+        assertEquals(true, mscx.contains("<trackName>Violoncello</trackName>"));
+        assertEquals(true, mscx.contains("<defaultClef>C3</defaultClef>"));
+        assertEquals(true, mscx.contains("<defaultClef>F</defaultClef>"));
+        assertEquals(true, mscx.contains("<Instrument><trackName>Viola</trackName><longName>Viola</longName>"
+                + "<shortName>Vla.</shortName><clef>C3</clef></Instrument>"));
+        assertEquals(true, mscx.contains("<Instrument><trackName>Violoncello</trackName><longName>Violoncello</longName>"
+                + "<shortName>Vc.</shortName><clef>F</clef></Instrument>"));
+    }
+
+    @Test
+    public void exportsPinnedMxlSampleTwoViolinOneSlurStopWithItsStartSpan() throws Exception {
+        String musicXml = MxlIo.extractMusicXmlTextFromMxl(readTestResource("upstream-zip/sample2.mxl"));
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        int dynamicPosition = mscx.indexOf("<subtype>mf</subtype>");
+        assertEquals(true, dynamicPosition >= 0);
+        int measureEnd = mscx.indexOf("</Measure>", dynamicPosition);
+        assertEquals(true, measureEnd > dynamicPosition);
+        String measureExcerpt = mscx.substring(dynamicPosition, measureEnd);
+
+        assertEquals(true, measureExcerpt.contains("<Chord><durationType>quarter</durationType><Spanner type=\"Slur\">"
+                + "<Slur/><next><location><fractions>1/4</fractions></location></next></Spanner>"
+                + "<Note><pitch>65</pitch></Note></Chord>"));
+        assertEquals(true, measureExcerpt.contains("<Chord><durationType>32nd</durationType><Spanner type=\"Slur\">"
+                + "<prev><location><fractions>-1/4</fractions></location></prev></Spanner>"
+                + "<Note><pitch>67</pitch></Note></Chord>"));
+        assertEquals(false, measureExcerpt.contains("<Chord><durationType>32nd</durationType><Spanner type=\"Slur\">"
+                + "<prev><location><fractions>-1/32</fractions></location></prev></Spanner>"
+                + "<Note><pitch>67</pitch></Note></Chord>"));
+    }
+
+    @Test
+    public void exportsBasicMusicXmlContentIntoMuseScoreLikePinnedUpstreamCase() {
+        String musicXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\"><part-name>P1</part-name>"
+                + "</score-part></part-list><part id=\"P1\"><measure number=\"1\"><attributes>"
+                + "<divisions>480</divisions><key><fifths>1</fifths><mode>major</mode></key>"
+                + "<time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+                + "<direction><direction-type><dynamics><mf/></dynamics></direction-type><sound tempo=\"120\"/>"
+                + "</direction><note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration>"
+                + "<voice>1</voice><type>quarter</type></note><note><rest/><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type></note><barline location=\"right\"><repeat direction=\"backward\"/>"
+                + "</barline></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        assertEquals(true, mscx.contains("<museScore"));
+        assertEquals(true, mscx.contains("<Staff id=\"1\">"));
+        assertEquals(true, mscx.contains("<TimeSig><sigN>3</sigN><sigD>4</sigD></TimeSig>"));
+        assertEquals(true, mscx.contains("<KeySig><accidental>1</accidental><concertKey>1</concertKey></KeySig>"));
+        assertEquals(true, mscx.contains("<Tempo><tempo>2.000000</tempo></Tempo>"));
+        assertEquals(true, mscx.contains("<Dynamic><subtype>mf</subtype></Dynamic>"));
+        assertEquals(true, mscx.contains("<endRepeat/>"));
+    }
+
+    @Test
+    public void importsBasicMuseScoreChordAndRestContentLikePinnedUpstreamCase() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division>"
+                + "<metaTag name=\"workTitle\">MS Test</metaTag><Staff id=\"1\"><Measure><voice>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "<Rest><durationType>quarter</durationType></Rest></voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, true, true, false, true);
+        Document document = MusicXmlIo.parseMusicXmlDocument(musicXml);
+
+        assertEquals("MS Test", directChildText(directChild(document.getDocumentElement(), "work"), "work-title"));
+        assertEquals(true, musicXml.contains("<score-part id=\"P1\">"));
+        assertEquals(true, musicXml.contains("<pitch><step>C</step><octave>4</octave></pitch>"));
+        assertEquals(true, musicXml.contains("<miscellaneous-field name=\"mks:src:musescore:raw-encoding\">"));
+    }
+
+    @Test
+    public void importsMuseScoreTempoSignaturesRepeatsAndDynamicsLikePinnedUpstreamCase() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure startRepeat=\"1\"><TimeSig><sigN>3</sigN><sigD>4</sigD></TimeSig>"
+                + "<KeySig><accidental>-1</accidental><mode>minor</mode></KeySig><voice>"
+                + "<Tempo><tempo>2.0</tempo></Tempo><Dynamic><subtype>mf</subtype><velocity>90</velocity></Dynamic>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord></voice></Measure>"
+                + "<Measure endRepeat=\"1\"><TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig><voice>"
+                + "<Dynamic><subtype>p</subtype><velocity>49</velocity></Dynamic>"
+                + "<Rest><durationType>quarter</durationType></Rest></voice></Measure>"
+                + "</Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, true, true, false, true);
+
+        assertEquals(true, musicXml.contains("<time><beats>3</beats><beat-type>4</beat-type></time>"));
+        assertEquals(true, musicXml.contains("<key><fifths>-1</fifths><mode>minor</mode></key>"));
+        assertEquals(true, musicXml.contains("<sound tempo=\"120\"/>"));
+        assertEquals(true, musicXml.contains("<barline location=\"left\"><repeat direction=\"forward\"/></barline>"));
+        assertEquals(true, musicXml.contains("<measure number=\"2\"><attributes><key><fifths>-1</fifths>"
+                + "<mode>minor</mode></key><time><beats>4</beats><beat-type>4</beat-type></time>"));
+        assertEquals(true, musicXml.contains("<barline location=\"right\">"));
+        assertEquals(true, musicXml.contains("<repeat direction=\"backward\"/>"));
+        assertEquals(true, musicXml.contains("<dynamics><mf/></dynamics>"));
+        assertEquals(true, musicXml.contains("<dynamics><p/></dynamics>"));
+        assertEquals(true, musicXml.contains("<sound dynamics=\"100.00\"/>"));
+        assertEquals(true, musicXml.contains("<sound dynamics=\"54.44\"/>"));
+        assertEquals(true, musicXml.contains("name=\"mks:src:musescore:version\">4.0</miscellaneous-field>"));
+    }
+
+    @Test
+    public void importsVisibleAndHiddenMuseScoreTempoTextLikePinnedUpstreamCases() {
+        String visible = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<VBox><Text><text>Tema</text></Text></VBox><Measure><voice>"
+                + "<Tempo><tempo>2.1666667</tempo><text>Quasi Presto</text></Tempo>"
+                + "<Tempo><tempo>2.1666667</tempo><text>Tema</text></Tempo>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+        String hidden = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Tempo><tempo>1.0</tempo><followText>1</followText><visible>0</visible>"
+                + "<text><sym>metNoteQuarterUp</sym><sym>noSym</sym><sym>metAugmentationDot</sym> = 60</text>"
+                + "</Tempo><Rest><durationType>quarter</durationType></Rest></voice></Measure></Staff></Score></museScore>";
+
+        String visibleXml = MuseScoreIo.convertMuseScoreToMusicXml(visible, false, false, false, true);
+        String hiddenXml = MuseScoreIo.convertMuseScoreToMusicXml(hidden, false, false, false, true);
+
+        assertEquals(1, countOccurrences(visibleXml, "<words>Quasi Presto</words>"));
+        assertEquals(1, countOccurrences(visibleXml, "<words>Tema</words>"));
+        assertEquals(true, visibleXml.contains("<sound tempo=\"130\"/>"));
+        assertEquals(false, hiddenXml.contains("<words"));
+        assertEquals(true, hiddenXml.contains("<sound tempo=\"60\"/>"));
+    }
+
+    @Test
+    public void roundTripsMusicXmlTupletMarkersLikePinnedUpstreamCase() {
+        String noteStart = "<note><pitch><step>C</step><octave>4</octave></pitch><duration>320</duration>"
+                + "<voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes>"
+                + "<normal-notes>2</normal-notes></time-modification><notations><tuplet type=\"start\" number=\"1\"/>"
+                + "</notations></note>";
+        String noteMiddle = "<note><pitch><step>D</step><octave>4</octave></pitch><duration>320</duration>"
+                + "<voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes>"
+                + "<normal-notes>2</normal-notes></time-modification></note>";
+        String noteStop = "<note><pitch><step>E</step><octave>4</octave></pitch><duration>320</duration>"
+                + "<voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes>"
+                + "<normal-notes>2</normal-notes></time-modification><notations><tuplet type=\"stop\" number=\"1\"/>"
+                + "</notations></note>";
+        String source = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\"><part-name>P1</part-name>"
+                + "</score-part></part-list><part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>" + noteStart + noteMiddle + noteStop
+                + "<note><rest/><duration>960</duration><voice>1</voice><type>half</type></note>"
+                + "</measure></part></score-partwise>";
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, true);
+
+        assertEquals(true, mscx.contains("<Tuplet id=\"T1\"><normalNotes>2</normalNotes><actualNotes>3</actualNotes></Tuplet>"));
+        assertEquals(true, roundTripped.contains("<tuplet type=\"start\" number=\"1\"/>"));
+        assertEquals(true, roundTripped.contains("<tuplet type=\"stop\" number=\"1\"/>"));
+    }
+
+    @Test
+    public void retainsCutTimeSubtypeWithoutFollowingExplicitTimeChangeLikePinnedUpstreamCase() {
+        String source = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\"><part-name>P1</part-name>"
+                + "</score-part></part-list><part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time symbol=\"cut\"><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>"
+                + "</measure><measure number=\"2\"><note><pitch><step>D</step><octave>4</octave></pitch>"
+                + "<duration>1920</duration><voice>1</voice><type>whole</type></note></measure></part></score-partwise>";
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+        assertEquals(1, countOccurrences(mscx, "<TimeSig>"));
+        assertEquals(1, countOccurrences(mscx,
+                "<TimeSig><subtype>2</subtype><sigN>4</sigN><sigD>4</sigD></TimeSig>"));
+    }
+
+    @Test
+    public void importsMuseScoreConcertAndTransposeKeysLikePinnedUpstreamCases() {
+        String concertKeyMscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><KeySig><concertKey>-1</concertKey><mode>minor</mode></KeySig>"
+                + "<TimeSig><sigN>3</sigN><sigD>4</sigD></TimeSig><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>60</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+        String transposeKeyMscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Part>"
+                + "<trackName>Clarinet in A</trackName><Instrument><transposeDiatonic>-2</transposeDiatonic>"
+                + "<transposeChromatic>-3</transposeChromatic></Instrument><Staff id=\"1\"/></Part><Staff id=\"1\">"
+                + "<Measure><voice><KeySig><concertKey>3</concertKey><transposeKey>0</transposeKey><mode>major</mode>"
+                + "</KeySig><TimeSig><sigN>3</sigN><sigD>4</sigD></TimeSig><Chord><durationType>quarter</durationType>"
+                + "<Note><pitch>72</pitch></Note></Chord></voice></Measure></Staff></Score></museScore>";
+
+        String concertKeyXml = MuseScoreIo.convertMuseScoreToMusicXml(concertKeyMscx, false, false, false, true);
+        String transposeKeyXml = MuseScoreIo.convertMuseScoreToMusicXml(transposeKeyMscx, false, false, false, true);
+
+        assertEquals(true, concertKeyXml.contains("<key><fifths>-1</fifths><mode>minor</mode></key>"));
+        assertEquals(true, transposeKeyXml.contains("<key><fifths>0</fifths><mode>major</mode></key>"));
+        assertEquals(true, transposeKeyXml.contains("<transpose><diatonic>-2</diatonic><chromatic>-3</chromatic>"
+                + "</transpose>"));
+    }
+
+    @Test
+    public void importsMuseScoreMeasureCThreeClefLikePinnedUpstreamCase() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Clef><concertClefType>C3</concertClefType></Clef>"
+                + "<Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, true);
+
+        assertEquals(true, musicXml.contains("<clef><sign>C</sign><line>3</line></clef>"));
+    }
+
+    @Test
+    public void exportsMusicXmlAltoClefAsMuseScoreDefaultClefCThreeLikePinnedUpstreamCase() {
+        String musicXml = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>Viola</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><clef><sign>C</sign><line>3</line></clef></attributes>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type></note></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        assertEquals(false, mscx.contains("<Clef><concertClefType>C3</concertClefType></Clef>"));
+        assertEquals(true, mscx.contains("<defaultClef>C3</defaultClef>"));
+    }
+
+    @Test
+    public void addsFinalLightHeavyBarlineWithoutExplicitMuseScoreEndBarlineLikePinnedUpstreamCase() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>"
+                + "</voice></Measure></Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, true);
+
+        assertEquals(true, musicXml.contains("<barline location=\"right\"><bar-style>light-heavy</bar-style>"
+                + "</barline>"));
+    }
+
+    @Test
+    public void exportsMusicXmlHeaderMetadataIntoMuseScoreMetaTagsLikePinnedUpstreamCase() {
+        String musicXml = "<score-partwise version=\"4.0\"><work><work-title>String Quartet No.15</work-title>"
+                + "<work-number>K.421</work-number></work><movement-title>Andante</movement-title>"
+                + "<movement-number>1</movement-number><identification>"
+                + "<creator type=\"composer\">Wolfgang Amadeus Mozart</creator>"
+                + "<creator type=\"arranger\">Arranger Name</creator><creator type=\"lyricist\">Lyricist Name</creator>"
+                + "<creator type=\"translator\">Translator Name</creator><rights>Public Domain</rights>"
+                + "<encoding><encoding-date>2026-03-02</encoding-date></encoding></identification>"
+                + "<credit page=\"1\"><credit-type>subtitle</credit-type><credit-words>K.421 Mvt 1</credit-words>"
+                + "</credit><part-list><score-part id=\"P1\"><part-name>P1</part-name></score-part></part-list>"
+                + "<part id=\"P1\"><measure number=\"1\"><attributes><divisions>480</divisions>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes><note><pitch><step>C</step>"
+                + "<octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(musicXml));
+
+        assertEquals(true, mscx.contains("<metaTag name=\"workTitle\">String Quartet No.15</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"workNumber\">K.421</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"movementTitle\">Andante</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"movementNumber\">1</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"subtitle\">K.421 Mvt 1</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"composer\">Wolfgang Amadeus Mozart</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"arranger\">Arranger Name</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"lyricist\">Lyricist Name</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"translator\">Translator Name</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"copyright\">Public Domain</metaTag>"));
+        assertEquals(true, mscx.contains("<metaTag name=\"creationDate\">2026-03-02</metaTag>"));
+    }
+
+    @Test
+    public void roundTripsPinnedPublicSampleSixFirstTwoMeasuresThroughMuseScoreFacade() throws Exception {
+        String source = new String(readTestResource("abc-roundtrip/roundtrip_sample6_m1_m2.musicxml"),
+                java.nio.charset.StandardCharsets.UTF_8);
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, true, false, false);
+
+        assertEquals(1, roundTripped.split("<part id=", -1).length - 1);
+        assertEquals(2, roundTripped.split("<measure number=", -1).length - 1);
+        assertEquals(source.split("<note>", -1).length - 1, roundTripped.split("<note>", -1).length - 1);
+        assertEquals(true, roundTripped.contains("<key><fifths>0</fifths><mode>major</mode></key>"));
+        assertEquals(true, roundTripped.contains("<pitch><step>B</step><octave>4</octave></pitch>"
+                + "<duration>4</duration><voice>1</voice><type>quarter</type><staff>1</staff>"));
+        assertEquals(true, roundTripped.contains("<chord/><pitch><step>B</step><octave>5</octave></pitch>"
+                + "<duration>4</duration><voice>1</voice><type>quarter</type><staff>1</staff>"));
+        assertEquals(true, roundTripped.contains("<pitch><step>E</step><octave>4</octave></pitch>"
+                + "<duration>4</duration><voice>1</voice><type>quarter</type><staff>1</staff>"));
+        assertEquals(true, roundTripped.contains("<pitch><step>E</step><octave>3</octave></pitch>"
+                + "<duration>4</duration><voice>6</voice><type>quarter</type><staff>6</staff>"));
+        assertEquals(collectMeasurePitchEvents(source, 1, 2), collectMeasurePitchEvents(roundTripped, 1, 2));
+        assertEquals(false, roundTripped.contains("action=clamped;reason=overfull"));
+    }
+
+    /** Mirrors the tracked Node articulation/dynamics MuseScore round-trip spot check. */
+    @Test
+    public void roundTripsMusicXmlArticulationsAndDynamicsThroughMuseScoreFacade() {
+        String source = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time>"
+                + "</attributes><direction><direction-type><dynamics><mf/></dynamics></direction-type></direction>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><notations><articulations><staccato/></articulations></notations></note>"
+                + "<note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><notations><articulations><accent/></articulations></notations></note>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type><notations><articulations><tenuto/></articulations></notations></note>"
+                + "<note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>"
+                + "</measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, roundTripped.contains("<dynamics><mf/></dynamics>"));
+        assertEquals(true, roundTripped.contains("<staccato/>"));
+        assertEquals(true, roundTripped.contains("<accent/>"));
+        assertEquals(true, roundTripped.contains("<tenuto/>"));
+        assertEquals(collectMeasurePitchEvents(source, 1, 1), collectMeasurePitchEvents(roundTripped, 1, 1));
+        assertEquals(1, countOccurrences(roundTripped, "<rest/>"));
+    }
+
+    /**
+     * Redistributable, behavior-equivalent evidence for the local-only
+     * Mozart/Paganini/Moonlight spot fixtures in the pinned Node repository.
+     */
+    @Test
+    public void roundTripsCompactLocalControlParityFixtureThroughMuseScoreFacade() throws Exception {
+        String source = new String(readTestResource("upstream-local-equivalent/compact-control-parity.musicxml"),
+                java.nio.charset.StandardCharsets.UTF_8);
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, mscx.contains("<Articulation><subtype>articLhPizzicatoAbove</subtype></Articulation>"));
+        assertEquals(true, mscx.contains("<Dynamic><subtype>mf</subtype>"));
+        assertEquals(true, mscx.contains("<Spanner type=\"Trill\">"));
+        assertEquals(true, mscx.contains("<Spanner type=\"Ottava\">"));
+        assertEquals(true, mscx.contains("<Marker><subtype>segno</subtype><label>segno</label></Marker>"));
+        assertEquals(true, mscx.contains("<Marker><subtype>coda</subtype><label>coda</label></Marker>"));
+        assertEquals(true, mscx.contains("<Marker><subtype>fine</subtype><label>Fine</label></Marker>"));
+        assertEquals(true, mscx.contains("<Jump><text>D.S.</text><jumpTo>segno</jumpTo>"));
+        assertEquals(true, mscx.contains("<Expression><text>Tema</text></Expression>"));
+        assertEquals(true, mscx.contains("<Expression><text><i></i>sempre legato</text></Expression>"));
+
+        assertEquals(true, roundTripped.contains("<measure number=\"0\" implicit=\"yes\">"));
+        assertEquals(true, roundTripped.contains("<trill-mark/><wavy-line type=\"start\" number=\"1\"/>"));
+        assertEquals(true, roundTripped.contains("<wavy-line type=\"stop\" number=\"1\"/>"));
+        assertEquals(true, roundTripped.contains("<octave-shift type=\"start\" size=\"8\" number=\"1\"/>"));
+        assertEquals(true, roundTripped.contains("<octave-shift type=\"stop\" size=\"8\" number=\"1\"/>"));
+        assertEquals(true, roundTripped.contains("<sound dalsegno=\"segno\" fine=\"fine\" tocoda=\"coda\"/>"));
+
+        // MuseScore serializes non-consecutive MusicXML labels as sequential
+        // measure indices and applies an Ottava display shift. Assert the
+        // upstream-observable event cardinality and pitch spelling separately
+        // from those intentional representation details.
+        List<String> sourceEvents = collectMeasurePitchEvents(source, 0, 153);
+        List<String> roundTrippedEvents = collectMeasurePitchEvents(roundTripped, 0, 153);
+        assertEquals(4, sourceEvents.size());
+        assertEquals(sourceEvents.size(), roundTrippedEvents.size());
+        assertEquals(true, containsPitchEvent(roundTrippedEvents, "1", "C", "4", ""));
+        assertEquals(true, containsPitchEvent(roundTrippedEvents, "1", "C", "4", "sharp"));
+    }
+
+    /** Compact fixed MSCX input for the local Paganini/Moonlight import-parity path. */
+    @Test
+    public void importsCompactLocalEquivalentMscxWithExactPitchEventParity() {
+        String mscx = "<museScore version=\"4.0\"><Score><Division>480</Division><Staff id=\"1\">"
+                + "<Measure><voice><Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note>"
+                + "</Chord><Chord><durationType>quarter</durationType><Note><pitch>61</pitch><Accidental>"
+                + "<subtype>accidentalSharp</subtype></Accidental></Note></Chord></voice></Measure>"
+                + "</Staff></Score></museScore>";
+
+        String musicXml = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(Arrays.asList("1|0|480|1|C||4|", "1|480|480|1|C|1|4|sharp"),
+                collectMeasurePitchEvents(musicXml, 1, 1));
+    }
+
+    @Test
+    public void roundTripsPinnedPublicSampleSixAndSevenCorpusThroughMuseScoreFacade() throws Exception {
+        assertMuseScoreRoundtripCorpusStats("upstream-musescore-roundtrip/sample6.musicxml", 4, 4, 137);
+        assertMuseScoreRoundtripCorpusStats("upstream-musescore-roundtrip/sample7.musicxml", 2, 4, 201);
+    }
+
+    @Test
+    public void roundTripsPinnedPublicSampleSevenPitchSpellingAndStaffFourNaturalAccidental() throws Exception {
+        String source = new String(readTestResource("upstream-musescore-roundtrip/sample7.musicxml"),
+                java.nio.charset.StandardCharsets.UTF_8);
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(collectMeasurePitchEvents(source, 3, 4), collectMeasurePitchEvents(roundTripped, 3, 4));
+        assertEquals(true, containsPitchEvent(collectMeasurePitchEvents(source, 7, 7), "4", "B", "3", "natural"));
+        assertEquals(true,
+                containsPitchEvent(collectMeasurePitchEvents(roundTripped, 7, 7), "4", "B", "3", "natural"));
+    }
+
+    @Test
+    public void roundTripsMusicXmlTransposeThroughMuseScoreInstrument() {
+        String source = "<score-partwise version=\"3.1\"><part-list><score-part id=\"P1\">"
+                + "<part-name>Clarinet in A</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>480</divisions><key><fifths>0</fifths><mode>major</mode></key>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef>"
+                + "<transpose><diatonic>-2</diatonic><chromatic>-3</chromatic></transpose></attributes>"
+                + "<note><pitch><step>C</step><octave>5</octave></pitch><duration>480</duration><voice>1</voice>"
+                + "<type>quarter</type></note></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, false, false, false);
+
+        assertEquals(true, mscx.contains("<transposeDiatonic>-2</transposeDiatonic>"));
+        assertEquals(true, mscx.contains("<transposeChromatic>-3</transposeChromatic>"));
+        assertEquals(true, mscx.contains("<KeySig><accidental>0</accidental><concertKey>3</concertKey><transposeKey>0</transposeKey>"));
+        assertEquals(true, roundTripped.contains("<transpose><diatonic>-2</diatonic><chromatic>-3</chromatic></transpose>"));
+    }
+
+    @Test
+    public void exportsZeroDurationForwardAndRoundedVoiceNumbersLikeUpstream() {
+        String source = "<score-partwise version=\"4.0\"><part-list><score-part id=\"P1\">"
+                + "<part-name>P1</part-name></score-part></part-list><part id=\"P1\"><measure number=\"1\">"
+                + "<attributes><divisions>4</divisions><key><fifths>0</fifths></key>"
+                + "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+                + "<forward><duration>0</duration></forward>"
+                + "<note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice>"
+                + "<type>quarter</type></note><backup><duration>4</duration></backup>"
+                + "<note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>2.4</voice>"
+                + "<type>quarter</type></note></measure></part></score-partwise>";
+
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+
+        assertEquals(2, countOccurrences(mscx, "<voice>"));
+        assertEquals(true, mscx.indexOf("<Chord>") >= 0 && mscx.indexOf("<Chord>") < mscx.indexOf("<Rest>"));
+    }
+
+    private static void assertMuseScoreRoundtripCorpusStats(String resourceName, int beats, int beatType, int tempo)
+            throws Exception {
+        String source = new String(readTestResource(resourceName), java.nio.charset.StandardCharsets.UTF_8);
+        String mscx = MuseScoreIo.exportMusicXmlDomToMuseScore(MusicXmlIo.parseMusicXmlDocument(source));
+        String roundTripped = MuseScoreIo.convertMuseScoreToMusicXml(mscx, false, true, false, false);
+
+        assertEquals(countOccurrences(source, "<part id="), countOccurrences(roundTripped, "<part id="), resourceName);
+        assertEquals(countOccurrences(source, "<measure number="), countOccurrences(roundTripped, "<measure number="),
+                resourceName);
+        assertEquals(countOccurrences(source, "<note>"), countOccurrences(roundTripped, "<note>"), resourceName);
+        assertEquals(countOccurrences(source, "<rest"), countOccurrences(roundTripped, "<rest"), resourceName);
+        assertEquals(firstMuseScoreRoundtripMeasureStats(source, 5),
+                firstMuseScoreRoundtripMeasureStats(roundTripped, 5), resourceName);
+        assertEquals(true, roundTripped.contains("<time><beats>" + beats + "</beats><beat-type>" + beatType
+                + "</beat-type></time>"), resourceName);
+        assertEquals(true, roundTripped.contains("<sound tempo=\"" + tempo + "\"/>"), resourceName);
+        assertEquals(false, roundTripped.contains("action=clamped;reason=overfull"), resourceName);
+    }
+
+    private static int countOccurrences(String text, String token) {
+        if (text == null || token == null || token.length() == 0) {
+            return 0;
+        }
+        int count = 0;
+        int start = 0;
+        while (true) {
+            int found = text.indexOf(token, start);
+            if (found < 0) {
+                return count;
+            }
+            count++;
+            start = found + token.length();
+        }
+    }
+
+    private static List<String> firstMuseScoreRoundtripMeasureStats(String musicXml, int limit) {
+        List<String> out = new ArrayList<String>();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("<measure\\s+number=\\\"([^\\\"]*)\\\"[^>]*>(.*?)</measure>", java.util.regex.Pattern.DOTALL)
+                .matcher(musicXml == null ? "" : musicXml);
+        while (matcher.find() && out.size() < limit) {
+            String measureBody = matcher.group(2);
+            out.add(matcher.group(1) + "|" + countOccurrences(measureBody, "<note") + "|"
+                    + countOccurrences(measureBody, "<rest") + "|" + countOccurrences(measureBody, "<chord")
+                    + "|" + countOccurrences(measureBody, "<tie type=\"start\"") + "|"
+                    + countOccurrences(measureBody, "<tie type=\"stop\""));
+        }
+        return out;
+    }
+
+    /** Mirrors the pinned Node collectMeasurePitchEvents test helper. */
+    private static List<String> collectMeasurePitchEvents(String musicXml, int fromMeasure, int toMeasure) {
+        Document doc = MusicXmlIo.parseMusicXmlDocument(musicXml);
+        List<String> out = new ArrayList<String>();
+        if (doc == null || doc.getDocumentElement() == null) {
+            return out;
+        }
+        for (Element part : directChildren(doc.getDocumentElement(), "part")) {
+            for (Element measure : directChildren(part, "measure")) {
+                Integer measureNo = integerOrNull(measure.getAttribute("number"));
+                if (measureNo == null || measureNo.intValue() < fromMeasure || measureNo.intValue() > toMeasure) {
+                    continue;
+                }
+                int cursor = 0;
+                for (Element child : directElementChildren(measure)) {
+                    String tagName = child.getTagName();
+                    if ("backup".equals(tagName) || "forward".equals(tagName)) {
+                        Integer duration = roundedPositiveNumberOrNull(directChildText(child, "duration"));
+                        if (duration != null) {
+                            cursor = "backup".equals(tagName) ? Math.max(0, cursor - duration.intValue())
+                                    : cursor + duration.intValue();
+                        }
+                        continue;
+                    }
+                    if (!"note".equals(tagName)) {
+                        continue;
+                    }
+                    Integer duration = roundedPositiveNumberOrNull(directChildText(child, "duration"));
+                    int roundedDuration = duration == null ? 0 : duration.intValue();
+                    boolean chord = directChild(child, "chord") != null;
+                    if (directChild(child, "rest") != null) {
+                        if (!chord && roundedDuration > 0) {
+                            cursor += roundedDuration;
+                        }
+                        continue;
+                    }
+                    Element pitch = directChild(child, "pitch");
+                    String step = directChildText(pitch, "step");
+                    String octave = directChildText(pitch, "octave");
+                    if (step == null || octave == null) {
+                        continue;
+                    }
+                    int onset = chord ? Math.max(0, cursor - roundedDuration) : cursor;
+                    String staff = directChildText(child, "staff");
+                    String alter = directChildText(pitch, "alter");
+                    String accidental = directChildText(child, "accidental");
+                    out.add(measureNo + "|" + onset + "|" + roundedDuration + "|"
+                            + (staff == null ? "1" : staff) + "|" + step + "|"
+                            + (alter == null ? "" : alter) + "|" + octave + "|"
+                            + (accidental == null ? "" : accidental));
+                    if (!chord) {
+                        cursor += roundedDuration;
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    private static Integer integerOrNull(String raw) {
+        try {
+            return Integer.valueOf(raw == null ? "" : raw.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static boolean containsPitchEvent(List<String> events, String staff, String step, String octave,
+            String accidental) {
+        String suffix = "|" + staff + "|" + step + "|";
+        String expected = "|" + octave + "|" + accidental;
+        for (String event : events) {
+            if (event.contains(suffix) && event.endsWith(expected)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Integer roundedPositiveNumberOrNull(String raw) {
+        try {
+            double value = Double.parseDouble(raw == null ? "" : raw.trim());
+            if (!Double.isFinite(value) || value <= 0) {
+                return null;
+            }
+            return Integer.valueOf((int) Math.round(value));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static List<Element> directChildren(Element parent, String tagName) {
+        List<Element> out = new ArrayList<Element>();
+        for (Element child : directElementChildren(parent)) {
+            if (tagName.equals(child.getTagName())) {
+                out.add(child);
+            }
+        }
+        return out;
+    }
+
+    private static List<Element> directElementChildren(Element parent) {
+        List<Element> out = new ArrayList<Element>();
+        if (parent == null) {
+            return out;
+        }
+        Node child = parent.getFirstChild();
+        while (child != null) {
+            if (child instanceof Element) {
+                out.add((Element) child);
+            }
+            child = child.getNextSibling();
+        }
+        return out;
+    }
+
+    private static Element directChild(Element parent, String tagName) {
+        for (Element child : directElementChildren(parent)) {
+            if (tagName.equals(child.getTagName())) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    private static String directChildText(Element parent, String tagName) {
+        Element child = directChild(parent, tagName);
+        if (child == null || child.getTextContent() == null) {
+            return null;
+        }
+        String text = child.getTextContent().trim();
+        return text.length() == 0 ? null : text;
+    }
+
+    private static byte[] readTestResource(String resourceName) throws IOException {
+        InputStream stream = MuseScoreIoTest.class.getClassLoader().getResourceAsStream(resourceName);
+        if (stream == null) {
+            throw new IOException("Missing test resource: " + resourceName);
+        }
+        try {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = stream.read(buffer)) >= 0) {
+                output.write(buffer, 0, count);
+            }
+            return output.toByteArray();
+        } finally {
+            stream.close();
+        }
     }
 }

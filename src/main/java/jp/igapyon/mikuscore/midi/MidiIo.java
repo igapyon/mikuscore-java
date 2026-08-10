@@ -667,6 +667,34 @@ public final class MidiIo {
         return Math.max(1, (int) Math.round(ticksPerQuarter));
     }
 
+    /** Mirrors {@code midi-musescore-io.normalizeMidiExportProfile}. */
+    public static String normalizeMidiExportProfile(Object value) {
+        return "musescore_parity".equals(value) ? "musescore_parity" : "safe";
+    }
+
+    /**
+     * Resolves the profile-owned MIDI runtime switches before playback event
+     * extraction. This is intentionally separate from the actual byte writer.
+     */
+    public static MidiExportRuntimeOptions resolveMidiExportRuntimeOptions(Object profileValue,
+            double baseTicksPerQuarter) {
+        String profile = normalizeMidiExportProfile(profileValue);
+        long roundedBaseTicks = Math.round(baseTicksPerQuarter);
+        int normalizedBaseTicks = Double.isFinite(baseTicksPerQuarter) && roundedBaseTicks > 0L
+                && roundedBaseTicks <= Integer.MAX_VALUE ? (int) roundedBaseTicks : 480;
+        if ("musescore_parity".equals(profile)) {
+            return new MidiExportRuntimeOptions(profile, 480, true, "musescore_parity_tuned", true, true, true,
+                    true, "off_before_on");
+        }
+        return new MidiExportRuntimeOptions(profile, normalizedBaseTicks, false, "safe_midi", false, false, false,
+                false, "off_before_on");
+    }
+
+    /** Mirrors {@code resolvePlaybackBuildModeForMidiExport}. */
+    public static String resolvePlaybackBuildModeForMidiExport(String policy) {
+        return "musescore_parity_tuned".equals(policy) ? "playback" : "midi";
+    }
+
     public static Integer normalizeMidiProgramNumber(double value) {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
             return null;
@@ -1312,6 +1340,156 @@ public final class MidiIo {
         return out.toByteArray();
     }
 
+    /**
+     * Serializes the non-raw {@code midi-writer.js} track plan into SMF bytes.
+     *
+     * <p>The upstream Node implementation uses its bundled MidiWriterJS 2.1.4
+     * runtime when {@code rawWriter} is false.  The plan classes above model the
+     * exact inputs supplied to that runtime; this method is the JVM-native
+     * counterpart of {@code new MidiWriter.Writer(tracks).buildFile()}.  In
+     * particular, each generated track contains both FF 03 (track name) and FF
+     * 04 (instrument name), and explicit-note events are merged stably by their
+     * absolute tick.</p>
+     */
+    public static byte[] buildMidiWriterCompatibleBytes(MidiExportWriterTrackPlan plan,
+            int writerTicksPerQuarter) {
+        MidiExportWriterTrackPlan safePlan = plan == null
+                ? new MidiExportWriterTrackPlan("", Collections.<byte[]>emptyList(),
+                        Collections.<MidiExportPlaybackTrackPlan>emptyList(),
+                        Collections.<MidiExportControlTrackPlan>emptyList())
+                : plan;
+        List<byte[]> trackChunks = new ArrayList<byte[]>();
+        trackChunks.add(buildMidiWriterMetaTrackChunk(safePlan));
+        for (MidiExportPlaybackTrackPlan playbackPlan : safePlan.getPlaybackTrackPlans()) {
+            if (playbackPlan != null) {
+                trackChunks.add(buildMidiWriterPlaybackTrackChunk(playbackPlan));
+            }
+        }
+        for (MidiExportControlTrackPlan controlPlan : safePlan.getControlTrackPlans()) {
+            if (controlPlan != null) {
+                trackChunks.add(buildMidiWriterControlTrackChunk(controlPlan));
+            }
+        }
+        return buildMidiWriterCompatibleFile(trackChunks, writerTicksPerQuarter);
+    }
+
+    private static byte[] buildMidiWriterMetaTrackChunk(MidiExportWriterTrackPlan plan) {
+        List<byte[]> sequentialEventData = new ArrayList<byte[]>();
+        sequentialEventData.add(buildTextMetaEventData(0, plan.getMetaTrackName(), 0x03));
+        sequentialEventData.add(buildTextMetaEventData(0, plan.getMetaTrackName(), 0x04));
+        sequentialEventData.addAll(plan.getMetaEventData());
+        return encodeMidiWriterSequentialTrackChunk(sequentialEventData);
+    }
+
+    private static byte[] buildMidiWriterPlaybackTrackChunk(MidiExportPlaybackTrackPlan plan) {
+        List<RawTrackEvent> events = new ArrayList<RawTrackEvent>();
+        events.add(new RawTrackEvent(0, 0, 0,
+                stripInitialDeltaZero(buildTextMetaEventData(0, plan.getTrackName(), 0x03))));
+        events.add(new RawTrackEvent(0, 0, 1,
+                stripInitialDeltaZero(buildTextMetaEventData(0, plan.getTrackName(), 0x04))));
+
+        int sequence = 2;
+        for (MidiExportProgramChangeEventFields program : buildMidiExportProgramChangeEventFields(plan)) {
+            events.add(new RawTrackEvent(0, 0, sequence++, new byte[] {
+                    (byte) (0xc0 + program.getChannel() - 1),
+                    (byte) Math.max(0, Math.min(127, program.getInstrument())) }));
+        }
+        for (RawMidiPlaybackEvent event : plan.getTrackEvents()) {
+            if (event == null) {
+                continue;
+            }
+            int channel = normalizeMidiChannel(event.getChannel());
+            int midiNumber = Math.max(0, Math.min(127, Math.round(event.getMidiNumber())));
+            int startTick = Math.max(0, Math.round(event.getStartTicks()));
+            // MidiWriterJS uses T<n> duration syntax. Its tick parser preserves
+            // positive n values and lets zero be zero, so do not impose the raw
+            // writer's one-tick minimum here.
+            int durationTicks = Math.max(0, Math.round(event.getDurTicks()));
+            int velocity = toMidiWriterVelocityByte(clampVelocity(event.getVelocity()));
+            events.add(new RawTrackEvent(startTick, 1, sequence++, new byte[] {
+                    (byte) (0x90 + channel - 1), (byte) midiNumber, (byte) velocity }));
+            events.add(new RawTrackEvent(startTick + durationTicks, 1, sequence++, new byte[] {
+                    (byte) (0x80 + channel - 1), (byte) midiNumber, (byte) velocity }));
+        }
+        return encodeRawTrackChunk(events);
+    }
+
+    private static byte[] buildMidiWriterControlTrackChunk(MidiExportControlTrackPlan plan) {
+        List<byte[]> sequentialEventData = new ArrayList<byte[]>();
+        sequentialEventData.add(buildTextMetaEventData(0, plan.getTrackName(), 0x03));
+        sequentialEventData.add(buildTextMetaEventData(0, plan.getTrackName(), 0x04));
+        for (MidiWriterControllerChangeEventFields controller : plan.getControllerChangeFields()) {
+            ByteArrayOutputStream eventData = new ByteArrayOutputStream();
+            writeBytes(eventData, numberToVariableLength(controller.getDelta()));
+            eventData.write(controller.getStatusByte() & 0xff);
+            eventData.write(controller.getControllerNumber() & 0x7f);
+            eventData.write(controller.getControllerValue() & 0x7f);
+            sequentialEventData.add(eventData.toByteArray());
+        }
+        return encodeMidiWriterSequentialTrackChunk(sequentialEventData);
+    }
+
+    private static byte[] encodeMidiWriterSequentialTrackChunk(List<byte[]> sequentialEventData) {
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        if (sequentialEventData != null) {
+            for (byte[] eventData : sequentialEventData) {
+                writeBytes(body, eventData);
+            }
+        }
+        // MidiWriterJS EndTrackEvent.data is [0x00, 0xff, 0x2f, 0x00].
+        body.write(0x00);
+        body.write(0xff);
+        body.write(0x2f);
+        body.write(0x00);
+        return wrapMidiTrackChunk(body.toByteArray());
+    }
+
+    private static byte[] buildMidiWriterCompatibleFile(List<byte[]> trackChunks, int writerTicksPerQuarter) {
+        List<byte[]> chunks = trackChunks == null ? Collections.<byte[]>emptyList() : trackChunks;
+        int size = 14;
+        for (byte[] chunk : chunks) {
+            if (chunk != null) {
+                size += chunk.length;
+            }
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream(size);
+        out.write(0x4d);
+        out.write(0x54);
+        out.write(0x68);
+        out.write(0x64);
+        out.write(0x00);
+        out.write(0x00);
+        out.write(0x00);
+        out.write(0x06);
+        // HeaderChunk chooses format 0 only for a single track.
+        out.write(0x00);
+        out.write(chunks.size() > 1 ? 0x01 : 0x00);
+        writeBytes(out, toU16BeBytes(chunks.size()));
+        // MidiWriterJS's setMidiWriterHeaderTicksPerQuarter clamps only its
+        // global header division to 0x7fff. Event ticks keep the caller's
+        // normalized TPQ, so this clamp belongs at serialization, not plan
+        // construction.
+        int headerTicksPerQuarter = Math.max(1, Math.min(0x7fff,
+                normalizeTicksPerQuarter(writerTicksPerQuarter)));
+        writeBytes(out, toU16BeBytes(headerTicksPerQuarter));
+        for (byte[] chunk : chunks) {
+            writeBytes(out, chunk);
+        }
+        return out.toByteArray();
+    }
+
+    private static byte[] wrapMidiTrackChunk(byte[] body) {
+        byte[] safeBody = body == null ? new byte[0] : body;
+        ByteArrayOutputStream out = new ByteArrayOutputStream(safeBody.length + 8);
+        out.write(0x4d);
+        out.write(0x54);
+        out.write(0x72);
+        out.write(0x6b);
+        writeBytes(out, toU32BeBytes(safeBody.length));
+        writeBytes(out, safeBody);
+        return out.toByteArray();
+    }
+
     public static List<RawMidiPlaybackEvent> normalizePlaybackEventsForParity(List<RawMidiPlaybackEvent> events) {
         Map<String, RawMidiPlaybackEvent> deduped = new LinkedHashMap<String, RawMidiPlaybackEvent>();
         if (events != null) {
@@ -1750,6 +1928,62 @@ public final class MidiIo {
         }
         String implicitAttr = trimToEmpty(measure.getAttribute("implicit")).toLowerCase();
         return "yes".equals(implicitAttr) || "true".equals(implicitAttr) || "1".equals(implicitAttr);
+    }
+
+    /**
+     * Builds the source-style tick ranges for one part's measures. This is the
+     * runtime-independent half of playback-flow's selected-measure handling;
+     * it deliberately does not perform WebAudio scheduling.
+     */
+    public static List<PlaybackMeasureTimelineRange> buildMeasureTimelineForPart(Document doc, String partId,
+            double fallbackDivisions) {
+        if (doc == null || doc.getDocumentElement() == null
+                || !"score-partwise".equals(doc.getDocumentElement().getNodeName())) {
+            return Collections.emptyList();
+        }
+        String requestedPartId = trimToEmpty(partId);
+        Element part = null;
+        for (Element candidate : directChildElementsByName(doc.getDocumentElement(), "part")) {
+            if (trimToEmpty(candidate.getAttribute("id")).equals(requestedPartId)) {
+                part = candidate;
+                break;
+            }
+        }
+        if (part == null) {
+            return Collections.emptyList();
+        }
+
+        boolean firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
+        int divisions = Math.max(1, (int) Math.round(fallbackDivisions));
+        int beats = 4;
+        int beatType = 4;
+        int tick = 0;
+        List<PlaybackMeasureTimelineRange> ranges = new ArrayList<PlaybackMeasureTimelineRange>();
+        List<Element> measures = directChildElementsByName(part, "measure");
+        for (int measureIndex = 0; measureIndex < measures.size(); measureIndex++) {
+            Element measure = measures.get(measureIndex);
+            Element nextMeasure = measureIndex + 1 < measures.size() ? measures.get(measureIndex + 1) : null;
+            Integer nextDivisions = getFirstIntegerByDirectPath(measure, "attributes", "divisions");
+            if (nextDivisions != null && nextDivisions.intValue() > 0) {
+                divisions = nextDivisions.intValue();
+            }
+            Integer nextBeats = getFirstIntegerByDirectPath(measure, "attributes", "time", "beats");
+            Integer nextBeatType = getFirstIntegerByDirectPath(measure, "attributes", "time", "beat-type");
+            if (nextBeats != null && nextBeats.intValue() > 0 && nextBeatType != null
+                    && nextBeatType.intValue() > 0) {
+                beats = nextBeats.intValue();
+                beatType = nextBeatType.intValue();
+            }
+            int measureContentDiv = estimateMeasureContentSpanDiv(measure);
+            int advanceDiv = resolveMeasureAdvanceDiv(measure, measureContentDiv, divisions, beats, beatType,
+                    isImplicitMeasure(nextMeasure), firstUnderfullAsPickup);
+            int measureTicks = Math.max(1,
+                    (int) Math.round((advanceDiv / (double) Math.max(1, divisions)) * fallbackDivisions));
+            ranges.add(new PlaybackMeasureTimelineRange(tick, tick + measureTicks, requestedPartId,
+                    trimToEmpty(measure.getAttribute("number"))));
+            tick += measureTicks;
+        }
+        return Collections.unmodifiableList(ranges);
     }
 
     public static List<RawMidiControlEvent> collectMidiControlEventsFromMusicXmlDoc(Document doc, int ticksPerQuarter) {
@@ -4777,20 +5011,17 @@ public final class MidiIo {
             appendRestBeamTimeline(beamTimeline, measureDiv - cursorForTimeline, divisions);
         }
 
-        Map<Integer, BeamAssignment> beamAssignments = computeMidiBeamAssignments(beamTimeline, beatDiv, true);
+        Map<Integer, MusicXmlIo.BeamAssignment> beamAssignments = computeMidiBeamAssignments(beamTimeline, beatDiv,
+                true);
         Map<Integer, String> beamXmlByChunkIndex = new LinkedHashMap<Integer, String>();
         for (Map.Entry<Integer, Integer> entry : noteTimelineByChunkIndex.entrySet()) {
-            BeamAssignment assignment = beamAssignments.get(entry.getValue());
+            MusicXmlIo.BeamAssignment assignment = beamAssignments.get(entry.getValue());
             if (assignment == null || assignment.getLevels() <= 0) {
                 continue;
             }
-            StringBuilder beamXml = new StringBuilder();
-            for (int level = 1; level <= assignment.getLevels(); level++) {
-                beamXml.append("<beam number=\"").append(level).append("\">").append(assignment.getState())
-                        .append("</beam>");
-            }
+            String beamXml = MusicXmlIo.buildMusicXmlBeamItemsXml(assignment);
             if (beamXml.length() > 0) {
-                beamXmlByChunkIndex.put(entry.getKey(), beamXml.toString());
+                beamXmlByChunkIndex.put(entry.getKey(), beamXml);
             }
         }
 
@@ -5570,70 +5801,16 @@ public final class MidiIo {
         return new MidiDrumDisplay(pitch.getStep(), pitch.getOctave());
     }
 
-    private static Map<Integer, BeamAssignment> computeMidiBeamAssignments(List<BeamTimelineEvent> events,
+    private static Map<Integer, MusicXmlIo.BeamAssignment> computeMidiBeamAssignments(List<BeamTimelineEvent> events,
             int beatDiv, boolean splitAtBeatBoundaryWhenImplicit) {
-        Map<Integer, BeamAssignment> assignmentByIndex = new LinkedHashMap<Integer, BeamAssignment>();
-        if (events == null) {
-            return assignmentByIndex;
-        }
-        boolean hasExplicitBeamMode = false;
-        if (!hasExplicitBeamMode) {
-            List<Integer> currentGroup = new ArrayList<Integer>();
-            int cursorDiv = 0;
-            int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
-            for (int index = 0; index < events.size(); index++) {
-                BeamTimelineEvent info = events.get(index);
-                if (info != null && splitAtBeatBoundaryWhenImplicit) {
-                    boolean startsAtBeatBoundary = cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0;
-                    if (startsAtBeatBoundary) {
-                        flushMidiBeamGroup(events, currentGroup, assignmentByIndex);
-                        currentGroup.clear();
-                    }
-                }
-                if (info == null || !"note".equals(info.getKind()) || !isMidiBeamableTimedEvent(info)) {
-                    flushMidiBeamGroup(events, currentGroup, assignmentByIndex);
-                    currentGroup.clear();
-                    if (info != null) {
-                        cursorDiv += Math.max(0, info.getDurDiv());
-                    }
-                    continue;
-                }
-                currentGroup.add(Integer.valueOf(index));
-                cursorDiv += Math.max(0, info.getDurDiv());
-            }
-            flushMidiBeamGroup(events, currentGroup, assignmentByIndex);
-        }
-        return assignmentByIndex;
-    }
-
-    private static boolean isMidiBeamableTimedEvent(BeamTimelineEvent info) {
-        return info != null && info.getLevels() > 0;
-    }
-
-    private static void flushMidiBeamGroup(List<BeamTimelineEvent> infos, List<Integer> indices,
-            Map<Integer, BeamAssignment> assignmentByIndex) {
-        List<Integer> chordIndices = new ArrayList<Integer>();
-        for (Integer index : indices) {
-            if (index == null || index.intValue() < 0 || index.intValue() >= infos.size()) {
-                continue;
-            }
-            BeamTimelineEvent info = infos.get(index.intValue());
-            if (info != null && "note".equals(info.getKind())) {
-                chordIndices.add(index);
+        List<MusicXmlIo.BeamEventInfo> infos = new ArrayList<MusicXmlIo.BeamEventInfo>();
+        if (events != null) {
+            for (BeamTimelineEvent event : events) {
+                infos.add(new MusicXmlIo.BeamEventInfo(true, event != null && "note".equals(event.getKind()), false,
+                        event == null ? 0 : event.getDurDiv(), event == null ? 0 : event.getLevels(), ""));
             }
         }
-        if (chordIndices.size() < 2) {
-            return;
-        }
-        for (int groupIndex = 0; groupIndex < chordIndices.size(); groupIndex++) {
-            Integer eventIndex = chordIndices.get(groupIndex);
-            BeamTimelineEvent info = infos.get(eventIndex.intValue());
-            if (info == null || info.getLevels() <= 0) {
-                continue;
-            }
-            String state = groupIndex == 0 ? "begin" : (groupIndex == chordIndices.size() - 1 ? "end" : "continue");
-            assignmentByIndex.put(eventIndex, new BeamAssignment(state, info.getLevels()));
-        }
+        return MusicXmlIo.computeBeamAssignments(infos, beatDiv, splitAtBeatBoundaryWhenImplicit);
     }
 
     private static String formatMidiNumber(double value) {
@@ -7541,6 +7718,37 @@ public final class MidiIo {
         }
     }
 
+    /** One selected-measure range in a runtime-independent playback timeline. */
+    public static final class PlaybackMeasureTimelineRange {
+        private final int startTick;
+        private final int endTick;
+        private final String partId;
+        private final String measureNumber;
+
+        public PlaybackMeasureTimelineRange(int startTick, int endTick, String partId, String measureNumber) {
+            this.startTick = Math.max(0, Math.round(startTick));
+            this.endTick = Math.max(this.startTick, Math.round(endTick));
+            this.partId = partId == null ? "" : partId;
+            this.measureNumber = measureNumber == null ? "" : measureNumber;
+        }
+
+        public int getStartTick() {
+            return startTick;
+        }
+
+        public int getEndTick() {
+            return endTick;
+        }
+
+        public String getPartId() {
+            return partId;
+        }
+
+        public String getMeasureNumber() {
+            return measureNumber;
+        }
+    }
+
     public static final class PlaybackScheduleCompactionResult {
         private final List<RawMidiPlaybackEvent> events;
         private final PlaybackScheduleCompactionSummary summary;
@@ -7757,6 +7965,70 @@ public final class MidiIo {
 
         public List<RawMidiPlaybackEvent> getEvents() {
             return events;
+        }
+    }
+
+    /** Immutable profile-owned options resolved before MIDI event extraction. */
+    public static final class MidiExportRuntimeOptions {
+        private final String profile;
+        private final int ticksPerQuarter;
+        private final boolean normalizeForParity;
+        private final String eventBuildPolicy;
+        private final boolean includeGraceInPlaybackLikeMode;
+        private final boolean includeOrnamentInPlaybackLikeMode;
+        private final boolean includeTieInPlaybackLikeMode;
+        private final boolean rawWriter;
+        private final String rawRetriggerPolicy;
+
+        private MidiExportRuntimeOptions(String profile, int ticksPerQuarter, boolean normalizeForParity,
+                String eventBuildPolicy, boolean includeGraceInPlaybackLikeMode,
+                boolean includeOrnamentInPlaybackLikeMode, boolean includeTieInPlaybackLikeMode, boolean rawWriter,
+                String rawRetriggerPolicy) {
+            this.profile = profile;
+            this.ticksPerQuarter = ticksPerQuarter;
+            this.normalizeForParity = normalizeForParity;
+            this.eventBuildPolicy = eventBuildPolicy;
+            this.includeGraceInPlaybackLikeMode = includeGraceInPlaybackLikeMode;
+            this.includeOrnamentInPlaybackLikeMode = includeOrnamentInPlaybackLikeMode;
+            this.includeTieInPlaybackLikeMode = includeTieInPlaybackLikeMode;
+            this.rawWriter = rawWriter;
+            this.rawRetriggerPolicy = rawRetriggerPolicy;
+        }
+
+        public String getProfile() {
+            return profile;
+        }
+
+        public int getTicksPerQuarter() {
+            return ticksPerQuarter;
+        }
+
+        public boolean isNormalizeForParity() {
+            return normalizeForParity;
+        }
+
+        public String getEventBuildPolicy() {
+            return eventBuildPolicy;
+        }
+
+        public boolean isIncludeGraceInPlaybackLikeMode() {
+            return includeGraceInPlaybackLikeMode;
+        }
+
+        public boolean isIncludeOrnamentInPlaybackLikeMode() {
+            return includeOrnamentInPlaybackLikeMode;
+        }
+
+        public boolean isIncludeTieInPlaybackLikeMode() {
+            return includeTieInPlaybackLikeMode;
+        }
+
+        public boolean isRawWriter() {
+            return rawWriter;
+        }
+
+        public String getRawRetriggerPolicy() {
+            return rawRetriggerPolicy;
         }
     }
 
@@ -8714,24 +8986,6 @@ public final class MidiIo {
 
         private int getDurDiv() {
             return durDiv;
-        }
-
-        private int getLevels() {
-            return levels;
-        }
-    }
-
-    private static final class BeamAssignment {
-        private final String state;
-        private final int levels;
-
-        private BeamAssignment(String state, int levels) {
-            this.state = state == null ? "" : state;
-            this.levels = Math.max(0, levels);
-        }
-
-        private String getState() {
-            return state;
         }
 
         private int getLevels() {

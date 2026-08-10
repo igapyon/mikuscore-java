@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.Arrays;
+import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
@@ -22,6 +23,17 @@ public class ScoreArticulationsTest {
         assertEquals("accent", ScoreArticulations.normalizeArticulationKind("Accent"));
         assertEquals("breath-mark", ScoreArticulations.normalizeArticulationKind("breath-mark"));
         assertNull(ScoreArticulations.normalizeArticulationKind("trill-mark"));
+    }
+
+    @Test
+    public void normalizationDoesNotDependOnTheDefaultLocale() {
+        Locale original = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+            assertEquals("staccatissimo", ScoreArticulations.normalizeArticulationKind("STACCATISSIMO"));
+        } finally {
+            Locale.setDefault(original);
+        }
     }
 
     @Test

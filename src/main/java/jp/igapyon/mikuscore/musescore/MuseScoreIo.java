@@ -5,11 +5,19 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 import jp.igapyon.mikuscore.musicxml.AccidentalSpelling;
+import jp.igapyon.mikuscore.musicxml.MusicXmlIo;
 
 public final class MuseScoreIo {
     private MuseScoreIo() {
@@ -1225,7 +1233,7 @@ public final class MuseScoreIo {
         String normalizedWorkTitle = trimToEmpty(workTitle);
         String normalizedMovementTitle = trimToEmpty(movementTitle);
         String title = normalizedWorkTitle.length() > 0 ? normalizedWorkTitle
-                : (normalizedMovementTitle.length() > 0 ? normalizedMovementTitle : "mikuscore export");
+                : (normalizedMovementTitle.length() > 0 ? normalizedMovementTitle : "miku-score export");
         String composer = readMusicXmlCreatorByTypeFromValues(creators, "composer");
         if (composer.length() == 0) {
             composer = readFirstMusicXmlCreatorFromValues(creators);
@@ -1472,10 +1480,2083 @@ public final class MuseScoreIo {
     public static String buildMuseScoreExportXmlFromParts(MuseScoreExportMetadata metadata, int divisions,
             Collection<MuseScoreExportPartResult> partResults) {
         if (partResults == null || partResults.isEmpty()) {
-            String title = metadata == null ? "mikuscore export" : metadata.getTitle();
+            String title = metadata == null ? "miku-score export" : metadata.getTitle();
             return buildEmptyMuseScoreExportXml(divisions, title);
         }
         return buildMuseScoreExportDocumentXml(metadata, divisions, buildMuseScoreExportDocumentBody(partResults));
+    }
+
+    /**
+     * Converts a MusicXML score-partwise DOM into MuseScore 4 MSCX.
+     *
+     * <p>The lower-level export helpers deliberately operate on value objects so
+     * they can be unit tested independently.  This method is the missing public
+     * bridge from the MusicXML DOM used by the CLI and Core API.</p>
+     */
+    public static String exportMusicXmlDomToMuseScore(Document doc) {
+        return exportMusicXmlDomToMuseScore(doc, false);
+    }
+
+    /**
+     * Converts a MusicXML score-partwise DOM into MuseScore 4 MSCX.
+     *
+     * @param normalizeCutTimeToTwoTwo when {@code true}, source cut-time 4/4
+     *        is emitted as MuseScore 2/2 while retaining its cut-time subtype
+     */
+    public static String exportMusicXmlDomToMuseScore(Document doc, boolean normalizeCutTimeToTwoTwo) {
+        Element score = doc == null ? null : doc.getDocumentElement();
+        if (score == null || !"score-partwise".equals(score.getTagName())) {
+            throw new IllegalArgumentException("MusicXML score-partwise root was not found.");
+        }
+
+        List<Integer> divisionValues = new ArrayList<Integer>();
+        List<Element> partNodes = directChildren(score, "part");
+        for (Element part : partNodes) {
+            for (Element measure : directChildren(part, "measure")) {
+                Element attributes = directChild(measure, "attributes");
+                Integer divisions = positiveIntOrNull(textOfDirectChild(attributes, "divisions"));
+                if (divisions != null) {
+                    divisionValues.add(divisions);
+                }
+            }
+        }
+        int divisions = computeGlobalMusicXmlDivisionsFromValues(divisionValues);
+        MuseScoreExportMetadata metadata = readMusicXmlExportMetadata(score);
+        if (partNodes.isEmpty()) {
+            return buildEmptyMuseScoreExportXml(divisions, metadata.getTitle());
+        }
+
+        Map<String, MuseScoreExportPartName> partNames = readMusicXmlExportPartNames(score);
+        List<MuseScoreExportPartResult> results = new ArrayList<MuseScoreExportPartResult>();
+        MuseScoreExportSlurState slurState = new MuseScoreExportSlurState();
+        int nextStaffId = 1;
+        for (int partIndex = 0; partIndex < partNodes.size(); partIndex++) {
+            MuseScoreExportPartResult result = buildMuseScoreExportPartFromMusicXml(partNodes.get(partIndex),
+                    partIndex + 1, partNames, nextStaffId, divisions, normalizeCutTimeToTwoTwo, slurState);
+            results.add(result);
+            nextStaffId = result.getNextStaffId();
+        }
+        return buildMuseScoreExportXmlFromParts(metadata, divisions, results);
+    }
+
+    /**
+     * Converts MuseScore 4 MSCX to MusicXML score-partwise for the public
+     * CLI/Core conversion path.  It preserves the score hierarchy (part,
+     * staff, measure, and voice) and pitched/rest events. Richer
+     * notation-level mappings remain independently tracked in the migration
+     * log.
+     */
+    public static String convertMuseScoreToMusicXml(String mscxSource) {
+        return convertMuseScoreToMusicXml(mscxSource, true, true, false, true);
+    }
+
+    /**
+     * Converts MuseScore 4 MSCX to MusicXML with the converter options that
+     * have a runtime-independent Java equivalent.
+     *
+     * @param normalizeCutTimeToTwoTwo normalize a MuseScore cut-time 4/4
+     *        signature to MusicXML 2/2 while retaining {@code symbol="cut"}
+     * @param applyImplicitBeams apply default MusicXML beam inference when
+     *        explicit MuseScore beam information is absent
+     */
+    public static String convertMuseScoreToMusicXml(String mscxSource, boolean normalizeCutTimeToTwoTwo,
+            boolean applyImplicitBeams) {
+        return convertMuseScoreToMusicXml(mscxSource, true, true, normalizeCutTimeToTwoTwo, applyImplicitBeams);
+    }
+
+    /**
+     * Converts MuseScore 4 MSCX to MusicXML with the same public import
+     * switches as the Node converter.
+     *
+     * @param sourceMetadata retain URI-encoded source MSCX and its version in
+     *        first-part MusicXML miscellaneous fields
+     * @param debugMetadata retain generated import diagnostics in miscellaneous
+     *        fields when diagnostics exist
+     * @param normalizeCutTimeToTwoTwo normalize a MuseScore cut-time 4/4
+     *        signature to MusicXML 2/2 while retaining {@code symbol="cut"}
+     * @param applyImplicitBeams apply default MusicXML beam inference when
+     *        explicit MuseScore beam information is absent
+     */
+    public static String convertMuseScoreToMusicXml(String mscxSource, boolean sourceMetadata,
+            boolean debugMetadata, boolean normalizeCutTimeToTwoTwo, boolean applyImplicitBeams) {
+        Document doc = MusicXmlIo.parseMusicXmlDocument(mscxSource);
+        Element root = doc == null ? null : doc.getDocumentElement();
+        Element score = root == null ? null : directChild(root, "Score");
+        if (root == null || !"museScore".equals(root.getTagName()) || score == null) {
+            throw new IllegalArgumentException("invalid MuseScore XML input.");
+        }
+        int divisions = intOrDefault(textOfDirectChild(score, "Division"), 480);
+        List<Element> sourceStaffs = collectReadableMuseScoreStaffs(score);
+        List<Element> sourcePartDefs = directChildren(score, "Part");
+        List<MuseScoreImportStaffGroup> partStaffs = groupMuseScoreStaffs(sourcePartDefs, sourceStaffs);
+        MuseScoreImportMetadata metadata = readMuseScoreImportMetadata(score);
+        String initialKeyMode = readGlobalMuseScoreKeyMode(score);
+        ResolvedMuseScoreImportOptions resolvedOptions = resolveMuseScoreImportOptions(Boolean.valueOf(sourceMetadata),
+                Boolean.valueOf(debugMetadata), Boolean.valueOf(normalizeCutTimeToTwoTwo),
+                Boolean.valueOf(applyImplicitBeams));
+        List<MuseScoreWarning> warnings = new ArrayList<MuseScoreWarning>();
+        Set<String> unknownTagSet = new java.util.TreeSet<String>();
+        if (sourceStaffs.isEmpty()) {
+            warnings.add(new MuseScoreWarning("MUSESCORE_IMPORT_WARNING",
+                    "No readable staff content found; created an empty placeholder score.", null, null, null, null,
+                    "placeholder-created", null, null, null, null));
+        }
+        List<ParsedMuseScorePart> parsedByPart = new ArrayList<ParsedMuseScorePart>();
+        List<String> partXmlItems = new ArrayList<String>();
+        for (int partIndex = 0; partIndex < partStaffs.size(); partIndex++) {
+            String partId = "P" + (partIndex + 1);
+            MuseScoreImportStaffGroup staffGroup = partStaffs.get(partIndex);
+            String partName = staffGroup.getPartName();
+            parsedByPart.add(new ParsedMuseScorePart(partId, partName, staffGroup.getTranspose(),
+                    Collections.<ParsedMuseScoreStaff>emptyList()));
+            partXmlItems.add(buildMusicXmlPartFromMuseScore(partId, staffGroup.getStaffs(), divisions,
+                    normalizeCutTimeToTwoTwo, applyImplicitBeams, "", staffGroup.getTranspose(), initialKeyMode,
+                    readMuseScoreInitialClefs(staffGroup), warnings, unknownTagSet));
+        }
+        if (!unknownTagSet.isEmpty()) {
+            warnings.add(new MuseScoreWarning("MUSESCORE_IMPORT_WARNING",
+                    "unsupported MuseScore elements skipped: " + joinWithComma(unknownTagSet), null, null, null,
+                    null, "skipped", "unsupported-elements", null, null, null));
+        }
+        String miscXml = buildMuseScoreImportMiscXml(mscxSource, trimToEmpty(root.getAttribute("version")),
+                resolvedOptions, warnings);
+        if (!partXmlItems.isEmpty() && miscXml.length() > 0) {
+            partXmlItems.set(0, injectMuseScoreImportMiscellaneousXml(partXmlItems.get(0), miscXml));
+        }
+        return buildMuseScoreImportDocumentXml(parsedByPart, metadata, partXmlItems);
+    }
+
+    private static String injectMuseScoreImportMiscellaneousXml(String partXml, String miscXml) {
+        if (partXml == null || miscXml == null || miscXml.length() == 0) {
+            return partXml == null ? "" : partXml;
+        }
+        int attributesEnd = partXml.indexOf("</attributes>");
+        if (attributesEnd < 0) {
+            return partXml;
+        }
+        return partXml.substring(0, attributesEnd) + "<miscellaneous>" + miscXml + "</miscellaneous>"
+                + partXml.substring(attributesEnd);
+    }
+
+    private static List<MuseScoreImportStaffGroup> groupMuseScoreStaffs(List<Element> partDefs,
+            List<Element> sourceStaffs) {
+        List<MuseScoreImportStaffGroup> groups = new ArrayList<MuseScoreImportStaffGroup>();
+        Map<String, Element> byId = new LinkedHashMap<String, Element>();
+        for (int staffIndex = 0; staffIndex < sourceStaffs.size(); staffIndex++) {
+            Element staff = sourceStaffs.get(staffIndex);
+            String id = trimToEmpty(staff.getAttribute("id"));
+            byId.put(id.length() == 0 ? String.valueOf(staffIndex + 1) : id, staff);
+        }
+        List<String> orderedStaffIds = new ArrayList<String>(byId.keySet());
+        Set<String> usedStaffIds = new LinkedHashSet<String>();
+        int nextFallbackStaffIndex = 0;
+        for (int partIndex = 0; partIndex < partDefs.size(); partIndex++) {
+            Element partDef = partDefs.get(partIndex);
+            List<Element> group = new ArrayList<Element>();
+            List<String> groupStaffIds = new ArrayList<String>();
+            List<Element> declared = directChildren(partDef, "Staff");
+            for (Element declaration : declared) {
+                String id = trimToEmpty(declaration.getAttribute("id"));
+                Element resolved = id.length() == 0 ? null : byId.get(id);
+                if (resolved != null && !usedStaffIds.contains(id)) {
+                    group.add(resolved);
+                    groupStaffIds.add(id);
+                    usedStaffIds.add(id);
+                }
+            }
+            int missingCount = Math.max(0, declared.size() - group.size());
+            for (int missingIndex = 0; missingIndex < missingCount; missingIndex++) {
+                while (nextFallbackStaffIndex < orderedStaffIds.size()
+                        && usedStaffIds.contains(orderedStaffIds.get(nextFallbackStaffIndex))) {
+                    nextFallbackStaffIndex++;
+                }
+                if (nextFallbackStaffIndex >= orderedStaffIds.size()) {
+                    break;
+                }
+                String fallbackId = orderedStaffIds.get(nextFallbackStaffIndex);
+                group.add(byId.get(fallbackId));
+                groupStaffIds.add(fallbackId);
+                usedStaffIds.add(fallbackId);
+                nextFallbackStaffIndex++;
+            }
+            if (!group.isEmpty()) {
+                groups.add(new MuseScoreImportStaffGroup(readMuseScorePartName(partDef, "P" + (partIndex + 1)), group,
+                        groupStaffIds, readPartTransposeFromMuseScorePart(partDef), partDef));
+            }
+        }
+        for (String staffId : orderedStaffIds) {
+            if (!usedStaffIds.contains(staffId)) {
+                groups.add(new MuseScoreImportStaffGroup("P" + (groups.size() + 1),
+                        Collections.singletonList(byId.get(staffId)), Collections.singletonList(staffId), null, null));
+            }
+        }
+        if (groups.isEmpty()) {
+            groups.add(new MuseScoreImportStaffGroup("P1", Collections.<Element>emptyList(),
+                    Collections.<String>emptyList(), null, null));
+        }
+        return groups;
+    }
+
+    private static String readMuseScorePartName(Element part, String fallback) {
+        String name = trimToEmpty(textOf(firstDescendant(part, "trackName")));
+        Element instrument = firstDescendant(part, "Instrument");
+        if (name.length() == 0) {
+            name = trimToEmpty(textOfDirectChild(instrument, "longName"));
+        }
+        if (name.length() == 0) {
+            name = trimToEmpty(textOfDirectChild(instrument, "trackName"));
+        }
+        if (name.length() == 0) {
+            name = trimToEmpty(textOfDirectChild(instrument, "shortName"));
+        }
+        if (name.length() == 0) {
+            name = trimToEmpty(textOfDirectChild(instrument, "instrumentId"));
+        }
+        return name.length() == 0 ? fallback : name;
+    }
+
+    private static Transpose readPartTransposeFromMuseScorePart(Element part) {
+        Element instrument = directChild(part, "Instrument");
+        Element transpose = firstDescendant(part, "transpose");
+        Integer diatonic = parseRoundedIntegerOrNull(textOfDirectChild(instrument, "transposeDiatonic"));
+        if (diatonic == null) {
+            diatonic = parseRoundedIntegerOrNull(textOfDirectChild(transpose, "diatonic"));
+        }
+        Integer chromatic = parseRoundedIntegerOrNull(textOfDirectChild(instrument, "transposeChromatic"));
+        if (chromatic == null) {
+            chromatic = parseRoundedIntegerOrNull(textOfDirectChild(transpose, "chromatic"));
+        }
+        return diatonic == null && chromatic == null ? null : new Transpose(diatonic, chromatic);
+    }
+
+    private static String readGlobalMuseScoreKeyMode(Element score) {
+        List<Element> staffs = directChildren(score, "Staff");
+        Element firstStaff = staffs.isEmpty() ? null : staffs.get(0);
+        Element firstMeasure = directChild(firstStaff, "Measure");
+        Element firstVoice = directChild(firstMeasure, "voice");
+        String explicit = normalizeKeyMode(textOfDirectChild(firstDescendant(firstMeasure, "KeySig"), "mode"));
+        if (explicit == null) {
+            explicit = normalizeKeyMode(textOfDirectChild(firstDescendant(firstVoice, "KeySig"), "mode"));
+        }
+        if (explicit == null) {
+            explicit = normalizeKeyMode(textOfDirectChild(firstDescendant(firstVoice, "keysig"), "mode"));
+        }
+        if (explicit != null) {
+            return explicit;
+        }
+        String inferred = inferKeyModeFromText(museScoreMetaTag(score, "workTitle"));
+        if (inferred == null) {
+            inferred = inferKeyModeFromText(museScoreMetaTag(score, "movementTitle"));
+        }
+        if (inferred == null) {
+            inferred = inferKeyModeFromText(readFirstMuseScoreVBoxText(score));
+        }
+        return inferred == null ? "major" : inferred;
+    }
+
+    private static String readFirstMuseScoreVBoxText(Element score) {
+        for (Element staff : directChildren(score, "Staff")) {
+            Element vbox = directChild(staff, "VBox");
+            Element text = directChild(vbox, "Text");
+            String value = trimToEmpty(textOfDirectChild(text, "text"));
+            if (value.length() > 0) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private static List<Clef> readMuseScoreInitialClefs(MuseScoreImportStaffGroup group) {
+        List<Clef> clefs = new ArrayList<Clef>();
+        Map<String, Clef> overrides = readMuseScoreStaffClefOverrides(group.getPartDefinition(), group.getStaffIds());
+        List<Element> staffs = group.getStaffs();
+        for (int staffIndex = 0; staffIndex < staffs.size(); staffIndex++) {
+            String staffId = staffIndex < group.getStaffIds().size() ? group.getStaffIds().get(staffIndex)
+                    : String.valueOf(staffIndex + 1);
+            Clef clef = overrides.get(staffId);
+            if (clef == null) {
+                clef = readMuseScoreClefForStaff(staffs.get(staffIndex));
+            }
+            clefs.add(clef == null ? new Clef("G", 2) : clef);
+        }
+        return clefs;
+    }
+
+    private static Map<String, Clef> readMuseScoreStaffClefOverrides(Element part, List<String> fallbackStaffIds) {
+        Map<String, Clef> overrides = new LinkedHashMap<String, Clef>();
+        if (part == null) {
+            return overrides;
+        }
+        List<Element> partStaffDefs = directChildren(part, "Staff");
+        for (int staffIndex = 0; staffIndex < partStaffDefs.size(); staffIndex++) {
+            Element staffDef = partStaffDefs.get(staffIndex);
+            String staffId = trimToEmpty(staffDef.getAttribute("id"));
+            if (staffId.length() == 0 && staffIndex < fallbackStaffIds.size()) {
+                staffId = fallbackStaffIds.get(staffIndex);
+            }
+            Clef clef = parseMuseClefText(textOfDirectChild(staffDef, "defaultClef"));
+            if (staffId.length() > 0 && clef != null) {
+                overrides.put(staffId, clef);
+            }
+        }
+        Element instrument = directChild(part, "Instrument");
+        for (Element clefDef : directChildren(instrument, "clef")) {
+            String staffId = trimToEmpty(clefDef.getAttribute("staff"));
+            Clef clef = parseMuseClefText(textOf(clefDef));
+            if (staffId.length() > 0 && clef != null) {
+                overrides.put(staffId, clef);
+            }
+        }
+        Element instrumentDefaultClef = null;
+        for (Element clefDef : directChildren(instrument, "clef")) {
+            if (trimToEmpty(clefDef.getAttribute("staff")).length() == 0) {
+                instrumentDefaultClef = clefDef;
+                break;
+            }
+        }
+        Clef parsedDefault = instrumentDefaultClef == null ? null : parseMuseClefText(textOf(instrumentDefaultClef));
+        if (parsedDefault != null && !fallbackStaffIds.isEmpty() && !overrides.containsKey(fallbackStaffIds.get(0))) {
+            overrides.put(fallbackStaffIds.get(0), parsedDefault);
+        }
+        return overrides;
+    }
+
+    private static Clef readMuseScoreClefForStaff(Element staff) {
+        Element measure = directChild(staff, "Measure");
+        Element voice = directChild(measure, "voice");
+        Element clef = directChild(voice, "Clef");
+        if (clef == null) {
+            clef = directChild(measure, "Clef");
+        }
+        if (clef == null) {
+            clef = directChild(staff, "Clef");
+        }
+        if (clef == null) {
+            return null;
+        }
+        String raw = textOfDirectChild(clef, "concertClefType");
+        if (raw.length() == 0) {
+            raw = textOfDirectChild(clef, "subtype");
+        }
+        return parseMuseClefText(raw);
+    }
+
+    private static final class MuseScoreImportStaffGroup {
+        private final String partName;
+        private final List<Element> staffs;
+        private final List<String> staffIds;
+        private final Transpose transpose;
+        private final Element partDefinition;
+
+        private MuseScoreImportStaffGroup(String partName, List<Element> staffs, List<String> staffIds,
+                Transpose transpose, Element partDefinition) {
+            this.partName = partName;
+            this.staffs = new ArrayList<Element>(staffs);
+            this.staffIds = new ArrayList<String>(staffIds);
+            this.transpose = transpose;
+            this.partDefinition = partDefinition;
+        }
+
+        private String getPartName() {
+            return partName;
+        }
+
+        private List<Element> getStaffs() {
+            return staffs;
+        }
+
+        private Transpose getTranspose() {
+            return transpose;
+        }
+
+        private List<String> getStaffIds() {
+            return staffIds;
+        }
+
+        private Element getPartDefinition() {
+            return partDefinition;
+        }
+    }
+
+    private static String buildMusicXmlPartFromMuseScore(String partId, List<Element> staffs, int divisions,
+            boolean normalizeCutTimeToTwoTwo, boolean applyImplicitBeams, String miscellaneousXml,
+            Transpose partTranspose, String initialKeyMode, List<Clef> initialClefs,
+            List<MuseScoreWarning> warnings, Set<String> unknownTagSet) {
+        int staffCount = Math.max(1, staffs == null ? 0 : staffs.size());
+        MuseImportedPartVoiceIdResolver voiceResolver = buildSimpleMuseScoreImportVoiceResolver(staffs);
+        int measureCount = 1;
+        if (staffs != null) {
+            for (Element staff : staffs) {
+                measureCount = Math.max(measureCount, directChildren(staff, "Measure").size());
+            }
+        }
+        int beats = 4;
+        int beatType = 4;
+        int fifths = 0;
+        String keyMode = normalizeKeyMode(initialKeyMode);
+        if (keyMode == null) {
+            keyMode = "major";
+        }
+        List<Clef> clefs = new ArrayList<Clef>();
+        for (int staffIndex = 0; staffIndex < staffCount; staffIndex++) {
+            Clef initialClef = initialClefs != null && staffIndex < initialClefs.size()
+                    ? initialClefs.get(staffIndex) : null;
+            clefs.add(initialClef == null ? new Clef("G", 2) : initialClef);
+        }
+        String currentTimeSymbol = "";
+        Map<String, MuseImportSlurState> slurStateByStaffVoice = new LinkedHashMap<String, MuseImportSlurState>();
+        Map<String, List<OttavaState>> activeOttavaStatesByStaffVoice = new LinkedHashMap<String, List<OttavaState>>();
+        Map<String, MutableInt> nextOttavaNumberByStaffVoice = new LinkedHashMap<String, MutableInt>();
+        Map<String, List<Integer>> activeTrillNumbersByStaffVoice = new LinkedHashMap<String, List<Integer>>();
+        Map<String, MutableInt> nextTrillNumberByStaffVoice = new LinkedHashMap<String, MutableInt>();
+        Map<String, Integer> previousAlterByPitchKey = new LinkedHashMap<String, Integer>();
+        boolean startsWithPickup = false;
+        int absoluteMeasureStartDiv = 0;
+        StringBuilder out = new StringBuilder("<part id=\"").append(xmlEscape(partId)).append("\">");
+        for (int measureIndex = 0; measureIndex < measureCount; measureIndex++) {
+            List<Element> measureByStaff = new ArrayList<Element>();
+            for (int staffIndex = 0; staffIndex < staffCount; staffIndex++) {
+                Element staff = staffs == null || staffIndex >= staffs.size() ? null : staffs.get(staffIndex);
+                List<Element> measures = directChildren(staff, "Measure");
+                measureByStaff.add(measureIndex < measures.size() ? measures.get(measureIndex) : null);
+            }
+            Element primary = measureByStaff.get(0);
+            Element timeSig = findMuseMeasureElement(primary, "TimeSig");
+            if (timeSig == null) {
+                timeSig = findMuseMeasureElement(primary, "timesig");
+            }
+            String timeSymbol = currentTimeSymbol;
+            if (timeSig != null) {
+                beats = intOrDefault(textOfDirectChild(timeSig, "sigN"), beats);
+                beatType = intOrDefault(textOfDirectChild(timeSig, "sigD"), beatType);
+                if (isMuseCutTimeSignature(textOfDirectChild(timeSig, "subtype"))) {
+                    timeSymbol = "cut";
+                    if (normalizeCutTimeToTwoTwo && beats == 4 && beatType == 4) {
+                        beats = 2;
+                        beatType = 2;
+                    }
+                }
+            }
+            currentTimeSymbol = timeSymbol;
+            Element keySig = findMuseMeasureElement(primary, "KeySig");
+            if (keySig == null) {
+                keySig = findMuseMeasureElement(primary, "keysig");
+            }
+            if (keySig != null) {
+                Integer parsedFifths = readMuseKeyFifthsFromValues(textOfDirectChild(keySig, "transposeKey"),
+                        textOfDirectChild(keySig, "accidental"), textOfDirectChild(keySig, "concertKey"),
+                        partTranspose != null);
+                if (parsedFifths != null) {
+                    fifths = parsedFifths.intValue();
+                }
+                String parsedMode = normalizeKeyMode(textOfDirectChild(keySig, "mode"));
+                if (parsedMode != null) {
+                    keyMode = parsedMode;
+                }
+            }
+            boolean hasClefChange = false;
+            for (int staffIndex = 0; staffIndex < staffCount; staffIndex++) {
+                Element clefElement = findMuseElement(measureByStaff.get(staffIndex), "Clef");
+                if (clefElement == null) {
+                    clefElement = directChild(measureByStaff.get(staffIndex), "Clef");
+                }
+                if (clefElement == null) {
+                    continue;
+                }
+                String raw = textOfDirectChild(clefElement, "concertClefType");
+                if (raw.length() == 0) {
+                    raw = textOfDirectChild(clefElement, "subtype");
+                }
+                Clef parsed = parseMuseClefText(raw);
+                if (parsed != null) {
+                    clefs.set(staffIndex, parsed);
+                    hasClefChange = true;
+                }
+            }
+            int nominalCapacity = Math.max(1, Math.round((divisions * 4 * beats) / (float) beatType));
+            Integer measureLength = parseMuseScoreMeasureLenToDivisions(primary, divisions);
+            int capacity = measureLength == null ? nominalCapacity : measureLength.intValue();
+            boolean implicitMeasure = measureLength != null && measureLength.intValue() < nominalCapacity;
+            if (measureIndex == 0) {
+                startsWithPickup = implicitMeasure;
+            }
+            int baseBeatDiv = Math.max(1, Math.round((divisions * 4.0f) / Math.max(1, beatType)));
+            int inferredBeamBeatDiv = beatType == 8 && beats >= 6 && beats % 3 == 0 ? baseBeatDiv * 3 : baseBeatDiv;
+            RepeatFlags repeatFlags = readMuseScoreMeasureRepeatFlags(primary);
+            boolean repeatForward = parseTruthyFlag(primary == null ? null : primary.getAttribute("startRepeat"))
+                    || hasMuseScoreMeasureMarker(primary, "startRepeat") || repeatFlags.isRepeatForward();
+            boolean repeatBackward = parseTruthyFlag(primary == null ? null : primary.getAttribute("endRepeat"))
+                    || hasMuseScoreMeasureMarker(primary, "endRepeat") || repeatFlags.isRepeatBackward();
+            boolean leftDoubleBarline = "double".equals(normalizeToken(readMuseScorePrimaryBarlineSubtype(primary)));
+            out.append("<measure number=\"").append(startsWithPickup ? measureIndex : measureIndex + 1)
+                    .append(implicitMeasure ? "\" implicit=\"yes\"" : "\"").append(">");
+            if (measureIndex == 0 || timeSig != null || keySig != null || hasClefChange) {
+                out.append("<attributes>");
+                if (measureIndex == 0) {
+                    out.append("<divisions>").append(divisions).append("</divisions>");
+                    if (staffCount > 1) {
+                        out.append("<staves>").append(staffCount).append("</staves>");
+                    }
+                }
+                out.append("<key><fifths>").append(fifths).append("</fifths><mode>").append(keyMode)
+                        .append("</mode></key><time")
+                        .append(timeSymbol.length() == 0 ? "" : " symbol=\"" + timeSymbol + "\"")
+                        .append("><beats>")
+                        .append(beats).append("</beats><beat-type>").append(beatType)
+                        .append("</beat-type></time>").append(buildTransposeXml(partTranspose));
+                if (staffCount > 1) {
+                    for (int staffIndex = 0; staffIndex < staffCount; staffIndex++) {
+                        Clef clef = clefs.get(staffIndex);
+                        out.append("<clef number=\"").append(staffIndex + 1).append("\"><sign>")
+                                .append(xmlEscape(clef.getSign())).append("</sign><line>")
+                                .append(clef.getLine()).append("</line></clef>");
+                    }
+                } else {
+                    Clef clef = clefs.get(0);
+                    out.append("<clef><sign>").append(xmlEscape(clef.getSign())).append("</sign><line>")
+                            .append(clef.getLine()).append("</line></clef>");
+                }
+                if (measureIndex == 0 && miscellaneousXml != null && miscellaneousXml.length() > 0) {
+                    out.append("<miscellaneous>").append(miscellaneousXml).append("</miscellaneous>");
+                }
+                out.append("</attributes>");
+            }
+            if (leftDoubleBarline) {
+                out.append("<barline location=\"left\"><bar-style>light-light</bar-style></barline>");
+            }
+            if (repeatForward) {
+                out.append("<barline location=\"left\"><repeat direction=\"forward\"/></barline>");
+            }
+            for (int staffIndex = 0; staffIndex < staffCount; staffIndex++) {
+                if (staffIndex > 0) {
+                    out.append(buildMuseImportedBackupXml(capacity));
+                }
+                List<Element> voices = directChildren(measureByStaff.get(staffIndex), "voice");
+                if (voices.isEmpty()) {
+                    out.append(buildSimpleMusicXmlRest(capacity, divisions, staffIndex + 1,
+                            voiceResolver.resolve(staffIndex + 1, 1), ""));
+                    continue;
+                }
+                for (int voiceIndex = 0; voiceIndex < voices.size(); voiceIndex++) {
+                    if (voiceIndex > 0) {
+                        out.append(buildMuseImportedBackupXml(capacity));
+                    }
+                    int localVoiceNo = voiceIndex + 1;
+                    String slurStateKey = (staffIndex + 1) + ":" + localVoiceNo;
+                    MuseImportSlurState slurState = slurStateByStaffVoice.get(slurStateKey);
+                    if (slurState == null) {
+                        slurState = new MuseImportSlurState();
+                        slurStateByStaffVoice.put(slurStateKey, slurState);
+                    }
+                    List<OttavaState> activeOttavaStates = activeOttavaStatesByStaffVoice.get(slurStateKey);
+                    if (activeOttavaStates == null) {
+                        activeOttavaStates = new ArrayList<OttavaState>();
+                        activeOttavaStatesByStaffVoice.put(slurStateKey, activeOttavaStates);
+                    }
+                    MutableInt nextOttavaNumber = nextOttavaNumberByStaffVoice.get(slurStateKey);
+                    if (nextOttavaNumber == null) {
+                        nextOttavaNumber = new MutableInt(1);
+                        nextOttavaNumberByStaffVoice.put(slurStateKey, nextOttavaNumber);
+                    }
+                    List<Integer> activeTrillNumbers = activeTrillNumbersByStaffVoice.get(slurStateKey);
+                    if (activeTrillNumbers == null) {
+                        activeTrillNumbers = new ArrayList<Integer>();
+                        activeTrillNumbersByStaffVoice.put(slurStateKey, activeTrillNumbers);
+                    }
+                    MutableInt nextTrillNumber = nextTrillNumberByStaffVoice.get(slurStateKey);
+                    if (nextTrillNumber == null) {
+                        nextTrillNumber = new MutableInt(1);
+                        nextTrillNumberByStaffVoice.put(slurStateKey, nextTrillNumber);
+                    }
+                    out.append(buildMusicXmlVoiceFromMuseScore(voices.get(voiceIndex), divisions, capacity,
+                            staffIndex + 1, localVoiceNo, voiceResolver, inferredBeamBeatDiv,
+                            applyImplicitBeams, slurState, activeOttavaStates, nextOttavaNumber, fifths,
+                            previousAlterByPitchKey, activeTrillNumbers, nextTrillNumber,
+                            absoluteMeasureStartDiv, measureIndex + 1, warnings, unknownTagSet));
+                }
+            }
+            if (repeatBackward || measureIndex == measureCount - 1) {
+                out.append("<barline location=\"right\">");
+                if (measureIndex == measureCount - 1) {
+                    out.append("<bar-style>light-heavy</bar-style>");
+                }
+                if (repeatBackward) {
+                    out.append("<repeat direction=\"backward\"/>");
+                }
+                out.append("</barline>");
+            }
+            out.append("</measure>");
+            absoluteMeasureStartDiv += capacity;
+        }
+        return out.append("</part>").toString();
+    }
+
+    private static MuseImportedPartVoiceIdResolver buildSimpleMuseScoreImportVoiceResolver(List<Element> staffs) {
+        int staffCount = Math.max(1, staffs == null ? 0 : staffs.size());
+        Map<Integer, java.util.Set<Integer>> localVoiceNosByStaff = new LinkedHashMap<Integer, java.util.Set<Integer>>();
+        for (int staffNo = 1; staffNo <= staffCount; staffNo++) {
+            localVoiceNosByStaff.put(Integer.valueOf(staffNo), new java.util.TreeSet<Integer>());
+        }
+        if (staffs != null) {
+            for (int staffIndex = 0; staffIndex < staffs.size(); staffIndex++) {
+                int sourceStaffNo = staffIndex + 1;
+                java.util.Set<Integer> localVoiceNos = localVoiceNosByStaff.get(Integer.valueOf(sourceStaffNo));
+                for (Element measure : directChildren(staffs.get(staffIndex), "Measure")) {
+                    List<Element> voices = directChildren(measure, "voice");
+                    if (voices.isEmpty()) {
+                        localVoiceNos.add(Integer.valueOf(1));
+                        continue;
+                    }
+                    for (int voiceIndex = 0; voiceIndex < voices.size(); voiceIndex++) {
+                        int defaultVoiceNo = voiceIndex + 1;
+                        localVoiceNos.add(Integer.valueOf(defaultVoiceNo));
+                        for (Element event : directChildren(voices.get(voiceIndex), null)) {
+                            MuseScoreImportEventRouting routing = readMuseImportEventRouting(event.getTagName(),
+                                    parseRoundedIntegerOrNull(textOfDirectChild(event, "track")), defaultVoiceNo,
+                                    staffIndex, parseRoundedIntegerOrNull(textOfDirectChild(event, "move")));
+                            Integer movedStaffNo = Integer.valueOf(routing.getMovedStaffNo());
+                            java.util.Set<Integer> movedVoiceNos = localVoiceNosByStaff.get(movedStaffNo);
+                            if (movedVoiceNos == null) {
+                                movedVoiceNos = new java.util.TreeSet<Integer>();
+                                localVoiceNosByStaff.put(movedStaffNo, movedVoiceNos);
+                            }
+                            movedVoiceNos.add(Integer.valueOf(routing.getVoiceNo()));
+                        }
+                    }
+                }
+            }
+        }
+        MuseImportedPartVoiceIdResolver resolver = new MuseImportedPartVoiceIdResolver();
+        List<Integer> staffNos = new ArrayList<Integer>(localVoiceNosByStaff.keySet());
+        Collections.sort(staffNos);
+        for (Integer staffNo : staffNos) {
+            java.util.Set<Integer> localVoiceNos = localVoiceNosByStaff.get(staffNo);
+            if (localVoiceNos == null || localVoiceNos.isEmpty()) {
+                resolver.resolve(staffNo.intValue(), 1);
+                continue;
+            }
+            for (Integer localVoiceNo : localVoiceNos) {
+                resolver.resolve(staffNo.intValue(), localVoiceNo.intValue());
+            }
+        }
+        return resolver;
+    }
+
+    private static Integer parseMuseScoreMeasureLenToDivisions(Element measure, int divisions) {
+        String raw = measure == null ? "" : trimToEmpty(measure.getAttribute("len"));
+        if (!raw.matches("^\\d+\\s*/\\s*\\d+$")) {
+            return null;
+        }
+        String[] terms = raw.split("\\s*/\\s*", -1);
+        try {
+            double numerator = Double.parseDouble(terms[0]);
+            double denominator = Double.parseDouble(terms[1]);
+            if (!Double.isFinite(numerator) || !Double.isFinite(denominator) || numerator <= 0 || denominator <= 0) {
+                return null;
+            }
+            double value = (Math.max(1, Math.round(divisions)) * 4.0d * numerator) / denominator;
+            if (!Double.isFinite(value) || value <= 0 || value > Integer.MAX_VALUE) {
+                return null;
+            }
+            return Integer.valueOf(Math.max(1, (int) Math.round(value)));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static RepeatFlags readMuseScoreMeasureRepeatFlags(Element measure) {
+        List<String> subtypes = new ArrayList<String>();
+        for (Element container : museScoreMeasureAndVoiceElements(measure)) {
+            for (String tagName : new String[] { "BarLine", "barline" }) {
+                for (Element barline : directChildren(container, tagName)) {
+                    subtypes.add(textOfDirectChild(barline, "subtype"));
+                }
+            }
+        }
+        return parseMeasureRepeatFlagsFromBarlineSubtypes(subtypes);
+    }
+
+    private static boolean hasMuseScoreMeasureMarker(Element measure, String markerName) {
+        for (Element container : museScoreMeasureAndVoiceElements(measure)) {
+            if (directChild(container, markerName) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String readMuseScorePrimaryBarlineSubtype(Element measure) {
+        for (Element container : museScoreMeasureAndVoiceElements(measure)) {
+            for (Element barline : directChildren(container, "BarLine")) {
+                String subtype = trimToEmpty(textOfDirectChild(barline, "subtype"));
+                if (subtype.length() > 0) {
+                    return subtype;
+                }
+            }
+        }
+        return "";
+    }
+
+    private static List<Element> museScoreMeasureAndVoiceElements(Element measure) {
+        List<Element> containers = new ArrayList<Element>();
+        if (measure == null) {
+            return containers;
+        }
+        containers.add(measure);
+        containers.addAll(directChildren(measure, "voice"));
+        return containers;
+    }
+
+    private static boolean isMuseCutTimeSignature(String subtype) {
+        String normalized = normalizeToken(subtype);
+        return "2".equals(normalized) || "cut".equals(normalized);
+    }
+
+    private static String buildMusicXmlVoiceFromMuseScore(Element voice, int divisions, int capacity, int staffNo,
+            int localVoiceNo, MuseImportedPartVoiceIdResolver voiceResolver, int inferredBeamBeatDiv,
+            boolean applyImplicitBeams, MuseImportSlurState slurState,
+            List<OttavaState> activeOttavaStates, MutableInt nextOttavaNumber, int keyFifths,
+            Map<String, Integer> previousAlterByPitchKey, List<Integer> activeTrillNumbers,
+            MutableInt nextTrillNumber, int measureStartDiv, int measureNo, List<MuseScoreWarning> warnings,
+            Set<String> unknownTagSet) {
+        List<Element> sourceEvents = directChildren(voice, null);
+        Map<String, TimeModification> tupletDefinitions = readMuseScoreTupletDefinitions(sourceEvents);
+        List<MuseBeamEvent> beamEvents = new ArrayList<MuseBeamEvent>();
+        for (Element event : sourceEvents) {
+            String tag = event.getTagName();
+            if ("Chord".equals(tag)) {
+                boolean grace = directChild(event, "grace") != null || directChild(event, "acciaccatura") != null
+                        || directChild(event, "appoggiatura") != null;
+                int duration = grace ? 0 : museEventDuration(event, divisions);
+                beamEvents.add(buildMuseImportedBeamEventInfo(true, true, grace, duration, null, divisions,
+                        museBeamExplicitMode(event)));
+            } else if ("Rest".equals(tag)) {
+                beamEvents.add(buildMuseImportedBeamEventInfo(true, false, false,
+                        museEventDuration(event, divisions), null, divisions, museBeamExplicitMode(event)));
+            } else {
+                beamEvents.add(new MuseBeamEvent(false, false, false, 0, 0, null));
+            }
+        }
+        Map<Integer, String> beamXmlByEventIndex = buildMuseBeamXmlByEventInfo(beamEvents, inferredBeamBeatDiv,
+                applyImplicitBeams);
+        StringBuilder out = new StringBuilder();
+        List<Integer> pendingTrillStarts = new ArrayList<Integer>();
+        List<Integer> pendingTrillStops = new ArrayList<Integer>();
+        List<Double> inlineTupletScaleStack = new ArrayList<Double>();
+        List<TupletState> inlineTupletStateStack = new ArrayList<TupletState>();
+        MutableInt nextInlineTupletNumber = new MutableInt(1);
+        int sourceTimedDuration = calculateMuseScoreVoiceTimedDuration(sourceEvents, divisions, capacity);
+        int occupied = 0;
+        int sourceCursor = 0;
+        for (int eventIndex = 0; eventIndex < sourceEvents.size(); eventIndex++) {
+            Element event = sourceEvents.get(eventIndex);
+            if ("Tuplet".equals(event.getTagName()) || "tuplet".equals(event.getTagName())) {
+                TupletDescriptor descriptor = readMuseScoreTupletDescriptor(event);
+                if (descriptor != null && descriptor.getId().length() == 0) {
+                    nextInlineTupletNumber.setCurrent(applyMuseInlineTupletStart(descriptor, inlineTupletScaleStack,
+                            inlineTupletStateStack, nextInlineTupletNumber.getCurrent()));
+                } else if (descriptor == null) {
+                    MuseScoreImportEventRouting routing = readMuseImportEventRouting(event.getTagName(),
+                            parseRoundedIntegerOrNull(textOfDirectChild(event, "track")), localVoiceNo, staffNo - 1,
+                            parseRoundedIntegerOrNull(textOfDirectChild(event, "move")));
+                    addMuseScoreImportUnsupportedTupletWarning(warnings, measureNo, staffNo, routing.getVoiceNo(),
+                            sourceCursor);
+                }
+                continue;
+            }
+            if ("endTuplet".equals(event.getTagName()) || "endtuplet".equals(event.getTagName())) {
+                applyMuseEndTuplet(inlineTupletScaleStack, inlineTupletStateStack);
+                continue;
+            }
+            if ("Tick".equals(event.getTagName()) || "tick".equals(event.getTagName())) {
+                sourceCursor = readMuseTickRelativeDiv(textOf(event), measureStartDiv);
+                continue;
+            }
+            String beamXml = readMuseImportedBeamXmlByEventIndex(beamXmlByEventIndex, eventIndex);
+            MuseScoreImportEventRouting routing = readMuseImportEventRouting(event.getTagName(),
+                    parseRoundedIntegerOrNull(textOfDirectChild(event, "track")), localVoiceNo, staffNo - 1,
+                    parseRoundedIntegerOrNull(textOfDirectChild(event, "move")));
+            int eventStaffNo = routing.getMovedStaffNo();
+            int eventVoiceNo = voiceResolver.resolve(eventStaffNo, routing.getVoiceNo());
+            int leadingDiv = Math.max(0, sourceCursor - occupied);
+            if (leadingDiv > 0) {
+                out.append(buildMuseImportedForwardXml(leadingDiv, eventVoiceNo, eventStaffNo));
+                occupied += leadingDiv;
+            }
+            if ("Dynamic".equals(event.getTagName())) {
+                String mark = parseMuseDynamicMark(textOfDirectChild(event, "subtype"));
+                if (isSimpleMuseElementVisible(event) && mark != null) {
+                    Integer velocity = positiveIntOrNull(textOfDirectChild(event, "velocity"));
+                    out.append(withDirectionPlacement(buildDynamicDirectionXml(mark, parseMuseDynamicSoundValue(velocity)),
+                            eventStaffNo, eventVoiceNo));
+                } else if (isSimpleMuseElementVisible(event)) {
+                    addMuseScoreImportUnsupportedEventWarning(warnings, measureNo, staffNo, routing.getVoiceNo(),
+                            sourceCursor, "Dynamic");
+                }
+            } else if ("Tempo".equals(event.getTagName())) {
+                String directionXml = parseSimpleMuseTempoDirectionXml(event);
+                if (directionXml != null) {
+                    out.append(withDirectionPlacement(directionXml, eventStaffNo, eventVoiceNo));
+                }
+            } else if ("Expression".equals(event.getTagName())) {
+                String directionXml = parseSimpleMuseExpressionDirectionXml(event);
+                if (directionXml != null) {
+                    out.append(withDirectionPlacement(directionXml, eventStaffNo, eventVoiceNo));
+                } else {
+                    addMuseScoreImportUnsupportedEventWarning(warnings, measureNo, staffNo, routing.getVoiceNo(),
+                            sourceCursor, "Expression");
+                }
+            } else if ("Marker".equals(event.getTagName())) {
+                String directionXml = parseSimpleMuseMarkerDirectionXml(event);
+                if (directionXml != null) {
+                    out.append(withDirectionPlacement(directionXml, eventStaffNo, eventVoiceNo));
+                } else {
+                    addMuseScoreImportUnsupportedEventWarning(warnings, measureNo, staffNo, routing.getVoiceNo(),
+                            sourceCursor, "Marker");
+                }
+            } else if ("Jump".equals(event.getTagName())) {
+                String directionXml = parseSimpleMuseJumpDirectionXml(event);
+                if (directionXml != null) {
+                    out.append(withDirectionPlacement(directionXml, eventStaffNo, eventVoiceNo));
+                } else {
+                    addMuseScoreImportUnsupportedEventWarning(warnings, measureNo, staffNo, routing.getVoiceNo(),
+                            sourceCursor, "Jump");
+                }
+            } else if ("BarLine".equals(event.getTagName()) || "barline".equals(event.getTagName())) {
+                String barlineXml = parseMuseScoreMidMeasureBarlineXml(event);
+                if (barlineXml != null) {
+                    out.append(barlineXml);
+                }
+            } else if (isMuseScoreOttavaSpanner(event)) {
+                appendMuseScoreOttavaDirections(out, event, eventStaffNo, eventVoiceNo, activeOttavaStates,
+                        nextOttavaNumber);
+            } else if (isMuseScoreTrillSpanner(event)) {
+                collectMuseScoreTrillSpannerTransition(event, activeTrillNumbers, nextTrillNumber,
+                        pendingTrillStarts, pendingTrillStops);
+            } else if ("Chord".equals(event.getTagName())) {
+                boolean grace = directChild(event, "grace") != null || directChild(event, "acciaccatura") != null
+                        || directChild(event, "appoggiatura") != null;
+                boolean graceSlash = directChild(event, "acciaccatura") != null;
+                if (!grace && !hasKnownMuseEventDuration(event, capacity, divisions)) {
+                    addMuseScoreImportDroppedEventWarning(warnings, measureNo, staffNo, eventVoiceNo, sourceCursor,
+                            "Chord", "unknown-duration");
+                    continue;
+                }
+                List<Element> notes = directChildren(event, "Note");
+                if (notes.isEmpty()) {
+                    addMuseScoreImportDroppedEventWarning(warnings, measureNo, staffNo, eventVoiceNo, sourceCursor,
+                            "Chord", "missing-pitch");
+                    continue;
+                }
+                int displayDuration = museEventDuration(event, divisions, capacity);
+                TimeModification referencedTimeModification = readMuseScoreChordTupletTimeModification(event,
+                        tupletDefinitions);
+                TimeModification timeModification = referencedTimeModification;
+                List<TupletStart> inlineTupletStarts = Collections.<TupletStart>emptyList();
+                if (timeModification == null && !inlineTupletStateStack.isEmpty()) {
+                    TupletState activeTuplet = inlineTupletStateStack.get(inlineTupletStateStack.size() - 1);
+                    timeModification = new TimeModification(activeTuplet.getActualNotes(), activeTuplet.getNormalNotes());
+                    inlineTupletStarts = consumeTupletStarts(inlineTupletStateStack);
+                }
+                int duration = grace ? 0 : (referencedTimeModification != null
+                        ? scaleMuseScoreTupletDuration(displayDuration, referencedTimeModification)
+                        : Math.max(1, (int) Math.round(displayDuration * currentTupletScale(inlineTupletScaleStack))));
+                if (shouldClampMuseImportedTimedEvent(occupied, duration, capacity, 0)) {
+                    break;
+                }
+                String tupletReferenceId = readMuseScoreChordTupletReferenceId(event);
+                boolean startsTuplet = timeModification != null
+                        && !tupletReferenceId.equals(readMuseScoreTupletReferenceId(sourceEvents, eventIndex - 1));
+                boolean stopsTuplet = timeModification != null
+                        && !tupletReferenceId.equals(readMuseScoreTupletReferenceId(sourceEvents, eventIndex + 1));
+                List<TupletStart> tupletStarts = new ArrayList<TupletStart>();
+                if (startsTuplet) {
+                    tupletStarts.add(new TupletStart(1, null, null));
+                }
+                tupletStarts.addAll(inlineTupletStarts);
+                List<Integer> tupletStops = new ArrayList<Integer>();
+                if (stopsTuplet) {
+                    tupletStops.add(Integer.valueOf(1));
+                }
+                tupletStops.addAll(readMuseScoreImmediateInlineTupletStops(sourceEvents, eventIndex,
+                        inlineTupletStateStack));
+                TupletMusicXml tupletXml = buildTupletMusicXml(timeModification, tupletStarts, tupletStops);
+                for (Element spanner : directChildren(event, null)) {
+                    if (isMuseScoreOttavaSpanner(spanner)) {
+                        appendMuseScoreOttavaDirections(out, spanner, eventStaffNo, eventVoiceNo, activeOttavaStates,
+                                nextOttavaNumber);
+                    } else if (isMuseScoreTrillSpanner(spanner)) {
+                        collectMuseScoreTrillSpannerTransition(spanner, activeTrillNumbers, nextTrillNumber,
+                                pendingTrillStarts, pendingTrillStops);
+                    }
+                }
+                MuseScoreChordNotationSummary notationSummary = readMuseScoreChordNotationSummary(event);
+                MuseSlurTransitions slurTransitions = readMuseScoreChordSlurTransitions(event, slurState);
+                int ottavaDisplayShift = semitoneShiftForActiveOttavaDisplay(activeOttavaStates);
+                for (int noteIndex = 0; noteIndex < notes.size(); noteIndex++) {
+                    out.append(buildSimpleMusicXmlPitchedNote(notes.get(noteIndex), duration, displayDuration, divisions, eventStaffNo,
+                            eventVoiceNo, noteIndex > 0, noteIndex == 0 ? beamXml : "", grace, graceSlash,
+                            noteIndex == 0 ? notationSummary.getArticulationTags() : Collections.<String>emptyList(),
+                            noteIndex == 0 ? notationSummary.getTechnicalTags() : Collections.<String>emptyList(),
+                            noteIndex == 0 ? slurTransitions.getStarts() : Collections.<Integer>emptyList(),
+                            noteIndex == 0 ? slurTransitions.getStops() : Collections.<Integer>emptyList(),
+                            noteIndex == 0 && notationSummary.hasChordLocalTrillMark(), keyFifths,
+                            previousAlterByPitchKey, ottavaDisplayShift,
+                            noteIndex == 0 ? pendingTrillStarts : Collections.<Integer>emptyList(),
+                            noteIndex == 0 ? pendingTrillStops : Collections.<Integer>emptyList(),
+                            noteIndex == 0 ? timeModification : null,
+                            noteIndex == 0 ? tupletXml.getNotationItems() : Collections.<String>emptyList()));
+                }
+                if (!notes.isEmpty()) {
+                    pendingTrillStarts.clear();
+                    pendingTrillStops.clear();
+                }
+                occupied += duration;
+                sourceCursor += duration;
+            } else if ("Rest".equals(event.getTagName())) {
+                if (!hasKnownMuseEventDuration(event, capacity, divisions)) {
+                    addMuseScoreImportDroppedEventWarning(warnings, measureNo, staffNo, eventVoiceNo, sourceCursor,
+                            "Rest", "unknown-duration");
+                    continue;
+                }
+                int displayDuration = museEventDuration(event, divisions, capacity);
+                TimeModification referencedTimeModification = readMuseScoreChordTupletTimeModification(event,
+                        tupletDefinitions);
+                TimeModification timeModification = referencedTimeModification;
+                List<TupletStart> inlineTupletStarts = Collections.<TupletStart>emptyList();
+                if (timeModification == null && !inlineTupletStateStack.isEmpty()) {
+                    TupletState activeTuplet = inlineTupletStateStack.get(inlineTupletStateStack.size() - 1);
+                    timeModification = new TimeModification(activeTuplet.getActualNotes(), activeTuplet.getNormalNotes());
+                    inlineTupletStarts = consumeTupletStarts(inlineTupletStateStack);
+                }
+                int duration = referencedTimeModification != null
+                        ? scaleMuseScoreTupletDuration(displayDuration, referencedTimeModification)
+                        : Math.max(1, (int) Math.round(displayDuration * currentTupletScale(inlineTupletScaleStack)));
+                if (shouldClampMuseImportedTimedEvent(occupied, duration, capacity, 0)) {
+                    break;
+                }
+                String tupletReferenceId = readMuseScoreChordTupletReferenceId(event);
+                boolean startsTuplet = timeModification != null
+                        && !tupletReferenceId.equals(readMuseScoreTupletReferenceId(sourceEvents, eventIndex - 1));
+                boolean stopsTuplet = timeModification != null
+                        && !tupletReferenceId.equals(readMuseScoreTupletReferenceId(sourceEvents, eventIndex + 1));
+                List<TupletStart> tupletStarts = new ArrayList<TupletStart>();
+                if (startsTuplet) {
+                    tupletStarts.add(new TupletStart(1, null, null));
+                }
+                tupletStarts.addAll(inlineTupletStarts);
+                List<Integer> tupletStops = new ArrayList<Integer>();
+                if (stopsTuplet) {
+                    tupletStops.add(Integer.valueOf(1));
+                }
+                tupletStops.addAll(readMuseScoreImmediateInlineTupletStops(sourceEvents, eventIndex,
+                        inlineTupletStateStack));
+                TupletMusicXml tupletXml = buildTupletMusicXml(timeModification, tupletStarts, tupletStops);
+                out.append(buildSimpleMusicXmlRest(duration, displayDuration, divisions, eventStaffNo, eventVoiceNo,
+                        beamXml, timeModification, tupletXml.getNotationItems(), pendingTrillStarts, pendingTrillStops));
+                pendingTrillStarts.clear();
+                pendingTrillStops.clear();
+                occupied += duration;
+                sourceCursor += duration;
+            } else if (!isIgnoredMuseImportTag(event.getTagName()) && unknownTagSet != null) {
+                unknownTagSet.add(normalizeToken(event.getTagName()));
+            }
+        }
+        addMuseScoreImportOverfullWarning(warnings, measureNo, staffNo, localVoiceNo, sourceTimedDuration, capacity);
+        if (out.length() == 0) {
+            return buildSimpleMusicXmlRest(capacity, divisions, staffNo,
+                    voiceResolver.resolve(staffNo, localVoiceNo), "");
+        }
+        return out.toString();
+    }
+
+    private static int calculateMuseScoreVoiceTimedDuration(List<Element> sourceEvents, int divisions, int capacity) {
+        if (sourceEvents == null || sourceEvents.isEmpty()) {
+            return 0;
+        }
+        Map<String, TimeModification> tupletDefinitions = readMuseScoreTupletDefinitions(sourceEvents);
+        List<Double> inlineTupletScaleStack = new ArrayList<Double>();
+        int total = 0;
+        for (Element event : sourceEvents) {
+            String tag = normalizeToken(event == null ? null : event.getTagName());
+            if ("tuplet".equals(tag)) {
+                TupletDescriptor descriptor = readMuseScoreTupletDescriptor(event);
+                if (descriptor != null && descriptor.getId().length() == 0) {
+                    inlineTupletScaleStack.add(Double.valueOf(descriptor.getNormalNotes()
+                            / (double) descriptor.getActualNotes()));
+                }
+                continue;
+            }
+            if ("endtuplet".equals(tag)) {
+                if (!inlineTupletScaleStack.isEmpty()) {
+                    inlineTupletScaleStack.remove(inlineTupletScaleStack.size() - 1);
+                }
+                continue;
+            }
+            boolean chord = "chord".equals(tag);
+            boolean rest = "rest".equals(tag);
+            if (!chord && !rest) {
+                continue;
+            }
+            boolean grace = chord && (directChild(event, "grace") != null || directChild(event, "acciaccatura") != null
+                    || directChild(event, "appoggiatura") != null);
+            if (grace || !hasKnownMuseEventDuration(event, capacity, divisions)
+                    || (chord && directChildren(event, "Note").isEmpty())) {
+                continue;
+            }
+            int displayDuration = museEventDuration(event, divisions, capacity);
+            TimeModification timeModification = readMuseScoreChordTupletTimeModification(event, tupletDefinitions);
+            int duration = timeModification == null
+                    ? Math.max(1, (int) Math.round(displayDuration * currentTupletScale(inlineTupletScaleStack)))
+                    : scaleMuseScoreTupletDuration(displayDuration, timeModification);
+            total = total > Integer.MAX_VALUE - duration ? Integer.MAX_VALUE : total + duration;
+        }
+        return total;
+    }
+
+    private static void addMuseScoreImportOverfullWarning(List<MuseScoreWarning> warnings, int measureNo, int staffNo,
+            int voiceNo, int occupiedDiv, int capacityDiv) {
+        if (warnings == null || occupiedDiv <= capacityDiv) {
+            return;
+        }
+        warnings.add(new MuseScoreWarning("MUSESCORE_IMPORT_WARNING",
+                "measure " + measureNo + " voice " + voiceNo + ": overfull content (" + occupiedDiv + " > "
+                        + capacityDiv + "); tail events are clamped.",
+                Integer.valueOf(measureNo), Integer.valueOf(staffNo), Integer.valueOf(voiceNo), null, "clamped",
+                "overfull", null, Integer.valueOf(occupiedDiv), Integer.valueOf(capacityDiv)));
+    }
+
+    private static void addMuseScoreImportUnsupportedTupletWarning(List<MuseScoreWarning> warnings, int measureNo,
+            int staffNo, int voiceNo, int atDiv) {
+        addMuseScoreImportUnsupportedEventWarning(warnings, measureNo, staffNo, voiceNo, atDiv, "Tuplet");
+    }
+
+    private static void addMuseScoreImportUnsupportedEventWarning(List<MuseScoreWarning> warnings, int measureNo,
+            int staffNo, int voiceNo, int atDiv, String tag) {
+        if (warnings == null) {
+            return;
+        }
+        String normalizedTag = tag == null ? "event" : tag;
+        warnings.add(new MuseScoreWarning("MUSESCORE_IMPORT_WARNING",
+                "measure " + measureNo + ": unsupported " + normalizedTag.toLowerCase(Locale.ROOT) + " skipped.",
+                Integer.valueOf(measureNo),
+                Integer.valueOf(staffNo), Integer.valueOf(voiceNo), Integer.valueOf(Math.max(0, atDiv)), "skipped",
+                "unsupported", normalizedTag, null, null));
+    }
+
+    private static boolean isMuseScoreOttavaSpanner(Element event) {
+        return event != null && "spanner".equals(normalizeToken(event.getTagName()))
+                && "ottava".equals(normalizeToken(event.getAttribute("type")));
+    }
+
+    private static boolean isMuseScoreTrillSpanner(Element event) {
+        return event != null && "spanner".equals(normalizeToken(event.getTagName()))
+                && "trill".equals(normalizeToken(event.getAttribute("type")));
+    }
+
+    private static void appendMuseScoreOttavaDirections(StringBuilder out, Element spanner, int staffNo, int voiceNo,
+            List<OttavaState> activeOttavaStates, MutableInt nextOttavaNumber) {
+        if (out == null || !isMuseScoreOttavaSpanner(spanner)) {
+            return;
+        }
+        Element ottava = directChild(spanner, "Ottava");
+        if (ottava == null) {
+            ottava = directChild(spanner, "ottava");
+        }
+        boolean hasStop = directChild(spanner, "prev") != null;
+        boolean hasStart = ottava != null || directChild(spanner, "next") != null;
+        String subtype = ottava == null ? "" : textOfDirectChild(ottava, "subtype");
+        for (String directionXml : applyMuseOttavaSpannerTransition(subtype, hasStart, hasStop,
+                activeOttavaStates, nextOttavaNumber)) {
+            out.append(withDirectionPlacement(directionXml, staffNo, voiceNo));
+        }
+    }
+
+    private static void collectMuseScoreTrillSpannerTransition(Element spanner, List<Integer> activeTrillNumbers,
+            MutableInt nextTrillNumber, List<Integer> pendingTrillStarts, List<Integer> pendingTrillStops) {
+        if (!isMuseScoreTrillSpanner(spanner)) {
+            return;
+        }
+        boolean hasStop = directChild(spanner, "prev") != null;
+        boolean hasStart = directChild(spanner, "Trill") != null || directChild(spanner, "trill") != null
+                || directChild(spanner, "next") != null;
+        applyMuseTrillSpannerTransition(parseTrillSpannerTransition(spanner.getAttribute("type"), hasStart, hasStop),
+                activeTrillNumbers, nextTrillNumber, pendingTrillStarts, pendingTrillStops);
+    }
+
+    private static String parseMuseScoreMidMeasureBarlineXml(Element barline) {
+        String normalized = normalizeToken(textOfDirectChild(barline, "subtype")).replaceAll("[\\s_]+", "-");
+        if (normalized.contains("end-start-repeat") || normalized.contains("endstartrepeat")) {
+            return buildMidMeasureRepeatBarlineXml("end-start");
+        }
+        if (normalized.contains("start-repeat") || normalized.contains("repeat-start")) {
+            return buildMidMeasureRepeatBarlineXml("forward");
+        }
+        if (normalized.contains("end-repeat") || normalized.contains("repeat-end")) {
+            return buildMidMeasureRepeatBarlineXml("backward");
+        }
+        return null;
+    }
+
+    private static String buildSimpleMusicXmlPitchedNote(Element museNote, int duration, int displayDuration,
+            int divisions, int staffNo,
+            int voiceNo, boolean chordFollow, String beamXml, boolean grace, boolean graceSlash,
+            Collection<String> articulationTags, Collection<String> technicalTags, Collection<Integer> slurStarts,
+            Collection<Integer> slurStops, boolean chordLocalTrillMark, int keyFifths,
+            Map<String, Integer> previousAlterByPitchKey, int ottavaDisplayShift, Collection<Integer> trillStarts,
+            Collection<Integer> trillStops, TimeModification timeModification,
+            Collection<String> tupletNotationItems) {
+        int midi = Math.max(0, Math.min(127, intOrDefault(textOfDirectChild(museNote, "pitch"), 60)
+                + ottavaDisplayShift));
+        String accidentalSubtype = textOfDirectChild(directChild(museNote, "Accidental"), "subtype");
+        String accidental = museAccidentalSubtypeToMusicXml(accidentalSubtype);
+        TieFlags tieFlags = readMuseScoreNoteTieFlags(museNote);
+        String tieXml = buildMuseImportedNoteTieXml(tieFlags);
+        String fingeringText = readMuseScoreNoteText(museNote, "Fingering");
+        String stringText = readMuseScoreNoteText(museNote, "String");
+        Integer stringNumber = parsePositiveIntegerOrNull(stringText);
+        List<MuseScoreChordNote> parsedNotes = parseMuseChordNotes(Collections.singletonList(
+                new MuseScoreChordNoteInput(Integer.valueOf(midi), accidentalSubtype, textOfDirectChild(museNote, "tpc"),
+                        tieFlags, fingeringText, stringText)), 0);
+        MuseImportedPitchXml importedPitch = buildMuseImportedPitchXml(
+                parsedNotes.isEmpty() ? null : parsedNotes.get(0), keyFifths, staffNo, previousAlterByPitchKey);
+        List<String> trillNotationItems = buildMuseImportedTrillNotationItems(trillStarts,
+                trillStops, chordLocalTrillMark, accidental);
+        String notationsXml = buildMuseImportedNoteNotationsXml(tupletNotationItems,
+                slurStarts, slurStops, trillNotationItems,
+                articulationTags, technicalTags, tieFlags, fingeringText, stringNumber);
+        TypeAndDots type = divisionToTypeAndDots(divisions, displayDuration);
+        String timeModificationXml = buildTupletMusicXml(timeModification, Collections.<TupletStart>emptyList(),
+                Collections.<Integer>emptyList()).getTimeModificationXml();
+        return "<note>" + (chordFollow ? "<chord/>" : "")
+                + (grace ? (graceSlash ? "<grace slash=\"yes\"/>" : "<grace/>") : "")
+                + importedPitch.getPitchXml() + tieXml + importedPitch.getAccidentalXml()
+                + (grace ? "" : "<duration>" + duration + "</duration>") + "<voice>" + voiceNo + "</voice><type>"
+                + type.getType() + "</type>" + repeatXml("<dot/>", type.getDots())
+                + timeModificationXml + (beamXml == null ? "" : beamXml) + "<staff>" + staffNo
+                + "</staff>" + notationsXml + "</note>";
+    }
+
+    private static Map<String, TimeModification> readMuseScoreTupletDefinitions(List<Element> sourceEvents) {
+        Map<String, TimeModification> definitions = new LinkedHashMap<String, TimeModification>();
+        for (Element event : sourceEvents) {
+            if (!"tuplet".equals(normalizeToken(event.getTagName()))) {
+                continue;
+            }
+            String id = trimToEmpty(event.getAttribute("id"));
+            int actual = intOrDefault(textOfDirectChild(event, "actualNotes"), 0);
+            int normal = intOrDefault(textOfDirectChild(event, "normalNotes"), 0);
+            if (id.length() > 0 && actual > 0 && normal > 0) {
+                definitions.put(id, new TimeModification(actual, normal));
+            }
+        }
+        return definitions;
+    }
+
+    private static TupletDescriptor readMuseScoreTupletDescriptor(Element tuplet) {
+        if (tuplet == null) {
+            return null;
+        }
+        return readMuseTupletDescriptor(tuplet.getAttribute("id"),
+                parseRoundedIntegerOrNull(textOfDirectChild(tuplet, "normalNotes")),
+                parseRoundedIntegerOrNull(textOfDirectChild(tuplet, "actualNotes")),
+                parseRoundedIntegerOrNull(textOfDirectChild(tuplet, "numberType")),
+                parseRoundedIntegerOrNull(textOfDirectChild(tuplet, "bracketType")));
+    }
+
+    private static List<Integer> readMuseScoreImmediateInlineTupletStops(List<Element> sourceEvents, int eventIndex,
+            List<TupletState> inlineTupletStateStack) {
+        List<Integer> stops = new ArrayList<Integer>();
+        if (sourceEvents == null || inlineTupletStateStack == null) {
+            return stops;
+        }
+        int stateIndex = inlineTupletStateStack.size() - 1;
+        for (int index = eventIndex + 1; index < sourceEvents.size(); index++) {
+            String tag = normalizeToken(sourceEvents.get(index).getTagName());
+            if ("endtuplet".equals(tag)) {
+                if (stateIndex >= 0) {
+                    stops.add(Integer.valueOf(inlineTupletStateStack.get(stateIndex).getNumber()));
+                    stateIndex--;
+                }
+                continue;
+            }
+            if ("tick".equals(tag) || "spanner".equals(tag) || "dynamic".equals(tag) || "tempo".equals(tag)
+                    || "expression".equals(tag) || "marker".equals(tag) || "jump".equals(tag)
+                    || "barline".equals(tag)) {
+                continue;
+            }
+            break;
+        }
+        return stops;
+    }
+
+    private static TimeModification readMuseScoreChordTupletTimeModification(Element chord,
+            Map<String, TimeModification> definitions) {
+        if (definitions == null) {
+            return null;
+        }
+        return definitions.get(readMuseScoreChordTupletReferenceId(chord));
+    }
+
+    private static String readMuseScoreChordTupletReferenceId(Element chord) {
+        Element reference = directChild(chord, "Tuplet");
+        if (reference == null) {
+            reference = directChild(chord, "tuplet");
+        }
+        return reference == null ? "" : trimToEmpty(textOf(reference));
+    }
+
+    private static String readMuseScoreTupletReferenceId(List<Element> events, int eventIndex) {
+        if (events == null || eventIndex < 0 || eventIndex >= events.size()) {
+            return "";
+        }
+        Element event = events.get(eventIndex);
+        return "Chord".equals(event.getTagName()) || "Rest".equals(event.getTagName())
+                ? readMuseScoreChordTupletReferenceId(event) : "";
+    }
+
+    private static int scaleMuseScoreTupletDuration(int displayDuration, TimeModification timeModification) {
+        if (timeModification == null || timeModification.getActualNotes() <= 0 || timeModification.getNormalNotes() <= 0) {
+            return Math.max(0, displayDuration);
+        }
+        return Math.max(1, Math.round(displayDuration * timeModification.getNormalNotes()
+                / (float) timeModification.getActualNotes()));
+    }
+
+    private static TieFlags readMuseScoreNoteTieFlags(Element note) {
+        Element tie = directChild(note, "Tie");
+        if (tie == null) {
+            tie = directChild(note, "tie");
+        }
+        if (tie == null) {
+            for (Element candidate : directChildren(note, "Spanner")) {
+                String type = normalizeToken(candidate.getAttribute("type"));
+                if ("tie".equals(type)) {
+                    tie = candidate;
+                    break;
+                }
+            }
+        }
+        return parseMuseTieFlags(tie != null, directChild(tie, "prev") != null, directChild(tie, "next") != null,
+                directChild(note, "endSpanner") != null);
+    }
+
+    private static String readMuseScoreNoteText(Element note, String tagName) {
+        Element item = directChild(note, tagName);
+        if (item == null) {
+            return null;
+        }
+        Element text = directChild(item, "text");
+        String value = trimToEmpty(text == null ? textOf(item) : textOf(text));
+        return value.length() == 0 ? null : value;
+    }
+
+    private static MuseScoreChordNotationSummary readMuseScoreChordNotationSummary(Element chord) {
+        List<String> articulationSubtypes = new ArrayList<String>();
+        for (Element articulation : directChildren(chord, "Articulation")) {
+            articulationSubtypes.add(textOfDirectChild(articulation, "subtype"));
+        }
+        List<String> ornamentSubtypes = new ArrayList<String>();
+        for (Element ornament : directChildren(chord, "Ornament")) {
+            ornamentSubtypes.add(textOfDirectChild(ornament, "subtype"));
+        }
+        return summarizeMuseChordNotations(articulationSubtypes, ornamentSubtypes);
+    }
+
+    private static MuseSlurTransitions readMuseScoreChordSlurTransitions(Element chord, MuseImportSlurState state) {
+        List<MuseSlurElement> slurs = new ArrayList<MuseSlurElement>();
+        for (Element slur : directChildren(chord, "Slur")) {
+            slurs.add(new MuseSlurElement(slur.getAttribute("type"), slur.getAttribute("id")));
+        }
+        List<MuseSlurTransition> spanners = new ArrayList<MuseSlurTransition>();
+        for (Element spanner : directChildren(chord, null)) {
+            if (!"spanner".equals(normalizeToken(spanner.getTagName()))) {
+                continue;
+            }
+            spanners.add(parseMuseSlurSpannerTransition(spanner.getAttribute("type"),
+                    directChild(spanner, "Slur") != null || directChild(spanner, "slur") != null
+                            || directChild(spanner, "next") != null,
+                    directChild(spanner, "prev") != null));
+        }
+        return parseMuseChordSlurTransitions(slurs, spanners, state);
+    }
+
+    private static String buildSimpleMusicXmlRest(int duration, int divisions, int staffNo, int voiceNo,
+            String beamXml) {
+        return buildSimpleMusicXmlRest(duration, duration, divisions, staffNo, voiceNo, beamXml, null,
+                Collections.<String>emptyList(), Collections.<Integer>emptyList(), Collections.<Integer>emptyList());
+    }
+
+    private static String buildSimpleMusicXmlRest(int duration, int displayDuration, int divisions, int staffNo,
+            int voiceNo, String beamXml, TimeModification timeModification, Collection<String> tupletNotationItems,
+            Collection<Integer> trillStarts, Collection<Integer> trillStops) {
+        TypeAndDots type = divisionToTypeAndDots(divisions, displayDuration);
+        String timeModificationXml = buildTupletMusicXml(timeModification, Collections.<TupletStart>emptyList(),
+                Collections.<Integer>emptyList()).getTimeModificationXml();
+        String notationsXml = buildMuseImportedNoteNotationsXml(tupletNotationItems,
+                Collections.<Integer>emptyList(), Collections.<Integer>emptyList(),
+                buildMuseImportedTrillNotationItems(trillStarts, trillStops, false, null),
+                Collections.<String>emptyList(), Collections.<String>emptyList(), new TieFlags(false, false), null, null);
+        return "<note><rest/><duration>" + duration + "</duration><voice>" + voiceNo + "</voice><type>"
+                + type.getType() + "</type>" + repeatXml("<dot/>", type.getDots())
+                + timeModificationXml + (beamXml == null ? "" : beamXml) + "<staff>" + staffNo
+                + "</staff>" + notationsXml + "</note>";
+    }
+
+    private static String museBeamExplicitMode(Element event) {
+        String mode = normalizeToken(textOfDirectChild(event, "BeamMode"));
+        if ("begin".equals(mode) || "mid".equals(mode)) {
+            return mode;
+        }
+        return null;
+    }
+
+    private static String parseSimpleMuseTempoDirectionXml(Element tempo) {
+        Double qps = finiteDoubleOrNull(textOfDirectChild(tempo, "tempo"));
+        Integer bpm = qps == null || qps.doubleValue() <= 0.0d ? null
+                : Integer.valueOf((int) Math.max(20, Math.min(300, Math.round(qps.doubleValue() * 60.0d))));
+        String text = trimToEmpty(textOfDirectChild(tempo, "text"));
+        if (isSimpleMuseElementVisible(tempo) && text.length() > 0) {
+            return buildWordsDirectionXml(text, "above", bpm, null);
+        }
+        if (bpm == null) {
+            return null;
+        }
+        return "<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>"
+                + bpm.intValue() + "</per-minute></metronome></direction-type><sound tempo=\"" + bpm.intValue()
+                + "\"/></direction>";
+    }
+
+    private static String parseSimpleMuseExpressionDirectionXml(Element expression) {
+        Element textElement = directChild(expression, "text");
+        String text = trimToEmpty(textElement == null ? textOf(expression) : textOf(textElement));
+        if (text.length() == 0) {
+            return null;
+        }
+        return buildWordsDirectionXml(text, null, null,
+                firstDescendant(textElement, "i") == null ? null : "italic");
+    }
+
+    private static String parseSimpleMuseMarkerDirectionXml(Element marker) {
+        String subtype = normalizeToken(textOfDirectChild(marker, "subtype"));
+        String label = trimToEmpty(textOfDirectChild(marker, "label"));
+        if (subtype.contains("segno")) {
+            return buildSegnoDirectionXml();
+        }
+        if (subtype.contains("coda")) {
+            return buildCodaDirectionXml();
+        }
+        if (subtype.contains("fine")) {
+            return buildWordsDirectionXml(label.length() == 0 ? "Fine" : label, null, null, null);
+        }
+        return label.length() == 0 ? null : buildWordsDirectionXml(label, null, null, null);
+    }
+
+    private static String parseSimpleMuseJumpDirectionXml(Element jump) {
+        String jumpTo = trimToEmpty(textOfDirectChild(jump, "jumpTo"));
+        String playUntil = trimToEmpty(textOfDirectChild(jump, "playUntil"));
+        String continueAt = trimToEmpty(textOfDirectChild(jump, "continueAt"));
+        String text = trimToEmpty(textOfDirectChild(jump, "text"));
+        String subtype = trimToEmpty(textOfDirectChild(jump, "subtype"));
+        if (text.length() == 0) {
+            text = subtype;
+        }
+        if (text.length() == 0) {
+            List<String> pieces = new ArrayList<String>();
+            if (jumpTo.length() > 0) {
+                pieces.add(jumpTo);
+            }
+            if (playUntil.length() > 0) {
+                pieces.add(playUntil);
+            }
+            if (continueAt.length() > 0) {
+                pieces.add(continueAt);
+            }
+            text = joinWithDelimiter(pieces, " / ");
+        }
+        if (text.length() == 0) {
+            return null;
+        }
+        List<String> soundAttributes = new ArrayList<String>();
+        String normalizedJumpTo = normalizeToken(jumpTo);
+        String normalizedPlayUntil = normalizeToken(playUntil);
+        String normalizedContinueAt = normalizeToken(continueAt);
+        if (normalizedJumpTo.contains("segno")) {
+            soundAttributes.add("dalsegno=\"segno\"");
+        }
+        if (normalizedJumpTo.contains("coda")) {
+            soundAttributes.add("dacapo=\"yes\"");
+        }
+        if (normalizedPlayUntil.contains("fine")) {
+            soundAttributes.add("fine=\"fine\"");
+        }
+        if (normalizedPlayUntil.contains("coda") || normalizedContinueAt.contains("coda")) {
+            soundAttributes.add("tocoda=\"coda\"");
+        }
+        String direction = buildWordsDirectionXml(text, null, null, null);
+        if (soundAttributes.isEmpty()) {
+            return direction;
+        }
+        return direction.replace("</direction>", "<sound " + joinWithDelimiter(soundAttributes, " ")
+                + "/></direction>");
+    }
+
+    private static Double finiteDoubleOrNull(String raw) {
+        try {
+            double value = Double.parseDouble(trimToEmpty(raw));
+            return Double.isFinite(value) ? Double.valueOf(value) : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static boolean isSimpleMuseElementVisible(Element event) {
+        Double visible = finiteDoubleOrNull(textOfDirectChild(event, "visible"));
+        return visible == null || visible.doubleValue() != 0.0d;
+    }
+
+    private static String joinWithDelimiter(Collection<String> values, String delimiter) {
+        StringBuilder out = new StringBuilder();
+        if (values != null) {
+            for (String value : values) {
+                if (value == null || value.length() == 0) {
+                    continue;
+                }
+                if (out.length() > 0) {
+                    out.append(delimiter);
+                }
+                out.append(value);
+            }
+        }
+        return out.toString();
+    }
+
+    private static int museEventDuration(Element event, int divisions) {
+        return museEventDuration(event, divisions, -1);
+    }
+
+    private static boolean hasKnownMuseEventDuration(Element event, int measureCapacity, int divisions) {
+        if (event == null) {
+            return false;
+        }
+        if ("measure".equals(normalizeToken(textOfDirectChild(event, "durationType")))) {
+            return measureCapacity > 0;
+        }
+        return durationTypeToDivisions(textOfDirectChild(event, "durationType"), divisions) != null;
+    }
+
+    private static void addMuseScoreImportDroppedEventWarning(List<MuseScoreWarning> warnings, int measureNo,
+            int staffNo, int voiceNo, int atDiv, String tag, String reason) {
+        if (warnings == null) {
+            return;
+        }
+        String normalizedTag = tag == null ? "event" : tag;
+        String normalizedReason = reason == null ? "unsupported" : reason;
+        warnings.add(new MuseScoreWarning("MUSESCORE_IMPORT_WARNING",
+                "measure " + measureNo + ": dropped " + normalizedTag.toLowerCase(Locale.ROOT) + " with "
+                        + normalizedReason.replace('-', ' ') + ".",
+                Integer.valueOf(measureNo), Integer.valueOf(staffNo), Integer.valueOf(voiceNo),
+                Integer.valueOf(Math.max(0, atDiv)), "dropped", normalizedReason, normalizedTag, null, null));
+    }
+
+    private static int museEventDuration(Element event, int divisions, int measureCapacity) {
+        if ("measure".equals(normalizeToken(textOfDirectChild(event, "durationType"))) && measureCapacity > 0) {
+            return measureCapacity;
+        }
+        Integer base = durationTypeToDivisions(textOfDirectChild(event, "durationType"), divisions);
+        int dots = nonNegativeIntOrDefault(textOfDirectChild(event, "dots"), 0);
+        return durationWithDots(base == null ? divisions : base.intValue(), dots);
+    }
+
+    private static Element findMuseElement(Element measure, String tagName) {
+        if (measure == null) {
+            return null;
+        }
+        for (Element voice : directChildren(measure, "voice")) {
+            Element found = directChild(voice, tagName);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private static Element findMuseMeasureElement(Element measure, String tagName) {
+        Element direct = directChild(measure, tagName);
+        return direct == null ? findMuseElement(measure, tagName) : direct;
+    }
+
+    private static String museScoreMetaTag(Element score, String name) {
+        for (Element metaTag : directChildren(score, "metaTag")) {
+            if (name.equals(trimToEmpty(metaTag.getAttribute("name")))) {
+                return trimToEmpty(textOf(metaTag));
+            }
+        }
+        return "";
+    }
+
+    private static List<Element> collectReadableMuseScoreStaffs(Element score) {
+        List<Element> readable = new ArrayList<Element>();
+        for (Element staff : directChildren(score, "Staff")) {
+            if (firstDescendant(staff, "Measure") != null) {
+                readable.add(staff);
+            }
+        }
+        return readable;
+    }
+
+    private static String readFirstMuseScoreVBoxTextByStyle(Element score, String styleName) {
+        String expectedStyle = trimToEmpty(styleName).toLowerCase(Locale.ROOT);
+        for (Element staff : directChildren(score, "Staff")) {
+            for (Element vbox : directChildren(staff, "VBox")) {
+                for (Element text : directChildren(vbox, "Text")) {
+                    String style = trimToEmpty(textOfDirectChild(text, "style")).toLowerCase(Locale.ROOT);
+                    if (!expectedStyle.equals(style)) {
+                        continue;
+                    }
+                    String value = trimToEmpty(textOfDirectChild(text, "text"));
+                    if (value.length() > 0) {
+                        return value;
+                    }
+                }
+            }
+        }
+        return "";
+    }
+
+    private static MuseScoreImportMetadata readMuseScoreImportMetadata(Element score) {
+        String workTitleMeta = museScoreMetaTag(score, "workTitle");
+        String subtitleMeta = museScoreMetaTag(score, "subtitle");
+        String movementTitleMeta = museScoreMetaTag(score, "movementTitle");
+        String movementNumberMeta = museScoreMetaTag(score, "movementNumber");
+        String workNumberMeta = museScoreMetaTag(score, "workNumber");
+        String arrangerMeta = museScoreMetaTag(score, "arranger");
+        String lyricistMeta = museScoreMetaTag(score, "lyricist");
+        String translatorMeta = museScoreMetaTag(score, "translator");
+        String copyrightMeta = museScoreMetaTag(score, "copyright");
+        String creationDateMeta = museScoreMetaTag(score, "creationDate");
+        String titleFromVBox = readFirstMuseScoreVBoxTextByStyle(score, "title");
+        String workTitle = !isMuseDefaultWorkTitle(workTitleMeta) ? workTitleMeta
+                : (titleFromVBox.length() > 0 ? titleFromVBox
+                        : (movementTitleMeta.length() > 0 ? movementTitleMeta : "Imported MuseScore"));
+        String composerMeta = museScoreMetaTag(score, "composer");
+        String composerFromVBox = readFirstMuseScoreVBoxTextByStyle(score, "composer");
+        String composer = !isMuseDefaultComposer(composerMeta) ? composerMeta
+                : (!isMuseDefaultComposer(composerFromVBox) ? composerFromVBox : "");
+        return new MuseScoreImportMetadata(workTitle, subtitleMeta, movementTitleMeta, movementNumberMeta,
+                workNumberMeta, composer, arrangerMeta, lyricistMeta, translatorMeta, copyrightMeta,
+                creationDateMeta);
+    }
+
+    private static MuseScoreExportMetadata readMusicXmlExportMetadata(Element score) {
+        Element work = directChild(score, "work");
+        Element identification = directChild(score, "identification");
+        List<MuseScoreExportCredit> credits = new ArrayList<MuseScoreExportCredit>();
+        for (Element credit : directChildren(score, "credit")) {
+            credits.add(new MuseScoreExportCredit(textOfDirectChild(credit, "credit-type"),
+                    textOfDirectChild(credit, "credit-words")));
+        }
+        List<MuseScoreExportCreator> creators = new ArrayList<MuseScoreExportCreator>();
+        if (identification != null) {
+            for (Element creator : directChildren(identification, "creator")) {
+                creators.add(new MuseScoreExportCreator(creator.getAttribute("type"), textOf(creator)));
+            }
+        }
+        return readMusicXmlExportMetadataFromValues(textOfDirectChild(work, "work-title"),
+                textOfDirectChild(score, "movement-title"), textOfDirectChild(work, "work-number"),
+                textOfDirectChild(score, "movement-number"), credits, creators,
+                textOfDirectChild(identification, "rights"),
+                textOfDirectChild(directChild(identification, "encoding"), "encoding-date"));
+    }
+
+    private static Map<String, MuseScoreExportPartName> readMusicXmlExportPartNames(Element score) {
+        List<MuseScoreExportPartNameEntry> entries = new ArrayList<MuseScoreExportPartNameEntry>();
+        Element partList = directChild(score, "part-list");
+        if (partList != null) {
+            for (Element scorePart : directChildren(partList, "score-part")) {
+                entries.add(new MuseScoreExportPartNameEntry(scorePart.getAttribute("id"),
+                        textOfDirectChild(scorePart, "part-name"), textOfDirectChild(scorePart, "part-abbreviation")));
+            }
+        }
+        return readPartNameMapFromMusicXmlParts(entries);
+    }
+
+    private static MuseScoreExportPartResult buildMuseScoreExportPartFromMusicXml(Element part, int partNo,
+            Map<String, MuseScoreExportPartName> partNames, int nextStaffId, int divisions,
+            boolean normalizeCutTimeToTwoTwo, MuseScoreExportSlurState slurState) {
+        String partId = part == null ? "" : trimToEmpty(part.getAttribute("id"));
+        MuseScoreExportPartIdentity identity = resolveMuseScoreExportPartIdentity(partId, partNo, partNames);
+        List<Element> measures = part == null ? Collections.<Element>emptyList() : directChildren(part, "measure");
+        int staffCount = getMusicXmlPartStaffCount(measures);
+        Map<Integer, String> initialClefs = readInitialClefs(measures, staffCount, identity.getPartName());
+        Transpose transpose = readPartTranspose(part);
+        Map<Integer, Collection<MuseScoreExportStaffMeasure>> measuresByStaff =
+                new LinkedHashMap<Integer, Collection<MuseScoreExportStaffMeasure>>();
+        for (int staffNo = 1; staffNo <= staffCount; staffNo++) {
+            measuresByStaff.put(Integer.valueOf(staffNo), buildMuseScoreExportStaffMeasures(measures, staffNo,
+                    divisions, initialClefs.get(Integer.valueOf(staffNo)), normalizeCutTimeToTwoTwo));
+        }
+        Collection<MuseScoreExportStaffMeasure> firstStaff = measuresByStaff.get(Integer.valueOf(1));
+        return buildMuseScoreExportPartResult(partNo, identity.getPartName(), identity.getPartAbbreviation(),
+                nextStaffId, firstStaff, measuresByStaff, staffCount, divisions, initialClefs, transpose, slurState);
+    }
+
+    private static List<MuseScoreExportStaffMeasure> buildMuseScoreExportStaffMeasures(List<Element> measures,
+            int staffNo, int divisions, String initialClef, boolean normalizeCutTimeToTwoTwo) {
+        List<MuseScoreExportStaffMeasure> out = new ArrayList<MuseScoreExportStaffMeasure>();
+        MuseScoreExportStaffState state = createInitialMuseScoreExportStaffState(divisions, 4, 4, 0,
+                initialClef == null ? "G" : initialClef);
+        for (int measureIndex = 0; measureIndex < measures.size(); measureIndex++) {
+            Element measure = measures.get(measureIndex);
+            Element attributes = directChild(measure, "attributes");
+            int sourceDivisions = intOrDefault(textOfDirectChild(attributes, "divisions"),
+                    state.getCurrentSourceDivisions());
+            Map<Integer, Map<Integer, List<MuseVoiceEvent>>> eventsByStaff =
+                    buildMuseVoiceEventsByStaffFromMusicXml(measure, divisions, sourceDivisions);
+            Map<Integer, List<MuseVoiceEvent>> byVoice = eventsByStaff.get(Integer.valueOf(staffNo));
+            if (byVoice == null) {
+                byVoice = new LinkedHashMap<Integer, List<MuseVoiceEvent>>();
+            }
+            Element time = directChild(attributes, "time");
+            Element key = directChild(attributes, "key");
+            List<MusicXmlClefSource> clefs = musicXmlClefSources(attributes);
+            String measureClef = readMusicXmlMeasureClefSignFromValues(clefs, staffNo);
+            String clefType = readMusicXmlMeasureMuseConcertClefTypeFromValues(clefs, staffNo);
+            boolean hasTime = time != null;
+            boolean leftDouble = hasBarStyle(measure, "left", "light-light");
+            boolean previousRightDouble = measureIndex > 0 && hasBarStyle(measures.get(measureIndex - 1), "right", "light-light");
+            List<MuseDirectionSeed> directionSeeds = collectDirectionSeedsFromMusicXmlMeasure(measure, staffNo);
+            // MusicXML fifths accepts zero and negatives. Do not route it through
+            // intOrDefault(), which is intentionally for positive fields such as
+            // divisions, beats, duration, and voice numbers.
+            Integer parsedMeasureFifths = parseRoundedIntegerOrNull(textOfDirectChild(key, "fifths"));
+            int measureFifths = parsedMeasureFifths == null ? state.getCurrentFifths()
+                    : parsedMeasureFifths.intValue();
+            MuseScoreExportMeasureContextResult context = buildMuseScoreExportMeasureContextFromValues(
+                    sourceDivisions, byVoice, measureIndex, divisions, state.getCurrentBeats(),
+                    state.getCurrentBeatType(), state.getCurrentTimeSymbol(), state.getCurrentFifths(),
+                    state.getCurrentClef(), intOrDefault(textOfDirectChild(time, "beats"), state.getCurrentBeats()),
+                    intOrDefault(textOfDirectChild(time, "beat-type"), state.getCurrentBeatType()),
+                    time == null ? "" : time.getAttribute("symbol"), hasTime,
+                    measureFifths, measureClef, clefType,
+                    normalizeCutTimeToTwoTwo, "yes".equalsIgnoreCase(measure.getAttribute("implicit")), leftDouble,
+                    previousRightDouble, directionSeeds,
+                    hasRepeat(measure, "left", "forward"), hasRepeat(measure, "right", "backward"));
+            out.add(new MuseScoreExportStaffMeasure(context.getMeasureContext(), context.getLenAttr(),
+                    context.getRenderCapacityDiv(), context.getVoiceNos(), byVoice));
+            state = applyMuseScoreExportMeasureState(state, context.getMeasureContext(), measureClef);
+        }
+        if (out.isEmpty()) {
+            Map<Integer, List<MuseVoiceEvent>> empty = new LinkedHashMap<Integer, List<MuseVoiceEvent>>();
+            empty.put(Integer.valueOf(1), Collections.<MuseVoiceEvent>emptyList());
+            MuseScoreExportMeasureContextResult context = buildMuseScoreExportMeasureContextFromValues(divisions,
+                    empty, 0, divisions, 4, 4, null, 0, initialClef, 4, 4, "", true, 0, initialClef, null,
+                    normalizeCutTimeToTwoTwo, false, false, false, Collections.<MuseDirectionSeed>emptyList(), false,
+                    false);
+            out.add(new MuseScoreExportStaffMeasure(context.getMeasureContext(), context.getLenAttr(),
+                    context.getRenderCapacityDiv(), context.getVoiceNos(), empty));
+        }
+        return out;
+    }
+
+    private static Map<Integer, Map<Integer, List<MuseVoiceEvent>>> buildMuseVoiceEventsByStaffFromMusicXml(
+            Element measure, int targetDivisions, int sourceDivisions) {
+        Map<Integer, Map<Integer, List<MuseVoiceEvent>>> byStaff =
+                new LinkedHashMap<Integer, Map<Integer, List<MuseVoiceEvent>>>();
+        List<MusePendingDirectionMarkEntry> pendingDirectionMarks = new ArrayList<MusePendingDirectionMarkEntry>();
+        int cursor = 0;
+        for (Element child : directChildren(measure, null)) {
+            String tag = child.getTagName();
+            if ("backup".equals(tag)) {
+                cursor = processMuseVoiceEventBackupCursor(cursor,
+                        roundedMuseNumberOrDefault(textOfDirectChild(child, "duration"), 0), targetDivisions,
+                        sourceDivisions);
+                continue;
+            }
+            if ("forward".equals(tag)) {
+                cursor = processMuseVoiceEventForwardCursor(cursor,
+                        roundedMuseNumberOrDefault(textOfDirectChild(child, "duration"), 0), targetDivisions,
+                        sourceDivisions);
+                continue;
+            }
+            if ("direction".equals(tag)) {
+                processMuseVoiceEventDirectionMarks(pendingDirectionMarks, cursor,
+                        readMusicXmlDirectionMarkPayload(child));
+                continue;
+            }
+            if ("barline".equals(tag)) {
+                List<String> repeatDirections = new ArrayList<String>();
+                for (Element repeat : directChildren(child, "repeat")) {
+                    repeatDirections.add(repeat.getAttribute("direction"));
+                }
+                processMuseVoiceEventMidBarlineMarks(pendingDirectionMarks, cursor,
+                        parseMusicXmlMidBarlineRepeatMarks(child.getAttribute("location"), repeatDirections));
+                continue;
+            }
+            if (!"note".equals(tag)) {
+                continue;
+            }
+            int staffNo = getNoteStaffNo(textOfDirectChild(child, "staff"));
+            int voiceNo = Math.max(1, roundedMuseNumberOrDefault(textOfDirectChild(child, "voice"), 1));
+            boolean grace = directChild(child, "grace") != null;
+            Element graceElement = directChild(child, "grace");
+            boolean graceSlash = graceElement != null && "yes".equalsIgnoreCase(graceElement.getAttribute("slash"));
+            boolean chordFollow = directChild(child, "chord") != null;
+            boolean rest = directChild(child, "rest") != null;
+            int duration = grace ? 0 : normalizeMuseVoiceEventDuration(
+                    Math.max(1, roundedMuseNumberOrDefault(textOfDirectChild(child, "duration"), sourceDivisions)),
+                    targetDivisions, sourceDivisions);
+            MusicXmlNumberSet tuplets = readMusicXmlTuplets(child);
+            TimeModification timeModification = readMusicXmlTimeModification(child);
+            List<MuseVoiceEvent> events = pushMuseVoiceEventList(byStaff, staffNo, voiceNo);
+            MusePendingDirectionMarks marks = consumeMusePendingDirectionMarks(pendingDirectionMarks, staffNo,
+                    voiceNo, cursor);
+            MuseScoreExportNote note = rest ? null : readMuseScoreExportNote(child);
+            MuseVoiceEvent merged = mergeChordFollowMusicXmlNoteEvent(events.isEmpty() ? null
+                    : events.get(events.size() - 1), chordFollow, rest, cursor, note,
+                    readMusicXmlSlurs(child).getStarts(), readMusicXmlSlurs(child).getStops(),
+                    readMusicXmlTrills(child).getStarts(), readMusicXmlTrills(child).getStops(),
+                    hasMusicXmlTrillMarkOnly(hasDirectOrnament(child, "trill-mark"), readMusicXmlTrills(child)),
+                    tuplets.getStarts(), tuplets.getStops(), timeModification, readMusicXmlArticulationSubtypes(child),
+                    grace, graceSlash);
+            if (merged != null) {
+                events.set(events.size() - 1, merged);
+            } else if (rest) {
+                events.add(buildRestMuseVoiceEventFromMusicXmlValues(cursor, duration, timeModification,
+                        tuplets.getStarts(), tuplets.getStops(), marks));
+            } else if (note != null) {
+                MusicXmlNumberSet slurs = readMusicXmlSlurs(child);
+                MusicXmlNumberSet trills = readMusicXmlTrills(child);
+                events.add(buildChordMuseVoiceEventFromMusicXmlValues(cursor, duration, grace, graceSlash,
+                        timeModification, tuplets.getStarts(), tuplets.getStops(), note, slurs.getStarts(),
+                        slurs.getStops(), trills.getStarts(), trills.getStops(),
+                        hasMusicXmlTrillMarkOnly(hasDirectOrnament(child, "trill-mark"), trills),
+                        readMusicXmlArticulationSubtypes(child), marks));
+            }
+            cursor = advanceMuseVoiceEventCursorAfterNote(cursor, chordFollow, grace, duration);
+        }
+        applyMuseTrailingDirectionMarks(byStaff, pendingDirectionMarks);
+        return byStaff;
+    }
+
+    private static MusicXmlDirectionMarkPayload readMusicXmlDirectionMarkPayload(Element direction) {
+        if (direction == null) {
+            return null;
+        }
+        List<MusicXmlOctaveShiftSource> octaveShifts = new ArrayList<MusicXmlOctaveShiftSource>();
+        for (Element octaveShift : descendants(direction, "octave-shift")) {
+            octaveShifts.add(new MusicXmlOctaveShiftSource(octaveShift.getAttribute("type"),
+                    octaveShift.getAttribute("size")));
+        }
+        Element sound = directChild(direction, "sound");
+        return parseMusicXmlDirectionMarkPayloadValues(textOfDirectChild(direction, "staff"),
+                textOfDirectChild(direction, "voice"), octaveShifts,
+                sound == null ? "" : sound.getAttribute("forward-repeat"),
+                sound == null ? "" : sound.getAttribute("backward-repeat"));
+    }
+
+    private static MuseScoreExportNote readMuseScoreExportNote(Element note) {
+        Element pitch = directChild(note, "pitch");
+        Element unpitched = directChild(note, "unpitched");
+        String step = pitch == null ? textOfDirectChild(unpitched, "display-step") : textOfDirectChild(pitch, "step");
+        String octave = pitch == null ? textOfDirectChild(unpitched, "display-octave") : textOfDirectChild(pitch, "octave");
+        String alter = pitch == null ? "0" : textOfDirectChild(pitch, "alter");
+        Integer midi = parseMusicXmlPitchToMidi(step, octave, alter);
+        if (midi == null) {
+            return null;
+        }
+        boolean tieStart = hasTypedChild(note, "tie", "start") || hasTypedDescendant(note, "tied", "start");
+        boolean tieStop = hasTypedChild(note, "tie", "stop") || hasTypedDescendant(note, "tied", "stop");
+        Element technical = firstDescendant(note, "technical");
+        return new MuseScoreExportNote(midi.intValue(), tieStart, tieStop,
+                parseMusicXmlAccidentalSubtype(textOfDirectChild(note, "accidental")),
+                textOfDirectChild(technical, "fingering"), positiveIntOrNull(textOfDirectChild(technical, "string")));
+    }
+
+    private static MusicXmlNumberSet readMusicXmlSlurs(Element note) {
+        return readTypedNumberSet(note, "slur");
+    }
+
+    private static MusicXmlNumberSet readMusicXmlTrills(Element note) {
+        return readTypedNumberSet(note, "wavy-line");
+    }
+
+    private static MusicXmlNumberSet readMusicXmlTuplets(Element note) {
+        return readTypedNumberSet(note, "tuplet");
+    }
+
+    private static MusicXmlNumberSet readTypedNumberSet(Element note, String tag) {
+        List<MusicXmlTypedNumber> values = new ArrayList<MusicXmlTypedNumber>();
+        for (Element element : descendants(note, tag)) {
+            values.add(new MusicXmlTypedNumber(element.getAttribute("type"), element.getAttribute("number")));
+        }
+        return parseMusicXmlTypedNumbers(values);
+    }
+
+    private static TimeModification readMusicXmlTimeModification(Element note) {
+        Element timeModification = directChild(note, "time-modification");
+        if (timeModification == null) {
+            return null;
+        }
+        return parseMusicXmlTupletTimeModification(textOfDirectChild(timeModification, "actual-notes"),
+                textOfDirectChild(timeModification, "normal-notes"));
+    }
+
+    private static List<String> readMusicXmlArticulationSubtypes(Element note) {
+        List<String> articulationTags = new ArrayList<String>();
+        Element articulations = firstDescendant(note, "articulations");
+        if (articulations != null) {
+            for (Element item : directChildren(articulations, null)) {
+                articulationTags.add(item.getTagName());
+            }
+        }
+        List<String> technicalTags = new ArrayList<String>();
+        Element technical = firstDescendant(note, "technical");
+        if (technical != null) {
+            for (Element item : directChildren(technical, null)) {
+                technicalTags.add(item.getTagName());
+            }
+        }
+        return parseMusicXmlArticulationSubtypes(articulationTags, technicalTags);
+    }
+
+    private static int getMusicXmlPartStaffCount(List<Element> measures) {
+        int count = 1;
+        for (Element measure : measures) {
+            Element attributes = directChild(measure, "attributes");
+            count = Math.max(count, intOrDefault(textOfDirectChild(attributes, "staves"), 1));
+            for (Element note : directChildren(measure, "note")) {
+                count = Math.max(count, getNoteStaffNo(textOfDirectChild(note, "staff")));
+            }
+        }
+        return count;
+    }
+
+    private static Map<Integer, String> readInitialClefs(List<Element> measures, int staffCount, String partName) {
+        Map<Integer, String> out = new LinkedHashMap<Integer, String>();
+        Map<Integer, List<Integer>> pitches = new LinkedHashMap<Integer, List<Integer>>();
+        for (Element measure : measures) {
+            for (Element note : directChildren(measure, "note")) {
+                if (directChild(note, "rest") != null) {
+                    continue;
+                }
+                MuseScoreExportNote value = readMuseScoreExportNote(note);
+                if (value != null) {
+                    int staff = getNoteStaffNo(textOfDirectChild(note, "staff"));
+                    List<Integer> staffPitches = pitches.get(Integer.valueOf(staff));
+                    if (staffPitches == null) {
+                        staffPitches = new ArrayList<Integer>();
+                        pitches.put(Integer.valueOf(staff), staffPitches);
+                    }
+                    staffPitches.add(Integer.valueOf(value.getMidi()));
+                }
+            }
+        }
+        for (int staffNo = 1; staffNo <= staffCount; staffNo++) {
+            String clef = null;
+            for (Element measure : measures) {
+                clef = readMusicXmlMeasureClefSignFromValues(musicXmlClefSources(directChild(measure, "attributes")),
+                        staffNo);
+                if (clef != null) {
+                    break;
+                }
+            }
+            if (clef == null && staffNo == 1) {
+                clef = inferClefSignFromPartName(partName);
+            }
+            if (clef == null) {
+                clef = inferClefSignFromPitches(pitches.get(Integer.valueOf(staffNo)));
+            }
+            out.put(Integer.valueOf(staffNo), clef == null ? "G" : clef);
+        }
+        return out;
+    }
+
+    private static Transpose readPartTranspose(Element part) {
+        if (part == null) {
+            return null;
+        }
+        for (Element measure : directChildren(part, "measure")) {
+            Element transpose = directChild(directChild(measure, "attributes"), "transpose");
+            if (transpose != null) {
+                return readPartTransposeFromValues(textOfDirectChild(transpose, "diatonic"),
+                        textOfDirectChild(transpose, "chromatic"));
+            }
+        }
+        return null;
+    }
+
+    private static List<MusicXmlClefSource> musicXmlClefSources(Element attributes) {
+        List<MusicXmlClefSource> out = new ArrayList<MusicXmlClefSource>();
+        if (attributes != null) {
+            for (Element clef : directChildren(attributes, "clef")) {
+                out.add(new MusicXmlClefSource(clef.getAttribute("number"), textOfDirectChild(clef, "sign")));
+            }
+        }
+        return out;
+    }
+
+    private static List<MuseDirectionSeed> collectDirectionSeedsFromMusicXmlMeasure(Element measure, int staffNo) {
+        List<MusicXmlDirectionSeedSource> directions = new ArrayList<MusicXmlDirectionSeedSource>();
+        List<String> measureTempoTexts = new ArrayList<String>();
+        for (Element child : directChildren(measure, null)) {
+            if ("sound".equals(child.getTagName()) && trimToEmpty(child.getAttribute("tempo")).length() > 0) {
+                measureTempoTexts.add(child.getAttribute("tempo"));
+            }
+            if (!"direction".equals(child.getTagName())) {
+                continue;
+            }
+            Element directionType = directChild(child, "direction-type");
+            Element sound = directChild(child, "sound");
+            Element metronome = directChild(directionType, "metronome");
+            Element dynamics = directChild(directionType, "dynamics");
+            List<String> dynamicTags = new ArrayList<String>();
+            for (Element dynamic : directChildren(dynamics, null)) {
+                dynamicTags.add(dynamic.getTagName());
+            }
+            List<MusicXmlDirectionWords> words = new ArrayList<MusicXmlDirectionWords>();
+            for (Element wordsElement : directChildren(directionType, "words")) {
+                words.add(new MusicXmlDirectionWords(textOf(wordsElement), wordsElement.getAttribute("font-style")));
+            }
+            directions.add(new MusicXmlDirectionSeedSource(textOfDirectChild(child, "staff"),
+                    sound == null ? "" : sound.getAttribute("tempo"), textOfDirectChild(metronome, "per-minute"),
+                    textOfDirectChild(metronome, "beat-unit"), directChildren(metronome, "beat-unit-dot").size(),
+                    sound == null ? "" : sound.getAttribute("dynamics"),
+                    sound == null ? "" : sound.getAttribute("dalsegno"),
+                    sound == null ? "" : sound.getAttribute("dacapo"),
+                    sound == null ? "" : sound.getAttribute("fine"),
+                    sound == null ? "" : sound.getAttribute("tocoda"), dynamicTags,
+                    directChild(directionType, "segno") != null, directChild(directionType, "coda") != null, words));
+        }
+        return collectDirectionSeedsFromMusicXmlMeasureValues(directions, measureTempoTexts, staffNo);
+    }
+
+    private static String readMusicXmlMeasureMuseConcertClefTypeFromValues(Collection<MusicXmlClefSource> clefs,
+            int staffNo) {
+        if (clefs == null) {
+            return null;
+        }
+        for (MusicXmlClefSource clef : clefs) {
+            if (clef == null || (clef.hasNumber() && (clef.getNumber() == null
+                    || clef.getNumber().intValue() != staffNo)) || (!clef.hasNumber() && staffNo != 1)) {
+                continue;
+            }
+            return readMusicXmlMeasureMuseConcertClefType(clef.getSign(), "");
+        }
+        return null;
+    }
+
+    private static boolean hasBarStyle(Element measure, String location, String style) {
+        for (Element barline : directChildren(measure, "barline")) {
+            if (location.equals(barline.getAttribute("location"))
+                    && style.equalsIgnoreCase(textOfDirectChild(barline, "bar-style"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasRepeat(Element measure, String location, String direction) {
+        for (Element barline : directChildren(measure, "barline")) {
+            Element repeat = directChild(barline, "repeat");
+            if (location.equals(barline.getAttribute("location")) && repeat != null
+                    && direction.equals(repeat.getAttribute("direction"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<Element> directChildren(Element parent, String tagName) {
+        List<Element> out = new ArrayList<Element>();
+        if (parent == null) {
+            return out;
+        }
+        Node child = parent.getFirstChild();
+        while (child != null) {
+            if (child instanceof Element && (tagName == null || tagName.equals(((Element) child).getTagName()))) {
+                out.add((Element) child);
+            }
+            child = child.getNextSibling();
+        }
+        return out;
+    }
+
+    private static Element directChild(Element parent, String tagName) {
+        List<Element> matches = directChildren(parent, tagName);
+        return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    private static List<Element> descendants(Element parent, String tagName) {
+        List<Element> out = new ArrayList<Element>();
+        if (parent == null) {
+            return out;
+        }
+        NodeList nodes = parent.getElementsByTagName(tagName);
+        for (int index = 0; index < nodes.getLength(); index++) {
+            if (nodes.item(index) instanceof Element) {
+                out.add((Element) nodes.item(index));
+            }
+        }
+        return out;
+    }
+
+    private static Element firstDescendant(Element parent, String tagName) {
+        List<Element> matches = descendants(parent, tagName);
+        return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    private static boolean hasTypedChild(Element parent, String tagName, String type) {
+        for (Element child : directChildren(parent, tagName)) {
+            if (type.equalsIgnoreCase(child.getAttribute("type"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasTypedDescendant(Element parent, String tagName, String type) {
+        for (Element child : descendants(parent, tagName)) {
+            if (type.equalsIgnoreCase(child.getAttribute("type"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasDirectOrnament(Element note, String tagName) {
+        return firstDescendant(firstDescendant(note, "ornaments"), tagName) != null;
+    }
+
+    private static String textOfDirectChild(Element parent, String tagName) {
+        return textOf(directChild(parent, tagName));
+    }
+
+    private static String textOf(Element element) {
+        return element == null || element.getTextContent() == null ? "" : element.getTextContent().trim();
+    }
+
+    private static Integer positiveIntOrNull(String text) {
+        try {
+            int value = Integer.parseInt(text == null ? "" : text.trim());
+            return value > 0 ? Integer.valueOf(value) : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static int intOrDefault(String text, int fallback) {
+        Integer value = positiveIntOrNull(text);
+        return value == null ? Math.max(1, fallback) : value.intValue();
+    }
+
+    private static int nonNegativeIntOrDefault(String text, int fallback) {
+        try {
+            int value = Integer.parseInt(text == null ? "" : text.trim());
+            return value >= 0 ? value : Math.max(0, fallback);
+        } catch (NumberFormatException ex) {
+            return Math.max(0, fallback);
+        }
     }
 
     public static String buildEmptyMuseScoreExportXml(int divisions, String title) {
@@ -1703,6 +3784,12 @@ public final class MuseScoreIo {
         }
     }
 
+    /** Mirrors {@code Math.round(Number(text) ?? fallback)} at the MusicXML boundary. */
+    private static int roundedMuseNumberOrDefault(String raw, int fallback) {
+        Integer parsed = parseRoundedIntegerOrNull(raw);
+        return parsed == null ? fallback : parsed.intValue();
+    }
+
     public static String buildTransposeXml(Transpose transpose) {
         if (transpose == null) {
             return "";
@@ -1873,7 +3960,6 @@ public final class MuseScoreIo {
             boolean allowImplicitInference) {
         List<MuseBeamEvent> infos = events == null ? Collections.<MuseBeamEvent>emptyList()
                 : new ArrayList<MuseBeamEvent>(events);
-        Map<Integer, BeamAssignment> assignmentByIndex = new LinkedHashMap<Integer, BeamAssignment>();
         boolean hasExplicitMuseBeamInfo = false;
         for (MuseBeamEvent info : infos) {
             if (info != null && info.isTimed()
@@ -1885,74 +3971,23 @@ public final class MuseScoreIo {
         if (!hasExplicitMuseBeamInfo && !allowImplicitInference) {
             return Collections.emptyMap();
         }
-
-        if (!hasExplicitMuseBeamInfo) {
-            List<Integer> currentGroup = new ArrayList<Integer>();
-            int cursorDiv = 0;
-            int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
-            for (int index = 0; index < infos.size(); index++) {
-                MuseBeamEvent info = infos.get(index);
-                if (info != null && info.isTimed() && cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0) {
-                    flushMuseBeamGroup(currentGroup, infos, assignmentByIndex);
-                    currentGroup = new ArrayList<Integer>();
-                }
-                if (info == null || !info.isChord() || !isBeamableMuseTimedEvent(info)) {
-                    flushMuseBeamGroup(currentGroup, infos, assignmentByIndex);
-                    currentGroup = new ArrayList<Integer>();
-                    if (info != null && info.isTimed()) {
-                        cursorDiv += Math.max(0, info.getDurationDiv());
-                    }
-                    continue;
-                }
-                currentGroup.add(Integer.valueOf(index));
-                cursorDiv += Math.max(0, info.getDurationDiv());
-            }
-            flushMuseBeamGroup(currentGroup, infos, assignmentByIndex);
-            return museBeamXmlByIndex(assignmentByIndex);
+        List<MusicXmlIo.BeamEventInfo> sharedEvents = new ArrayList<MusicXmlIo.BeamEventInfo>();
+        for (MuseBeamEvent info : infos) {
+            sharedEvents.add(new MusicXmlIo.BeamEventInfo(info != null && info.isTimed(),
+                    info != null && info.isChord(), info != null && info.isGrace(),
+                    info == null ? 0 : info.getDurationDiv(), info == null ? 0 : info.getLevels(),
+                    info == null ? "" : info.getExplicitMode()));
         }
-
-        List<Integer> activeGroup = new ArrayList<Integer>();
-        int cursorDiv = 0;
-        int resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
-        for (int index = 0; index < infos.size(); index++) {
-            MuseBeamEvent info = infos.get(index);
-            if (info == null || !info.isTimed()) {
-                flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
-                activeGroup = new ArrayList<Integer>();
-                continue;
+        Map<Integer, MusicXmlIo.BeamAssignment> assignments = MusicXmlIo.computeBeamAssignments(sharedEvents,
+                beatDiv, !hasExplicitMuseBeamInfo);
+        Map<Integer, String> out = new LinkedHashMap<Integer, String>();
+        for (Map.Entry<Integer, MusicXmlIo.BeamAssignment> entry : assignments.entrySet()) {
+            String xml = MusicXmlIo.buildMusicXmlBeamItemsXml(entry.getValue());
+            if (xml.length() > 0) {
+                out.put(entry.getKey(), xml);
             }
-            if (cursorDiv > 0 && cursorDiv % resolvedBeatDiv == 0) {
-                flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
-                activeGroup = new ArrayList<Integer>();
-            }
-            if (!isBeamableMuseTimedEvent(info)) {
-                flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
-                activeGroup = new ArrayList<Integer>();
-                continue;
-            }
-            if ("begin".equals(info.getExplicitMode())) {
-                flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
-                activeGroup = new ArrayList<Integer>();
-                activeGroup.add(Integer.valueOf(index));
-                cursorDiv += Math.max(0, info.getDurationDiv());
-                continue;
-            }
-            if ("mid".equals(info.getExplicitMode())) {
-                if (activeGroup.isEmpty()) {
-                    MuseBeamEvent previous = index > 0 ? infos.get(index - 1) : null;
-                    if (isBeamableMuseTimedEvent(previous)) {
-                        activeGroup.add(Integer.valueOf(index - 1));
-                    }
-                }
-                activeGroup.add(Integer.valueOf(index));
-                cursorDiv += Math.max(0, info.getDurationDiv());
-                continue;
-            }
-            activeGroup.add(Integer.valueOf(index));
-            cursorDiv += Math.max(0, info.getDurationDiv());
         }
-        flushMuseBeamGroup(activeGroup, infos, assignmentByIndex);
-        return museBeamXmlByIndex(assignmentByIndex);
+        return out;
     }
 
     public static MuseBeamEvent buildMuseImportedBeamEventInfo(boolean timed, boolean chord, boolean grace,
@@ -1969,51 +4004,6 @@ public final class MuseScoreIo {
         }
         String xml = beamXmlByEventIndex.get(Integer.valueOf(Math.max(0, eventIndex)));
         return xml == null ? "" : xml;
-    }
-
-    private static boolean isBeamableMuseTimedEvent(MuseBeamEvent info) {
-        return info != null && info.isTimed() && !info.isGrace() && info.getLevels() > 0;
-    }
-
-    private static void flushMuseBeamGroup(List<Integer> indices, List<MuseBeamEvent> infos,
-            Map<Integer, BeamAssignment> assignmentByIndex) {
-        List<Integer> chordIndices = new ArrayList<Integer>();
-        if (indices != null) {
-            for (Integer index : indices) {
-                if (index == null || index.intValue() < 0 || index.intValue() >= infos.size()) {
-                    continue;
-                }
-                MuseBeamEvent info = infos.get(index.intValue());
-                if (info != null && info.isChord() && !info.isGrace()) {
-                    chordIndices.add(index);
-                }
-            }
-        }
-        if (chordIndices.size() < 2) {
-            return;
-        }
-        for (int groupIndex = 0; groupIndex < chordIndices.size(); groupIndex++) {
-            Integer eventIndex = chordIndices.get(groupIndex);
-            MuseBeamEvent info = infos.get(eventIndex.intValue());
-            String state = groupIndex == 0 ? "begin" : (groupIndex == chordIndices.size() - 1 ? "end" : "continue");
-            assignmentByIndex.put(eventIndex, new BeamAssignment(state, info.getLevels()));
-        }
-    }
-
-    private static Map<Integer, String> museBeamXmlByIndex(Map<Integer, BeamAssignment> assignmentByIndex) {
-        Map<Integer, String> out = new LinkedHashMap<Integer, String>();
-        for (Map.Entry<Integer, BeamAssignment> entry : assignmentByIndex.entrySet()) {
-            BeamAssignment assignment = entry.getValue();
-            StringBuilder xml = new StringBuilder();
-            for (int level = 1; level <= assignment.levels; level++) {
-                xml.append("<beam number=\"").append(level).append("\">").append(assignment.state)
-                        .append("</beam>");
-            }
-            if (xml.length() > 0) {
-                out.put(entry.getKey(), xml.toString());
-            }
-        }
-        return out;
     }
 
     public static OttavaShift parseOttavaSubtype(String raw) {
@@ -3859,6 +5849,20 @@ public final class MuseScoreIo {
         return out.toString();
     }
 
+    private static String joinWithComma(Collection<String> values) {
+        StringBuilder out = new StringBuilder();
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (out.length() > 0) {
+                out.append(", ");
+            }
+            out.append(value == null ? "" : value);
+        }
+        return out.toString();
+    }
+
     private static List<String> mergeUniqueSubtypes(Collection<String> base, Collection<String> incoming) {
         if (incoming == null || incoming.isEmpty()) {
             return base == null ? null : new ArrayList<String>(base);
@@ -5544,16 +7548,6 @@ public final class MuseScoreIo {
 
         public String getExplicitMode() {
             return explicitMode;
-        }
-    }
-
-    private static final class BeamAssignment {
-        private final String state;
-        private final int levels;
-
-        private BeamAssignment(String state, int levels) {
-            this.state = state;
-            this.levels = Math.max(0, levels);
         }
     }
 

@@ -4,6 +4,8 @@
  */
 package jp.igapyon.mikuscore.scorefeatures;
 
+import java.util.Locale;
+
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 
@@ -61,7 +63,7 @@ public final class ScoreTies {
     }
 
     private static String normalizeTieType(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return "start".equals(normalized) || "stop".equals(normalized) ? normalized : null;
     }
 

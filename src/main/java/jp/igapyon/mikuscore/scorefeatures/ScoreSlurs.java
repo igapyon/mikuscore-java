@@ -6,6 +6,7 @@ package jp.igapyon.mikuscore.scorefeatures;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -18,15 +19,15 @@ public final class ScoreSlurs {
         if (feature == null) {
             return "";
         }
-        String type = normalizeSlurType(feature.getType());
-        if (type == null) {
-            return "";
-        }
-        Integer number = positiveRounded(feature.getNumber());
-        String placement = normalizeSlurPlacement(feature.getPlacement());
-        String numberAttr = number == null ? "" : " number=\"" + number + "\"";
-        String placementAttr = "start".equals(type) && placement != null ? " placement=\"" + placement + "\"" : "";
-        return "<slur type=\"" + type + "\"" + numberAttr + placementAttr + "/>";
+        Object number = feature.getNumber();
+        double numericNumber = toNumber(number);
+        String numberAttr = isJavaScriptTruthy(number) && numericNumber > 0
+                ? " number=\"" + Math.round(numericNumber) + "\""
+                : "";
+        String placementAttr = "start".equals(feature.getType()) && isJavaScriptTruthy(feature.getPlacement())
+                ? " placement=\"" + feature.getPlacement() + "\""
+                : "";
+        return "<slur type=\"" + String.valueOf(feature.getType()) + "\"" + numberAttr + placementAttr + "/>";
     }
 
     public static String buildMusicXmlSlursXml(Iterable<SlurFeature> features) {
@@ -69,12 +70,12 @@ public final class ScoreSlurs {
     }
 
     private static String normalizeSlurType(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return "start".equals(normalized) || "stop".equals(normalized) ? normalized : null;
     }
 
     private static String normalizeSlurPlacement(String raw) {
-        String normalized = raw == null ? "" : raw.trim().toLowerCase();
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         return "above".equals(normalized) || "below".equals(normalized) ? normalized : null;
     }
 
@@ -90,15 +91,52 @@ public final class ScoreSlurs {
         if (value == null) {
             return Double.NaN;
         }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue() ? 1 : 0;
+        }
         if (value instanceof Number) {
             return ((Number) value).doubleValue();
         }
         String text = String.valueOf(value).trim();
         if (text.length() == 0) {
-            return Double.NaN;
+            return 0;
+        }
+        if (text.startsWith("0x") || text.startsWith("0X")) {
+            return parseRadixNumber(text.substring(2), 16);
+        }
+        if (text.startsWith("0b") || text.startsWith("0B")) {
+            return parseRadixNumber(text.substring(2), 2);
+        }
+        if (text.startsWith("0o") || text.startsWith("0O")) {
+            return parseRadixNumber(text.substring(2), 8);
         }
         try {
             return Double.parseDouble(text);
+        } catch (NumberFormatException ex) {
+            return Double.NaN;
+        }
+    }
+
+    private static boolean isJavaScriptTruthy(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue();
+        }
+        if (value instanceof Number) {
+            double number = ((Number) value).doubleValue();
+            return number != 0 && !Double.isNaN(number);
+        }
+        return !(value instanceof String) || ((String) value).length() > 0;
+    }
+
+    private static double parseRadixNumber(String digits, int radix) {
+        if (digits.isEmpty()) {
+            return Double.NaN;
+        }
+        try {
+            return Long.parseLong(digits, radix);
         } catch (NumberFormatException ex) {
             return Double.NaN;
         }

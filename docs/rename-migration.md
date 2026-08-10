@@ -39,7 +39,16 @@ canonical `miku-score` name. The rename was performed by a human; the local
 | Compatibility | Java package `jp.igapyon.mikuscore` and public class names such as `MikuscoreCli` | Changing Java package or public class names would break Java callers; this migration intentionally preserves them. |
 | Historical reference | `docs/worklog/2026-05-legacy-straight-conversion-log.md`, past Releases, and past Issue/PR references | These records describe pre-rename work and published artifacts. They are not rewritten. |
 | Historical local workspace | `workplace/mikuscore` when it already exists | `workplace/` is ignored local scratch space. Its directory name does not define the current repository or public Maven/CLI contract. |
-| Unmigrated current public surface | None | Current repository URL, Maven metadata, CLI output, documented artifact names, and workflow input paths use `miku-score`. |
+| Compatibility identifier | MIDI `app=mikuscore` metadata | This is a retained wire-format identifier. It remains unchanged for compatibility with existing MIDI metadata consumers. |
+| Unmigrated current public surface | None | Current repository URL, Maven metadata, CLI output, generated fallback titles, download filename stems, documented artifact names, and workflow input paths use `miku-score`. |
+
+## 2026-08-09 follow-up
+
+Upstream `miku-score` fallback titles and generated download filename stems were
+checked against the Java implementation. Java now emits `miku-score` for these
+user-facing values in the ABC, MEI, LilyPond, and MuseScore conversion paths
+and in `CoreApi` download payloads. The MIDI `app=mikuscore` metadata key is
+intentionally retained as the documented compatibility identifier.
 
 ## Follow-up boundary
 

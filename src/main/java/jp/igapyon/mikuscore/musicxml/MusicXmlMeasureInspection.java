@@ -1,5 +1,6 @@
 package jp.igapyon.mikuscore.musicxml;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -91,11 +92,11 @@ public final class MusicXmlMeasureInspection {
         private final String nodeId;
         private final Selector selector;
         private final String voice;
-        private final Integer duration;
+        private final Double duration;
         private final boolean rest;
         private final Pitch pitch;
 
-        public Note(String nodeId, Selector selector, String voice, Integer duration, boolean rest, Pitch pitch) {
+        public Note(String nodeId, Selector selector, String voice, Double duration, boolean rest, Pitch pitch) {
             this.nodeId = nodeId;
             this.selector = selector;
             this.voice = voice;
@@ -116,7 +117,7 @@ public final class MusicXmlMeasureInspection {
             return voice;
         }
 
-        public Integer getDuration() {
+        public Double getDuration() {
             return duration;
         }
 
@@ -140,7 +141,7 @@ public final class MusicXmlMeasureInspection {
             MusicXmlJson.appendNullableString(builder, voice);
             builder.append(",\n");
             builder.append(indent).append("  \"duration\": ");
-            appendNullableInteger(builder, duration);
+            appendNullableNumber(builder, duration);
             builder.append(",\n");
             builder.append(indent).append("  \"is_rest\": ").append(rest).append(",\n");
             builder.append(indent).append("  \"pitch\": ");
@@ -210,10 +211,10 @@ public final class MusicXmlMeasureInspection {
 
     public static final class Pitch {
         private final String step;
-        private final Integer alter;
-        private final Integer octave;
+        private final Double alter;
+        private final Double octave;
 
-        public Pitch(String step, Integer alter, Integer octave) {
+        public Pitch(String step, Double alter, Double octave) {
             this.step = step;
             this.alter = alter;
             this.octave = octave;
@@ -224,10 +225,20 @@ public final class MusicXmlMeasureInspection {
         }
 
         public Integer getAlter() {
-            return alter;
+            return integralValueOrNull(alter);
         }
 
         public Integer getOctave() {
+            return integralValueOrNull(octave);
+        }
+
+        /** Source-shaped numeric alter value for callers that need non-integer inspection data. */
+        public Double getAlterNumber() {
+            return alter;
+        }
+
+        /** Source-shaped numeric octave value for callers that need non-integer inspection data. */
+        public Double getOctaveNumber() {
             return octave;
         }
 
@@ -237,10 +248,10 @@ public final class MusicXmlMeasureInspection {
             MusicXmlJson.appendNullableString(builder, step);
             builder.append(",\n");
             builder.append(indent).append("  \"alter\": ");
-            appendNullableInteger(builder, alter);
+            appendNullableNumber(builder, alter);
             builder.append(",\n");
             builder.append(indent).append("  \"octave\": ");
-            appendNullableInteger(builder, octave);
+            appendNullableNumber(builder, octave);
             builder.append("\n");
             builder.append(indent).append("}");
         }
@@ -252,5 +263,42 @@ public final class MusicXmlMeasureInspection {
         } else {
             builder.append(value.intValue());
         }
+    }
+
+    private static void appendNullableNumber(StringBuilder builder, Double value) {
+        if (value == null || !Double.isFinite(value.doubleValue())) {
+            builder.append("null");
+            return;
+        }
+        double number = value.doubleValue();
+        if (number == 0d) {
+            builder.append('0');
+            return;
+        }
+        double magnitude = Math.abs(number);
+        if (magnitude >= 0.000001d && magnitude < 1.0e21d) {
+            builder.append(BigDecimal.valueOf(number).stripTrailingZeros().toPlainString());
+            return;
+        }
+        String text = Double.toString(number);
+        int exponentIndex = Math.max(text.indexOf('E'), text.indexOf('e'));
+        if (exponentIndex < 0) {
+            builder.append(text);
+            return;
+        }
+        String mantissa = text.substring(0, exponentIndex);
+        if (mantissa.endsWith(".0")) {
+            mantissa = mantissa.substring(0, mantissa.length() - 2);
+        }
+        int exponent = Integer.parseInt(text.substring(exponentIndex + 1));
+        builder.append(mantissa).append('e').append(exponent >= 0 ? "+" : "").append(exponent);
+    }
+
+    private static Integer integralValueOrNull(Double value) {
+        if (value == null || !Double.isFinite(value.doubleValue()) || value.doubleValue() != Math.rint(value.doubleValue())
+                || value.doubleValue() < Integer.MIN_VALUE || value.doubleValue() > Integer.MAX_VALUE) {
+            return null;
+        }
+        return Integer.valueOf((int) value.doubleValue());
     }
 }

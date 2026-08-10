@@ -30,6 +30,19 @@ public class ScoreTimeSignaturesTest {
     }
 
     @Test
+    public void normalizesJavaScriptBooleanAndRadixNumberInputs() {
+        TimeSignatureFeature normalized = ScoreTimeSignatures
+                .normalizeTimeSignatureFeature(new TimeSignatureFeature(Boolean.TRUE, "0b100", "COMMON"));
+
+        assertNotNull(normalized);
+        assertEquals(Integer.valueOf(1), normalized.getBeats());
+        assertEquals(Integer.valueOf(4), normalized.getBeatType());
+        assertEquals("common", normalized.getSymbol());
+        assertNull(ScoreTimeSignatures
+                .normalizeTimeSignatureFeature(new TimeSignatureFeature(Boolean.FALSE, Integer.valueOf(4))));
+    }
+
+    @Test
     public void buildsMusicXmlTimeSignatureFeatures() {
         assertEquals("<time symbol=\"common\"><beats>6</beats><beat-type>8</beat-type></time>",
                 ScoreTimeSignatures.buildMusicXmlTimeSignatureXml(

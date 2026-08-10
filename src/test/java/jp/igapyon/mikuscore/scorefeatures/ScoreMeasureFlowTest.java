@@ -15,6 +15,8 @@ public class ScoreMeasureFlowTest {
     public void buildsMusicXmlBackupControls() {
         assertEquals("<backup><duration>960</duration></backup>",
                 ScoreMeasureFlow.buildMusicXmlBackupXml(new FlowInput(Double.valueOf(960.2))));
+        assertEquals("<backup><duration>1</duration></backup>",
+                ScoreMeasureFlow.buildMusicXmlBackupXml(new FlowInput(Boolean.TRUE)));
         assertEquals("", ScoreMeasureFlow.buildMusicXmlBackupXml(new FlowInput(Integer.valueOf(0))));
     }
 
